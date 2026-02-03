@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>سوق لينك - ربط الكتالوج</title>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f0f2f5; }
+        .card { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; }
+        button { background-color: #1877f2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; }
+        button:hover { background-color: #166fe5; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>مرحباً بك في سوق لينك</h2>
+    <p>ابدأ بربط منتجاتك من Meta Catalog لتظهر في السوق الموحد</p>
+    <button onclick="startAuth()">احصل على صلاحية الوصول للكتالوج</button>
+</div>
+
+<script>
+    function startAuth() {
+        const appId = '1539852660587503'; // ضع هنا رقم تطبيقك
+const redirectUri = encodeURIComponent('https://attently-hard-juanita.ngrok-free.dev/auth/callback');
+        const scope = 'catalog_management'; // الصلاحيات
+        
+        const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code`;
+        
+        // التوجيه لصفحة فيسبوك
+        window.location.href = authUrl;
+    }
+</script>
+
+</body>
+</html>
