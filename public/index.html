@@ -1,35 +1,186 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
+
 <head>
     <meta charset="UTF-8">
     <title>سوق لينك - ربط الكتالوج</title>
     <style>
-        body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f0f2f5; }
-        .card { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; }
-        button { background-color: #1877f2; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; }
-        button:hover { background-color: #166fe5; }
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f0f2f5;
+        }
+
+        .card {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        button {
+            background-color: #1877f2;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background-color: #166fe5;
+        }
     </style>
 </head>
+
 <body>
+    <div class="card">
+        <h2>مرحباً بك في سوق لينك</h2>
+        <p>ابدأ بربط منتجاتك من Meta Catalog لتظهر في السوق الموحد</p>
+        <button onclick="startAuth()">احصل على صلاحية الوصول للكتالوج</button>
+    </div>
 
-<div class="card">
-    <h2>مرحباً بك في سوق لينك</h2>
-    <p>ابدأ بربط منتجاتك من Meta Catalog لتظهر في السوق الموحد</p>
-    <button onclick="startAuth()">احصل على صلاحية الوصول للكتالوج</button>
-</div>
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
-<script>
-    function startAuth() {
-        const appId = '1539852660587503'; // ضع هنا رقم تطبيقك
-const redirectUri = encodeURIComponent('https://attently-hard-juanita.ngrok-free.dev/auth/callback');
-        const scope = 'catalog_management'; // الصلاحيات
-        
-        const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code`;
-        
-        // التوجيه لصفحة فيسبوك
-        window.location.href = authUrl;
-    }
-</script>
+    <script>
+        // تهيئة Supabase من السيرفر (يقرأ من .env)
+        let supabaseClient;
+
+        async function initSupabase() {
+            if (typeof supabase === 'undefined') {
+                console.error('Supabase library not loaded');
+                return;
+            }
+            try {
+                const res = await fetch('/api/config');
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    console.error('❌ [BROWSER] لم يتم تحميل إعدادات Supabase:', err.error || res.statusText);
+                    return;
+                }
+                const { supabaseUrl, supabaseAnonKey } = await res.json();
+                if (!supabaseUrl || !supabaseAnonKey) {
+                    console.error('❌ [BROWSER] SUPABASE_URL أو المفتاح غير موجودين في .env');
+                    return;
+                }
+                supabaseClient = supabase.createClient(supabaseUrl, supabaseAnonKey);
+                console.log('✅ [BROWSER] تم تهيئة Supabase بنجاح');
+            } catch (e) {
+                console.error('❌ [BROWSER] خطأ في تحميل إعدادات Supabase:', e);
+            }
+        }
+
+        // دالة تسجيل الدخول التلقائي
+        async function loginForTesting() {
+            console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            console.log("🔐 [BROWSER] بدء عملية تسجيل الدخول...");
+            console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+            if (!supabaseClient) {
+                console.error("❌ [BROWSER] Supabase client not initialized");
+                return;
+            }
+
+            try {
+                console.log("📡 [BROWSER] إرسال طلب تسجيل الدخول إلى Supabase...");
+                console.log("   - Email: asshabmalak@gmail.com");
+
+                const { data, error } = await supabaseClient.auth.signInWithPassword({
+                    email: 'asshabmalak@gmail.com',
+                    password: 'e6jM&9p5wNWVy!E',
+                });
+
+                if (error) {
+                    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    console.error("❌ [BROWSER] فشل تسجيل الدخول");
+                    console.error("   - Error:", error.message);
+                    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                } else {
+                    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    console.log("✅ [BROWSER] تم تسجيل الدخول بنجاح!");
+                    console.log("   - User ID:", data.user.id);
+                    console.log("   - Email:", data.user.email);
+                    console.log("   - Access Token:", data.session.access_token ? "✅ موجود" : "❌ غير موجود");
+                    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                    // يمكنك حفظ التوكن للاستخدام لاحقاً
+                    window.userToken = data.session.access_token;
+                }
+            } catch (err) {
+                console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                console.error("❌ [BROWSER] خطأ في تسجيل الدخول");
+                console.error("   - Error:", err);
+                console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            }
+        }
+
+        // دالة بدء عملية المصادقة مع Meta
+        function startAuth() {
+            console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            console.log("🚀 [BROWSER] بدء عملية المصادقة مع Meta...");
+            console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+            // ضروري: توكن Supabase يُرسل مع الطلب العائد من Meta عبر معامل state
+            const token = window.userToken;
+            if (!token) {
+                console.error("❌ [BROWSER] لا يوجد توكن. سجّل الدخول أولاً ثم حاول مرة أخرى.");
+                alert("يجب تسجيل الدخول أولاً. انتظر حتى يظهر في Console: «تم تسجيل الدخول بنجاح» ثم اضغط الزر مرة أخرى.");
+                return;
+            }
+
+            const appId = '1539852660587503';
+            const redirectUri = encodeURIComponent('https://attently-hard-juanita.ngrok-free.dev/auth/callback');
+            const scope = 'catalog_management';
+            // إرسال التوكن في state ليعيده Meta مع الكود حتى يستخدمه السيرفر
+            const state = encodeURIComponent(token);
+
+            console.log("📋 [BROWSER] معلومات المصادقة:");
+            console.log("   - App ID:", appId);
+            console.log("   - Redirect URI:", decodeURIComponent(redirectUri));
+            console.log("   - Scope:", scope);
+            console.log("   - Token (state): ✅ مُضاف للطلب");
+
+            const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}`;
+
+            console.log("🌐 [BROWSER] التوجيه إلى صفحة Meta...");
+            console.log("   - URL:", authUrl);
+            console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+            // التوجيه لصفحة فيسبوك
+            window.location.href = authUrl;
+        }
+
+        // تحميل الإعدادات ثم تسجيل الدخول أو عرض رسالة callback
+        window.addEventListener('DOMContentLoaded', async function () {
+            await initSupabase();
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const code = urlParams.get('code');
+
+            if (code) {
+                console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+                console.log("🔄 [BROWSER] تم استلام الكود من Meta!");
+                console.log("   - Authorization Code:", code);
+                console.log("   - جاري معالجة الطلب في السيرفر...");
+                console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            } else {
+                // تسجيل الدخول التلقائي فقط إذا لم يكن هناك code
+                await loginForTesting();
+            }
+        });
+
+        // الانتظار حتى يتم تحميل الصفحة بالكامل ثم استدعاء دالة تسجيل الدخول
+        window.addEventListener('DOMContentLoaded', function () {
+            loginForTesting();
+        });
+    </script>
 
 </body>
+
 </html>

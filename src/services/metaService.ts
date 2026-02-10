@@ -1,56 +1,82 @@
+// services/metaService.ts
+import { supabase } from '../lib/supabase.js';
+
 export class MetaService {
-  private baseUrl: string;
-  private accessToken: string;
   private catalogId: string;
 
-  constructor(accessToken: string, catalogId: string, version = "v18.0") {
-    this.accessToken = accessToken;
+  constructor(catalogId: string) {
     this.catalogId = catalogId;
-    this.baseUrl = `https://graph.facebook.com/${version}`;
+    // لم نعد بحاجة لتخزين الـ accessToken هنا لأنه محفوظ ومُشفر في سوبابيس
   }
 
   /**
-   * دالة جديدة لتحويل التوكين القصير إلى طويل الأمد (60 يوم)
+   * طلب المنتجات عبر الـ Edge Function
+   * @param userToken - توكن JWT الخاص بالمستخدم المسجل في سوبابيس
    */
-  async exchangeForLongLivedToken(shortLivedToken: string): Promise<any> {
-    const url = `${this.baseUrl}/oauth/access_token?` +
-      `grant_type=fb_exchange_token&` +
-      `client_id=${process.env.META_APP_ID}&` +
-      `client_secret=${process.env.META_APP_SECRET}&` +
-      `fb_exchange_token=${shortLivedToken}`;
+  async getCatalogProducts(userToken: string) {
+    try {
+      const { data, error } = await supabase.functions.invoke('meta-proxy', {
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+        },
+        body: {
+          endpoint: `${this.catalogId}/products`,
+          method: 'GET',
+          params: 'fields=id,name,description,price,currency,image_url,url,availability,brand,category&limit=25'
+        },
+      });
 
-    const response = await fetch(url);
-    const data: any = await response.json();
-
-    if (data.access_token) {
-      // تحديث التوكين في الخدمة فوراً بالنوع الطويل
-      this.updateAccessToken(data.access_token);
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error("Error fetching products via Edge Function:", error);
+      throw error;
     }
-    
-    return data;
   }
 
-  public updateAccessToken(newToken: string): void {
-    this.accessToken = newToken;
-    console.log("🔄 MetaService: تم تحديث الـ Access Token بنجاح.");
+  /**
+   * جلب منتج محدد عبر الـ Edge Function
+   */
+  async getProduct(productId: string, userToken: string) {
+    try {
+      const { data, error } = await supabase.functions.invoke('meta-proxy', {
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+        },
+        body: {
+          endpoint: productId,
+          method: 'GET',
+          params: 'fields=id,name,description,price,currency,image_url,url,availability,brand,category'
+        },
+      });
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error("Error fetching product details:", error);
+      throw error;
+    }
   }
 
-  async getCatalogProducts() {
-    const url = `${this.baseUrl}/${this.catalogId}/products?fields=id,name,description,price,currency,image_url,url,availability,brand,category&limit=25&access_token=${this.accessToken}`;
-    const response = await fetch(url);
-    return response.json();
+  /**
+   * البحث عن منتجات بالاسم عبر الـ Edge Function
+   * @param query - نص البحث
+   * @param userToken - توكن JWT الخاص بالمستخدم المسجل في سوبابيس
+   */
+  async searchProducts(query: string, userToken: string) {
+    try {
+      const data: any = await this.getCatalogProducts(userToken);
+      // البحث في قائمة المنتجات حسب الاسم
+      const filteredProducts = data?.data?.filter((p: any) => 
+        p.name?.toLowerCase().includes(query.toLowerCase())
+      ) || [];
+      return { data: filteredProducts };
+    } catch (error) {
+      console.error("Error searching products:", error);
+      throw error;
+    }
   }
 
-  async getProduct(productId: string) {
-    const url = `${this.baseUrl}/${productId}?fields=id,name,description,price,currency,image_url,url,availability,brand,category&access_token=${this.accessToken}`;
-    const response = await fetch(url);
-    return response.json();
-  }
-
-  async searchProducts(query: string) {
-    const data: any = await this.getCatalogProducts();
-    return data.data?.filter((p: any) => 
-      p.name.toLowerCase().includes(query.toLowerCase())
-    ) || [];
-  }
+  // ملاحظة: دالة exchangeForLongLivedToken يجب أن تُنقل أيضاً إلى Edge Function 
+  // لكي يتم حفظ التوكن الجديد مشفراً فور إصداره.
 }

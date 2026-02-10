@@ -1,30 +1,75 @@
-/**
- * RESPONSIBILITY:
- * This service handles all direct communication with the Meta Graph API.
- * It encapsulates the API logic, endpoints, and data fetching.
- * It returns raw data to the callers and doesn't know anything about MCP.
- */
+// services/metaService.ts
+import { supabase } from '../lib/supabase.js';
 export class MetaService {
-    baseUrl;
-    accessToken;
     catalogId;
-    constructor(accessToken, catalogId, version = "v18.0") {
-        this.accessToken = accessToken;
+    constructor(catalogId) {
         this.catalogId = catalogId;
-        this.baseUrl = `https://graph.facebook.com/${version}`;
+        // لم نعد بحاجة لتخزين الـ accessToken هنا لأنه محفوظ ومُشفر في سوبابيس
     }
-    async getCatalogProducts() {
-        const url = `${this.baseUrl}/${this.catalogId}/products?fields=id,name,description,price,currency,image_url,url,availability,brand,category&limit=25&access_token=${this.accessToken}`;
-        const response = await fetch(url);
-        return response.json();
+    /**
+     * طلب المنتجات عبر الـ Edge Function
+     * @param userToken - توكن JWT الخاص بالمستخدم المسجل في سوبابيس
+     */
+    async getCatalogProducts(userToken) {
+        try {
+            const { data, error } = await supabase.functions.invoke('meta-proxy', {
+                headers: {
+                    Authorization: `Bearer ${userToken}`,
+                },
+                body: {
+                    endpoint: `${this.catalogId}/products`,
+                    method: 'GET',
+                    params: 'fields=id,name,description,price,currency,image_url,url,availability,brand,category&limit=25'
+                },
+            });
+            if (error)
+                throw error;
+            return data;
+        }
+        catch (error) {
+            console.error("Error fetching products via Edge Function:", error);
+            throw error;
+        }
     }
-    async getProduct(productId) {
-        const url = `${this.baseUrl}/${productId}?fields=id,name,description,price,currency,image_url,url,availability,brand,category&access_token=${this.accessToken}`;
-        const response = await fetch(url);
-        return response.json();
+    /**
+     * جلب منتج محدد عبر الـ Edge Function
+     */
+    async getProduct(productId, userToken) {
+        try {
+            const { data, error } = await supabase.functions.invoke('meta-proxy', {
+                headers: {
+                    Authorization: `Bearer ${userToken}`,
+                },
+                body: {
+                    endpoint: productId,
+                    method: 'GET',
+                    params: 'fields=id,name,description,price,currency,image_url,url,availability,brand,category'
+                },
+            });
+            if (error)
+                throw error;
+            return data;
+        }
+        catch (error) {
+            console.error("Error fetching product details:", error);
+            throw error;
+        }
     }
-    async searchProducts(query) {
-        const data = await this.getCatalogProducts();
-        return data.data?.filter((p) => p.name.toLowerCase().includes(query.toLowerCase())) || [];
+    /**
+     * البحث عن منتجات بالاسم عبر الـ Edge Function
+     * @param query - نص البحث
+     * @param userToken - توكن JWT الخاص بالمستخدم المسجل في سوبابيس
+     */
+    async searchProducts(query, userToken) {
+        try {
+            const data = await this.getCatalogProducts(userToken);
+            // البحث في قائمة المنتجات حسب الاسم
+            const filteredProducts = data?.data?.filter((p) => p.name?.toLowerCase().includes(query.toLowerCase())) || [];
+            return { data: filteredProducts };
+        }
+        catch (error) {
+            console.error("Error searching products:", error);
+            throw error;
+        }
     }
 }
