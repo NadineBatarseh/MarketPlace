@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install react react-dom)",
+      "Bash(npm run build)",
+      "Bash(npm install -D tailwindcss @tailwindcss/vite)",
+      "Bash(find \"c:\\\\Users\\\\hp\\\\Desktop\\\\SOUQLINK\\\\src\\\\pages\\\\singleStore\"\" -type f -name \"* \")",
+      "Bash(npx tsc --noEmit)",
+      "Bash(echo \"Exit: $?\")"
+    ]
+  }
+}

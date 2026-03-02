@@ -1,9 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
-import 'dotenv/config';
+import { createClient } from "@supabase/supabase-js";
 
-// استخراج المتغيرات من ملف .env
-const supabaseUrl = process.env.SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_KEY!;
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL ?? "YOUR_SUPABASE_URL",
+  import.meta.env.VITE_SUPABASE_ANON_KEY ?? "YOUR_SUPABASE_ANON_KEY"
+);
 
-// إنشاء العميل الذي سيتصل بقاعدة البيانات
-export const supabase = createClient(supabaseUrl, supabaseKey);
+export default supabase;
