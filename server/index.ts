@@ -141,7 +141,7 @@ app.get("/api/stores/:id", async (req: Request, res: Response) => {
 
   const { data: store, error } = await supabase
     .from("shops")
-    .select("shop_id, name, description, shopLogo, created_at")
+    .select("shop_id, name, description, shopLogo, created_at, whatsapp, instagram, facebook, location")
     .eq("shop_id", id)
     .single();
 
@@ -151,7 +151,16 @@ app.get("/api/stores/:id", async (req: Request, res: Response) => {
     return res.status(404).json({ ok: false, error: `المتجر غير موجود — ${detail}` });
   }
 
-  return res.json({ ok: true, store });
+  // Resolve logo from the shopLogo storage bucket (file named by shop_id, any extension)
+  let shopLogo: string | null = store.shopLogo ?? null;
+  const { data: files } = await supabase.storage.from("shopLogo").list("", { search: id });
+  const logoFile = files?.find((f) => f.name.split(".")[0] === id);
+  if (logoFile) {
+    const { data: urlData } = supabase.storage.from("shopLogo").getPublicUrl(logoFile.name);
+    shopLogo = urlData.publicUrl;
+  }
+
+  return res.json({ ok: true, store: { ...store, shopLogo } });
 });
 
 // GET /api/stores/:id/products  — paginated product list for a shop
