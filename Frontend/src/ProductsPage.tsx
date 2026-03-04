@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const BACKEND_URL = "http://localhost:4000";
 
@@ -16,6 +17,7 @@ type Product = {
 const CURRENT_SHOP_ID = "cc76a171-a549-43c8-ad7c-7bcadbd0e9a3";
 
 export default function ProductsPage() {
+  const navigate = useNavigate();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");
@@ -71,6 +73,7 @@ async function syncFromMeta() {
         {products.map((p) => (
           <div
             key={p.id}
+            onClick={() => navigate(`/product/${p.id}`)}
             style={{
               border: "1px solid #ddd",
               borderRadius: 8,
@@ -78,6 +81,7 @@ async function syncFromMeta() {
               display: "flex",
               gap: 12,
               alignItems: "center",
+              cursor: "pointer",
             }}
           >
             {p.image_url ? (
