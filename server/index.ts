@@ -91,7 +91,7 @@ app.post("/api/sync-products", async (_req: Request, res: Response) => {
           title:           p.name ?? `Product ${p.id}`,
           description:     p.description ?? null,
           price:           parseMetaPrice(p.price),
-          image_url:       storedImageUrl ?? p.image_url ?? null,
+          image_url:       storedImageUrl ? [storedImageUrl] : p.image_url ? [p.image_url] : null,
           stock_Quantity:  p.quantity_to_sell_on_facebook ?? null,
         };
       })
@@ -222,7 +222,52 @@ app.get("/api/stores/:id/products", async (req: Request, res: Response) => {
   });
 });
 
-/* ---------- META AUTH ROUTES ---------- */
+/* ---------- META AUTH CALLBACK ---------- */
+
+app.get("/auth/callback", async (req: Request, res: Response) => {
+  const code = req.query.code as string;
+  const sb_auth_token = req.query.state as string;
+
+  if (!code) return res.status(400).send("Missing authorization code.");
+  if (!sb_auth_token) return res.status(401).send("Missing auth token in state.");
+
+  try {
+    const redirectUri =
+      process.env.META_REDIRECT_URI ||
+      `${req.protocol}://${req.headers.host}/auth/callback`;
+
+    const params = new URLSearchParams({
+      client_id: process.env.META_APP_ID!,
+      client_secret: process.env.META_APP_SECRET!,
+      redirect_uri: redirectUri,
+      code,
+    });
+
+    const metaRes = await fetch(
+      `https://graph.facebook.com/v18.0/oauth/access_token?${params.toString()}`
+    );
+    const metaData: any = await metaRes.json();
+
+    if (!metaData.access_token) {
+      return res.status(400).json({ error: "Failed to get access token", details: metaData.error });
+    }
+
+    const { error } = await supabase.functions.invoke("store-catalog-token", {
+      headers: { Authorization: `Bearer ${sb_auth_token}` },
+      body: { token: metaData.access_token, provider: "facebook" },
+    });
+
+    if (error) {
+      return res.status(500).send(`Failed to save token: ${error.message}`);
+    }
+
+    res.send(`<h1>تم الربط والحفظ في Supabase بنجاح! 🎉</h1><p>يمكنك إغلاق هذه الصفحة والعودة للتطبيق.</p>`);
+  } catch (err: any) {
+    res.status(500).send(`<h2>خطأ في السيرفر</h2><p>${err.message}</p>`);
+  }
+});
+
+/* ---------- META AUTH INITIATION ---------- */
 
 app.get("/auth/meta", (_req: Request, res: Response) => {
   const clientId = process.env.META_APP_ID;
@@ -239,45 +284,6 @@ app.get("/auth/meta", (_req: Request, res: Response) => {
   oauthUrl.searchParams.set("scope", "catalog_management");
 
   res.redirect(oauthUrl.toString());
-});
-
-app.get(["/auth/callback", "/auth/meta/callback"], async (req: Request, res: Response) => {
-  const code = req.query.code as string;
-  if (!code) {
-    return res.status(400).send("Missing code from Meta");
-  }
-
-  const redirectUri =
-    process.env.META_REDIRECT_URI ||
-    `http://localhost:${PORT}/auth/callback`;
-
-  const params = new URLSearchParams();
-  params.append("client_id", process.env.META_APP_ID!);
-  params.append("client_secret", process.env.META_APP_SECRET!);
-  params.append("redirect_uri", redirectUri);
-  params.append("code", code);
-
-  try {
-    const metaRes = await fetch(
-      `https://graph.facebook.com/v18.0/oauth/access_token?${params.toString()}`
-    );
-    const metaData: any = await metaRes.json();
-
-    if (!metaData.access_token) {
-      console.error("[/auth/callback] Meta error:", metaData.error);
-      return res.status(500).json({
-        error: "Failed to get token from Meta",
-        details: metaData.error,
-      });
-    }
-
-    console.log("✅ [/auth/callback] Access token received from Meta");
-    // TODO: save metaData.access_token securely via store-catalog-token edge function
-    res.send("<h1>✅ Connected to Meta successfully!</h1><p>You can close this tab.</p>");
-  } catch (err) {
-    console.error("[/auth/callback] Server error:", err);
-    res.status(500).send("Internal server error during token exchange");
-  }
 });
 
 /* ---------- SERVE FRONTEND (production only) ---------- */
