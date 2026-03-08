@@ -20,7 +20,7 @@ export default function ProductsPage() {
   const [msg, setMsg] = useState("");
 
   async function loadProducts() {
-    const res = await fetch(`${BACKEND_URL}/products`);
+    const res = await fetch(`${BACKEND_URL}/api/products`);
     const data = await res.json();
     if (data.ok) setProducts(data.products);
   }
@@ -29,7 +29,7 @@ export default function ProductsPage() {
     setLoading(true);
     setMsg("");
 
-    const res = await fetch(`${BACKEND_URL}/sync-products`, { method: "POST" });
+    const res = await fetch(`${BACKEND_URL}/api/sync-products`, { method: "POST" });
     const data = await res.json();
 
     if (!data.ok) {

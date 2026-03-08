@@ -47,7 +47,7 @@ app.get("/health", (_req: Request, res: Response) => {
   res.json({ ok: true, message: "Backend is running" });
 });
 
-app.post("/sync-products", async (_req: Request, res: Response) => {
+app.post("/api/sync-products", async (_req: Request, res: Response) => {
   try {
     const catalogId = process.env.META_CATALOG_ID;
     const accessToken = process.env.META_ACCESS_TOKEN;
@@ -113,7 +113,7 @@ app.post("/sync-products", async (_req: Request, res: Response) => {
   }
 });
 
-app.get("/products", async (_req: Request, res: Response) => {
+app.get("/api/products", async (_req: Request, res: Response) => {
   const { data, error } = await supabase
     .from("products")
     .select("*")
@@ -222,15 +222,73 @@ app.get("/api/stores/:id/products", async (req: Request, res: Response) => {
   });
 });
 
-/* ---------- SERVE FRONTEND (production) ---------- */
+/* ---------- META AUTH ROUTES ---------- */
 
-const distPath = path.join(__dirname, "../dist");
-app.use(express.static(distPath));
+app.get("/auth/meta", (_req: Request, res: Response) => {
+  const clientId = process.env.META_APP_ID;
+  if (!clientId) {
+    return res.status(500).send("META_APP_ID is not configured in .env");
+  }
+  const redirectUri =
+    process.env.META_REDIRECT_URI ||
+    `http://localhost:${PORT}/auth/callback`;
 
-// Catch-all: send index.html for any unknown route (SPA support)
-app.get("*", (_req: Request, res: Response) => {
-  res.sendFile(path.join(distPath, "index.html"));
+  const oauthUrl = new URL("https://www.facebook.com/dialog/oauth");
+  oauthUrl.searchParams.set("client_id", clientId);
+  oauthUrl.searchParams.set("redirect_uri", redirectUri);
+  oauthUrl.searchParams.set("scope", "catalog_management");
+
+  res.redirect(oauthUrl.toString());
 });
+
+app.get(["/auth/callback", "/auth/meta/callback"], async (req: Request, res: Response) => {
+  const code = req.query.code as string;
+  if (!code) {
+    return res.status(400).send("Missing code from Meta");
+  }
+
+  const redirectUri =
+    process.env.META_REDIRECT_URI ||
+    `http://localhost:${PORT}/auth/callback`;
+
+  const params = new URLSearchParams();
+  params.append("client_id", process.env.META_APP_ID!);
+  params.append("client_secret", process.env.META_APP_SECRET!);
+  params.append("redirect_uri", redirectUri);
+  params.append("code", code);
+
+  try {
+    const metaRes = await fetch(
+      `https://graph.facebook.com/v18.0/oauth/access_token?${params.toString()}`
+    );
+    const metaData: any = await metaRes.json();
+
+    if (!metaData.access_token) {
+      console.error("[/auth/callback] Meta error:", metaData.error);
+      return res.status(500).json({
+        error: "Failed to get token from Meta",
+        details: metaData.error,
+      });
+    }
+
+    console.log("✅ [/auth/callback] Access token received from Meta");
+    // TODO: save metaData.access_token securely via store-catalog-token edge function
+    res.send("<h1>✅ Connected to Meta successfully!</h1><p>You can close this tab.</p>");
+  } catch (err) {
+    console.error("[/auth/callback] Server error:", err);
+    res.status(500).send("Internal server error during token exchange");
+  }
+});
+
+/* ---------- SERVE FRONTEND (production only) ---------- */
+
+if (process.env.NODE_ENV === "production") {
+  const distPath = path.join(__dirname, "../dist");
+  app.use(express.static(distPath));
+  app.get("*", (_req: Request, res: Response) => {
+    res.sendFile(path.join(distPath, "index.html"));
+  });
+}
 
 /* ---------- START ---------- */
 
