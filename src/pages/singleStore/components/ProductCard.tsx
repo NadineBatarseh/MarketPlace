@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { Product } from "../types";
 import { parsePrice } from "../helpers";
 import StarRating from "./StarRating";
@@ -17,12 +18,17 @@ export default function ProductCard({
   onAddToCart: (id: string | number, name: string) => void;
   onToggleFav: (id: string | number) => void;
 }) {
+  const navigate = useNavigate();
   const name  = product.title || product.name || "منتج";
   const price = parsePrice(product.price);
   const delay = `${(index * 0.07).toFixed(2)}s`;
 
   return (
-    <div className="sp-card" style={{ animation: `sp-fadeUp .35s ease ${delay} both` }}>
+    <div
+      className="sp-card"
+      style={{ animation: `sp-fadeUp .35s ease ${delay} both`, cursor: "pointer" }}
+      onClick={() => navigate(`/product/${product.id}`)}
+    >
       {product.badge && (
         <div className={`sp-card-badge${product.is_new ? " new" : ""}`}>{product.badge}</div>
       )}
@@ -32,7 +38,7 @@ export default function ProductCard({
 
       <div
         className="sp-card-fav"
-        onClick={() => onToggleFav(product.id)}
+        onClick={(e) => { e.stopPropagation(); onToggleFav(product.id); }}
         title="أضف للمفضلة"
         style={{ background: isFaved ? "#fee2e2" : undefined }}
       >
@@ -88,7 +94,7 @@ export default function ProductCard({
         </div>
         <button
           className={`sp-btn-cart${isAdded ? " added" : ""}`}
-          onClick={() => onAddToCart(product.id, name)}
+          onClick={(e) => { e.stopPropagation(); onAddToCart(product.id, name); }}
         >
           {isAdded ? (
             <>

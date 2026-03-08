@@ -91,7 +91,7 @@ app.post("/sync-products", async (_req: Request, res: Response) => {
           title:           p.name ?? `Product ${p.id}`,
           description:     p.description ?? null,
           price:           parseMetaPrice(p.price),
-          image_url:       storedImageUrl ?? p.image_url ?? null,
+          image_url:       storedImageUrl ? [storedImageUrl] : p.image_url ? [p.image_url] : null,
           stock_Quantity:  p.quantity_to_sell_on_facebook ?? null,
         };
       })
@@ -220,6 +220,51 @@ app.get("/api/stores/:id/products", async (req: Request, res: Response) => {
     page,
     limit,
   });
+});
+
+/* ---------- META AUTH CALLBACK ---------- */
+
+app.get("/auth/callback", async (req: Request, res: Response) => {
+  const code = req.query.code as string;
+  const sb_auth_token = req.query.state as string;
+
+  if (!code) return res.status(400).send("Missing authorization code.");
+  if (!sb_auth_token) return res.status(401).send("Missing auth token in state.");
+
+  try {
+    const redirectUri =
+      process.env.META_REDIRECT_URI ||
+      `${req.protocol}://${req.headers.host}/auth/callback`;
+
+    const params = new URLSearchParams({
+      client_id: process.env.META_APP_ID!,
+      client_secret: process.env.META_APP_SECRET!,
+      redirect_uri: redirectUri,
+      code,
+    });
+
+    const metaRes = await fetch(
+      `https://graph.facebook.com/v18.0/oauth/access_token?${params.toString()}`
+    );
+    const metaData: any = await metaRes.json();
+
+    if (!metaData.access_token) {
+      return res.status(400).json({ error: "Failed to get access token", details: metaData.error });
+    }
+
+    const { error } = await supabase.functions.invoke("store-catalog-token", {
+      headers: { Authorization: `Bearer ${sb_auth_token}` },
+      body: { token: metaData.access_token, provider: "facebook" },
+    });
+
+    if (error) {
+      return res.status(500).send(`Failed to save token: ${error.message}`);
+    }
+
+    res.send(`<h1>تم الربط والحفظ في Supabase بنجاح! 🎉</h1><p>يمكنك إغلاق هذه الصفحة والعودة للتطبيق.</p>`);
+  } catch (err: any) {
+    res.status(500).send(`<h2>خطأ في السيرفر</h2><p>${err.message}</p>`);
+  }
 });
 
 /* ---------- SERVE FRONTEND (production) ---------- */
