@@ -1,0 +1,318 @@
+/* ---- City Filter ---- */
+.sl-cities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  padding: 24px 48px 8px;
+  direction: rtl;
+}
+.sl-city-btn {
+  padding: 8px 20px;
+  border-radius: 999px;
+  border: 1.5px solid #d1d5db;
+  background: #fff;
+  color: #374151;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+.sl-city-btn:hover { border-color: #2a7a3b; color: #2a7a3b; }
+.sl-city-btn--active { background: #2a7a3b; color: #fff; border-color: #2a7a3b; }
+
+/* ---- Hero ---- */
+.sl-hero {
+  position: relative;
+  background: #fff;
+  text-align: right;
+  padding: 48px 48px 36px;
+  overflow: hidden;
+  border-bottom: 1px solid #ececec;
+}
+
+.sl-hero-circle {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0.08;
+  background: #2a7a3b;
+  pointer-events: none;
+}
+
+.sl-hero-circle--1 {
+  width: 320px;
+  height: 320px;
+  top: -120px;
+  left: -80px;
+}
+
+.sl-hero-circle--2 {
+  width: 200px;
+  height: 200px;
+  bottom: -80px;
+  left: 160px;
+}
+
+.sl-hero-title {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #1a1a1a;
+  margin: 0 0 8px;
+  position: relative;
+}
+
+.sl-hero-sub {
+  font-size: 1rem;
+  color: #666;
+  margin: 0;
+  position: relative;
+}
+
+/* ---- Page ---- */
+.sl-page {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 36px 32px 60px;
+  background: #f7f7f7;
+  min-height: 60vh;
+}
+
+/* ---- Grid ---- */
+.sl-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+@media (max-width: 1100px) {
+  .sl-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 760px) {
+  .sl-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 480px) {
+  .sl-grid { grid-template-columns: 1fr; }
+  .sl-hero { padding: 32px 20px 24px; }
+  .sl-page { padding: 24px 16px 40px; }
+}
+
+/* ---- Card ---- */
+.sl-card {
+  background: #fff;
+  border-radius: 16px;
+  padding: 24px 16px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.07);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  text-align: center;
+}
+
+.sl-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(42, 122, 59, 0.14);
+}
+
+/* ---- Logo ---- */
+.sl-logo-wrap {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  flex-shrink: 0;
+}
+
+.sl-logo,
+.sl-logo-placeholder {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.sl-logo-placeholder {
+  background: #2a7a3b;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.2rem;
+  font-weight: 700;
+}
+
+.sl-badge {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  width: 32px;
+  height: 32px;
+  background: #2a7a3b;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+}
+
+.sl-badge svg {
+  width: 16px;
+  height: 16px;
+  stroke: #fff;
+}
+
+/* ---- Rating ---- */
+.sl-rating {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: center;
+}
+
+.sl-star {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.sl-rating-score {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.sl-rating-count {
+  font-size: 0.82rem;
+  color: #999;
+}
+
+/* ---- Info ---- */
+.sl-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+}
+
+.sl-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.sl-location {
+  font-size: 0.82rem;
+  color: #777;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.sl-pin {
+  width: 13px;
+  height: 13px;
+  stroke: #2a7a3b;
+  flex-shrink: 0;
+}
+
+/* ---- Visit button ---- */
+.sl-visit-btn {
+  width: 100%;
+  margin-top: 6px;
+  padding: 9px 0;
+  border: 1.5px solid #2a7a3b;
+  border-radius: 10px;
+  background: transparent;
+  color: #2a7a3b;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sl-visit-btn:hover {
+  background: #2a7a3b;
+  color: #fff;
+}
+
+/* ---- Load more ---- */
+.sl-more-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 36px;
+}
+
+.sl-more-btn {
+  background: #2a7a3b;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 36px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.sl-more-btn:hover {
+  background: #1f5e2c;
+}
+
+/* ---- States ---- */
+.sl-error {
+  color: #c0392b;
+  text-align: center;
+  margin-top: 60px;
+  font-size: 1rem;
+}
+
+.sl-empty {
+  text-align: center;
+  color: #999;
+  margin-top: 60px;
+  font-size: 1rem;
+}
+
+/* ---- Skeleton ---- */
+.sl-card--skeleton {
+  pointer-events: none;
+}
+
+.sl-skeleton-circle {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: #e8e8e8;
+  animation: sl-shimmer 1.4s infinite;
+}
+
+.sl-skeleton-line {
+  height: 14px;
+  border-radius: 6px;
+  background: #e8e8e8;
+  animation: sl-shimmer 1.4s infinite;
+}
+
+.sl-skeleton-line--wide  { width: 70%; }
+.sl-skeleton-line--narrow { width: 45%; }
+
+.sl-skeleton-btn {
+  width: 100%;
+  height: 36px;
+  border-radius: 10px;
+  background: #e8e8e8;
+  animation: sl-shimmer 1.4s infinite;
+  margin-top: 6px;
+}
+
+@keyframes sl-shimmer {
+  0%   { opacity: 1; }
+  50%  { opacity: 0.4; }
+  100% { opacity: 1; }
+}
