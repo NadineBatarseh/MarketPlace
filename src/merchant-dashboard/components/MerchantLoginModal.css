@@ -1,0 +1,154 @@
+/* ══════════════════════════════════════
+   MerchantLoginModal.css
+   ══════════════════════════════════════ */
+
+.mlm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(5px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  direction: rtl;
+  font-family: 'Cairo', 'Tajawal', 'IBM Plex Sans Arabic', sans-serif;
+}
+
+.mlm-modal {
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 2.5rem 2rem 2rem;
+  width: 100%;
+  max-width: 440px;
+  margin: 1rem;
+  position: relative;
+  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.25);
+  animation: mlm-slide-in 0.25s ease;
+}
+
+@keyframes mlm-slide-in {
+  from { opacity: 0; transform: scale(0.94) translateY(12px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.mlm-close {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  background: #f3f4f6;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  color: #6b7280;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  transition: background 0.2s, color 0.2s;
+  line-height: 1;
+}
+.mlm-close:hover { background: #e5e7eb; color: #111; }
+
+/* ── Header ── */
+.mlm-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+.mlm-icon {
+  font-size: 3.2rem;
+  margin-bottom: 0.75rem;
+  display: block;
+}
+.mlm-header h2 {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: #1a1a2e;
+  margin: 0 0 0.4rem;
+}
+.mlm-header p {
+  color: #6b7280;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+/* ── Form ── */
+.mlm-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.mlm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.mlm-field label {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #1a1a2e;
+}
+.mlm-field input {
+  padding: 0.8rem 1rem;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 12px;
+  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-size: 0.95rem;
+  direction: rtl;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  background: #fafafa;
+}
+.mlm-field input:focus {
+  border-color: #1a1a2e;
+  box-shadow: 0 0 0 3px rgba(26, 26, 46, 0.08);
+  background: #fff;
+}
+.mlm-field input:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ── Error ── */
+.mlm-error {
+  background: #fef2f2;
+  color: #dc2626;
+  padding: 0.7rem 1rem;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  border: 1px solid #fecaca;
+  text-align: center;
+}
+
+/* ── Submit ── */
+.mlm-submit {
+  padding: 0.9rem;
+  background: #1a1a2e;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+  margin-top: 0.2rem;
+}
+.mlm-submit:hover:not(:disabled) { background: #e8572a; }
+.mlm-submit:active:not(:disabled) { transform: scale(0.99); }
+.mlm-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ── Hint ── */
+.mlm-hint {
+  text-align: center;
+  margin-top: 1.2rem;
+  color: #9ca3af;
+  font-size: 0.8rem;
+  line-height: 1.7;
+}
+.mlm-hint code {
+  background: #f3f4f6;
+  padding: 0.1rem 0.35rem;
+  border-radius: 5px;
+  color: #1a1a2e;
+  font-size: 0.78rem;
+}

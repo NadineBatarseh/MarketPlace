@@ -1,7 +1,7 @@
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
+  width: 100%;         /* ← full screen width */
+  margin: 0;           /* ← no centering */
+  padding: 0;          /* ← no inner spacing */
   text-align: center;
 }
 
@@ -39,4 +39,11 @@
 
 .read-the-docs {
   color: #888;
+}
+
+.app-missing-shop {
+  padding: 2rem;
+  text-align: center;
+  color: #888;
+  font-family: 'Cairo', sans-serif;
 }

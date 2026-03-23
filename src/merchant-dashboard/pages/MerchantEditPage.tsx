@@ -1,0 +1,405 @@
+import { useState, useRef, useEffect } from 'react';
+import { useMerchantAuth, MerchantShop } from '../context/MerchantAuthContext';
+import supabase from '../../lib/supabase';
+
+const ALL_CATEGORIES = [
+  'ملابس رجالية', 'ملابس نسائية', 'ملابس أطفال', 'إكسسوارات',
+  'أدوات منزلية', 'إلكترونيات', 'مستلزمات مطبخ', 'عطور ومستحضرات',
+  'رياضة وترفيه', 'ألعاب أطفال', 'كتب وقرطاسية', 'أخرى',
+];
+
+interface DBProduct {
+  id: string;
+  shop_id: string;
+  title: string;
+  description: string | null;
+  price: number;
+  image_url: string | null;
+  stock_Quantity: number;
+}
+
+interface ProductForm {
+  name: string;
+  description: string;
+  price: string;
+  quantity: string;
+  imageUrl: string | null;
+}
+
+function AddProductModal({ shopId, onAdd, onClose }: { shopId: string; onAdd: (p: DBProduct) => void; onClose: () => void }) {
+  const [form, setForm] = useState<ProductForm>({ name: '', description: '', price: '', quantity: '', imageUrl: null });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const imgInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => setForm(f => ({ ...f, imageUrl: ev.target?.result as string }));
+    reader.readAsDataURL(file);
+  };
+
+  const handleAdd = async () => {
+    if (!form.name.trim() || !form.price.trim() || !form.quantity.trim()) {
+      setError('يرجى ملء الحقول المطلوبة');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+
+    const { data, error: insertErr } = await supabase
+      .from('products')
+      .insert({
+        shop_id: shopId,
+        title: form.name.trim(),
+        description: form.description.trim() || null,
+        price: parseFloat(form.price) || 0,
+        image_url: form.imageUrl,
+        stock_Quantity: parseInt(form.quantity) || 0,
+      })
+      .select()
+      .single();
+
+    if (insertErr || !data) {
+      setError('تعذّر إضافة المنتج: ' + (insertErr?.message ?? 'خطأ غير معروف'));
+      setSaving(false);
+      return;
+    }
+
+    onAdd(data as DBProduct);
+    onClose();
+  };
+
+  return (
+    <div className="apm-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="apm-modal">
+        <div className="apm-header">
+          <h3>إضافة منتج جديد</h3>
+          <button type="button" className="apm-close" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="apm-fields">
+          <div className="apm-field">
+            <label>صورة المنتج</label>
+            <div className="apm-img-preview" onClick={() => imgInputRef.current?.click()}>
+              {form.imageUrl
+                ? <img src={form.imageUrl} alt="معاينة المنتج" />
+                : <div className="apm-img-placeholder"><span>📷</span>انقر لاختيار صورة</div>
+              }
+            </div>
+            <input ref={imgInputRef} type="file" accept="image/*" onChange={handleImageChange} className="mep-file-hidden" aria-label="اختر صورة المنتج" />
+          </div>
+
+          <div className="apm-field">
+            <label>اسم المنتج *</label>
+            <input type="text" placeholder="مثال: قميص صيفي" value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+          </div>
+
+          <div className="apm-field">
+            <label>وصف المنتج</label>
+            <textarea placeholder="اكتب وصفاً مختصراً..." value={form.description}
+              onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+          </div>
+
+          <div className="apm-field">
+            <label>السعر (ر.س) *</label>
+            <input type="number" min="0" step="0.5" placeholder="150" value={form.price}
+              onChange={e => setForm(f => ({ ...f, price: e.target.value }))} />
+          </div>
+
+          <div className="apm-field">
+            <label>الكمية المتاحة *</label>
+            <input type="number" min="0" placeholder="20" value={form.quantity}
+              onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} />
+          </div>
+
+          {error && <div className="md-page-error">{error}</div>}
+
+          <button type="button" className="apm-add-btn" onClick={handleAdd} disabled={saving}>
+            {saving ? 'جاري الحفظ...' : '➕ إضافة المنتج'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function MerchantEditPage() {
+  const { merchant, updateShopLocally } = useMerchantAuth();
+  const shop = merchant!.shop;
+  const isCreate = shop === null;
+
+  const [name, setName] = useState(shop?.name ?? '');
+  const [location, setLocation] = useState(shop?.location ?? '');
+  const [description, setDescription] = useState(shop?.description ?? '');
+  const [categories, setCategories] = useState<string[]>(shop?.categories ?? []);
+  const [logoUrl, setLogoUrl] = useState<string | null>(shop?.shopLogo ?? null);
+  const [products, setProducts] = useState<DBProduct[]>([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [loadingProducts, setLoadingProducts] = useState(!isCreate);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  // After a successful create, hold the new shop_id so products can be added
+  const [createdShopId, setCreatedShopId] = useState<string | null>(null);
+
+  const activeShopId = shop?.shop_id ?? createdShopId;
+
+  useEffect(() => {
+    if (!shop?.shop_id) { setLoadingProducts(false); return; }
+    supabase
+      .from('products')
+      .select('*')
+      .eq('shop_id', shop.shop_id)
+      .then(({ data, error }) => {
+        if (!error && data) setProducts(data as DBProduct[]);
+        setLoadingProducts(false);
+      });
+  }, [shop?.shop_id]);
+
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => setLogoUrl(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const toggleCategory = (cat: string) => {
+    setCategories(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]);
+  };
+
+  const deleteProduct = async (id: string) => {
+    if (!activeShopId) return;
+    const { error } = await supabase.from('products').delete().eq('id', id).eq('shop_id', activeShopId);
+    if (!error) setProducts(prev => prev.filter(p => p.id !== id));
+  };
+
+  const handleSave = async () => {
+    if (!name.trim() || !location.trim() || categories.length === 0) {
+      setSaveError('يرجى ملء اسم المتجر والموقع واختيار فئة واحدة على الأقل');
+      return;
+    }
+    setSaving(true);
+    setSaveError('');
+
+    if (isCreate) {
+      // ── CREATE ──
+      // shops.merchant_id is a FK to merchants.id (not the auth UUID)
+      const { data: merchantRow, error: mErr } = await supabase
+        .from('merchants')
+        .select('id')
+        .eq('user_id', merchant!.id)
+        .single();
+
+      if (mErr || !merchantRow) {
+        setSaveError('تعذر العثور على سجل التاجر — تأكد من وجود سجل في جدول merchants');
+        setSaving(false);
+        return;
+      }
+
+      const { data, error: insertErr } = await supabase
+        .from('shops')
+        .insert({
+          owner_id: merchant!.id,
+          merchant_id: merchantRow.id,
+          name: name.trim(),
+          location: location.trim(),
+          description: description.trim() || null,
+          shopLogo: logoUrl,
+          categories,
+        })
+        .select()
+        .single();
+
+      if (insertErr || !data) {
+        setSaveError('تعذّر إنشاء المتجر: ' + (insertErr?.message ?? 'خطأ غير معروف'));
+        setSaving(false);
+        return;
+      }
+
+      const newShop: MerchantShop = {
+        shop_id: data.shop_id,
+        name: data.name,
+        shopLogo: data.shopLogo ?? null,
+        location: data.location ?? null,
+        description: data.description ?? null,
+        whatsapp: data.whatsapp ?? null,
+        facebook: data.facebook ?? null,
+        instagram: data.instagram ?? null,
+        merchant_id: data.merchant_id,
+        categories: data.categories ?? [],
+      };
+      updateShopLocally(newShop);
+      setCreatedShopId(data.shop_id);
+      setSaving(false);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 4000);
+      return;
+    }
+
+    // ── UPDATE ──
+    const { error: updateErr } = await supabase
+      .from('shops')
+      .update({
+        name: name.trim(),
+        location: location.trim(),
+        description: description.trim() || null,
+        shopLogo: logoUrl,
+        categories,
+      })
+      .eq('shop_id', shop!.shop_id)
+      .eq('owner_id', merchant!.id);
+
+    if (updateErr) {
+      setSaveError('تعذّر الحفظ: ' + updateErr.message);
+      setSaving(false);
+      return;
+    }
+
+    const updatedShop: MerchantShop = {
+      ...shop!,
+      name: name.trim(),
+      location: location.trim(),
+      description: description.trim() || null,
+      shopLogo: logoUrl,
+      categories,
+    };
+    updateShopLocally(updatedShop);
+    setSaving(false);
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 3000);
+  };
+
+  const pageTitle = isCreate ? 'إنشاء متجرك' : 'تعديل صفحة المتجر';
+
+  const saveBtnLabel = saving
+    ? 'جاري الحفظ...'
+    : isCreate
+      ? '🚀 إنشاء المتجر'
+      : '💾 حفظ التعديلات';
+
+  return (
+    <div className="mep-root">
+      <h1 className="mep-title">{pageTitle}</h1>
+
+
+      {/* Logo */}
+      <div className="mep-section">
+        <h2 className="mep-section-title">🖼️ شعار المتجر</h2>
+        <div className="mep-logo-area">
+          <div className="mep-logo-preview" onClick={() => logoInputRef.current?.click()} title="انقر لتغيير الشعار">
+            {logoUrl
+              ? <img src={logoUrl} alt="شعار المتجر" />
+              : <span className="mep-logo-placeholder">🏪</span>
+            }
+          </div>
+          <div>
+            <div className="mep-logo-info">
+              اختر صورة بجودة عالية لتمثيل متجرك<br />
+              الصيغ المدعومة: JPG، PNG، WEBP
+            </div>
+            <button type="button" className="mep-logo-btn" onClick={() => logoInputRef.current?.click()}>
+              📁 اختر صورة
+            </button>
+          </div>
+          <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} className="mep-file-hidden" aria-label="اختر شعار المتجر" />
+        </div>
+      </div>
+
+      {/* Basic info */}
+      <div className="mep-section">
+        <h2 className="mep-section-title">📋 معلومات المتجر</h2>
+        <div className="mep-fields">
+          <div className="mep-field">
+            <label>اسم المتجر</label>
+            <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="أدخل اسم متجرك" />
+          </div>
+          <div className="mep-field">
+            <label>الموقع / المنطقة</label>
+            <input type="text" value={location} onChange={e => setLocation(e.target.value)} placeholder="مثال: الرياض، حي النزهة" />
+          </div>
+          <div className="mep-field">
+            <label>وصف المتجر</label>
+            <input type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="وصف مختصر عن متجرك" />
+          </div>
+        </div>
+      </div>
+
+      {/* Categories */}
+      <div className="mep-section">
+        <h2 className="mep-section-title">🏷️ فئات المتجر</h2>
+        <div className="mep-categories">
+          {ALL_CATEGORIES.map(cat => (
+            <button
+              type="button"
+              key={cat}
+              className={`mep-cat-chip${categories.includes(cat) ? ' selected' : ''}`}
+              onClick={() => toggleCategory(cat)}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Products — only shown after a shop exists */}
+      {(shop !== null || createdShopId !== null) && (
+        <div className="mep-section">
+          <div className="mep-products-header">
+            <h2 className="mep-section-title mep-section-title--flush">📦 المنتجات</h2>
+            <button type="button" className="mep-add-product-btn" onClick={() => setShowAddModal(true)}>
+              ➕ إضافة منتج
+            </button>
+          </div>
+
+          {loadingProducts ? (
+            <div className="md-page-loading">جاري تحميل المنتجات...</div>
+          ) : products.length === 0 ? (
+            <div className="mr-empty mep-products-gap">لا توجد منتجات — أضف أول منتج لك!</div>
+          ) : (
+            <div className="mep-products-grid mep-products-gap">
+              {products.map(p => (
+                <div key={p.id} className="mep-product-card">
+                  <button type="button" className="mep-product-del-btn" onClick={() => deleteProduct(p.id)} title="حذف المنتج">🗑</button>
+                  <div className="mep-product-img">
+                    {p.image_url ? <img src={p.image_url} alt={p.title} /> : '📦'}
+                  </div>
+                  <div className="mep-product-name">{p.title}</div>
+                  {p.description && <div className="mep-product-desc">{p.description}</div>}
+                  <div className="mep-product-footer">
+                    <span className="mep-product-price">{Number(p.price).toLocaleString('ar-SA')} ر.س</span>
+                    <span className="mep-product-qty">الكمية: {p.stock_Quantity}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {saveSuccess && (
+        <div className="mep-save-success">
+          {isCreate ? '🚀 تم إنشاء متجرك بنجاح!' : '✅ تم حفظ التعديلات بنجاح!'}
+        </div>
+      )}
+      {saveError && <div className="md-page-error">{saveError}</div>}
+
+      <button type="button" className="mep-save-btn" onClick={handleSave} disabled={saving}>
+        {saveBtnLabel}
+      </button>
+
+      {showAddModal && activeShopId && (
+        <AddProductModal
+          shopId={activeShopId}
+          onAdd={p => setProducts(prev => [...prev, p])}
+          onClose={() => setShowAddModal(false)}
+        />
+      )}
+    </div>
+  );
+}
