@@ -156,7 +156,7 @@ function addToCart(id: string | number, name: string) {
   return (
     <div dir="rtl" style={{ fontFamily: "'Cairo', sans-serif", background: "var(--bg)", minHeight: "100vh", color: "var(--text-main)" }}>
 
-      <StoreNav searchQuery={searchQuery} onSearchChange={setSearchQuery} />
+      <StoreNav searchQuery={searchQuery} onSearchChange={setSearchQuery} cartCount={0} />
 
       {/* Banner */}
       <div className="sp-banner">
