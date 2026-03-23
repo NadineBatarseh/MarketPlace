@@ -54,7 +54,7 @@ app.get("/health", (_req: Request, res: Response) => {
   res.json({ ok: true, message: "Backend is running" });
 });
 
-app.post("/sync-products", async (_req: Request, res: Response) => {
+app.post("/api/sync-products", async (_req: Request, res: Response) => {
   try {
     const catalogId = process.env.META_CATALOG_ID;
     const accessToken = process.env.META_ACCESS_TOKEN;
@@ -120,7 +120,7 @@ app.post("/sync-products", async (_req: Request, res: Response) => {
   }
 });
 
-app.get("/products", async (_req: Request, res: Response) => {
+app.get("/api/products", async (_req: Request, res: Response) => {
   const { data, error } = await supabase
     .from("products")
     .select("*")
@@ -329,15 +329,34 @@ app.get("/auth/callback", async (req: Request, res: Response) => {
   }
 });
 
-/* ---------- SERVE FRONTEND (production) ---------- */
+/* ---------- META AUTH INITIATION ---------- */
 
-const distPath = path.join(__dirname, "../dist");
-app.use(express.static(distPath));
+app.get("/auth/meta", (_req: Request, res: Response) => {
+  const clientId = process.env.META_APP_ID;
+  if (!clientId) {
+    return res.status(500).send("META_APP_ID is not configured in .env");
+  }
+  const redirectUri =
+    process.env.META_REDIRECT_URI ||
+    `http://localhost:${PORT}/auth/callback`;
 
-// Catch-all: send index.html for any unknown route (SPA support)
-app.get("*", (_req: Request, res: Response) => {
-  res.sendFile(path.join(distPath, "index.html"));
+  const oauthUrl = new URL("https://www.facebook.com/dialog/oauth");
+  oauthUrl.searchParams.set("client_id", clientId);
+  oauthUrl.searchParams.set("redirect_uri", redirectUri);
+  oauthUrl.searchParams.set("scope", "catalog_management");
+
+  res.redirect(oauthUrl.toString());
 });
+
+/* ---------- SERVE FRONTEND (production only) ---------- */
+
+if (process.env.NODE_ENV === "production") {
+  const distPath = path.join(__dirname, "../dist");
+  app.use(express.static(distPath));
+  app.get("*", (_req: Request, res: Response) => {
+    res.sendFile(path.join(distPath, "index.html"));
+  });
+}
 
 /* ---------- START ---------- */
 
