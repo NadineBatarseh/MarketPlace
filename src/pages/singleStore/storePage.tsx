@@ -1,196 +1,97 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { Store, Product, Status, PAGE_SIZE } from "./types";
-import { apiFetch } from "./api";
-import StoreNav from "./components/StoreNav";
-import StoreHeader from "./components/StoreHeader";
-import ProductsSection from "./components/ProductsSection";
-import { useShop } from "../../context/ShopContext";
-import "./storePage.css";
-import { useMerchantAuth } from '../../merchant-dashboard/context/MerchantAuthContext';
-import { useCustomerAuth } from '../../context/CustomerAuthContext';
-import supabase from '../../lib/supabase';
+import type { MouseEvent } from 'react';
+import { useState } from 'react';
+import './storePage.css';
 
+import { useStore } from './hooks/useStore';
+import { useProducts } from './hooks/useProducts';
+import { useToast } from './hooks/useToast';
 
-export default function StorePage({ shopId }: { shopId: string }) {
-  // ── Store state ──
-  const [storeStatus, setStoreStatus] = useState<Status>("loading");
-  const [store, setStore]             = useState<Store | null>(null);
-  const [storeError, setStoreError]   = useState("");
+import Topbar from '../../components/Topbar';
+import StoreNav from './components/StoreNav';
+import StoreHero from './components/StoreHero';
+import Sidebar from './components/Sidebar';
+import type { FilterKey, FilterState } from './components/Sidebar';
+import ProductsSection from './components/ProductsSection';
+import Footer from './components/Footer';
+import Toast from './components/Toast';
 
-  // ── Products state ──
-  const [productsStatus, setProductsStatus] = useState<Status>("loading");
-  const [products, setProducts]             = useState<Product[]>([]);
-  const [productsError, setProductsError]   = useState("");
-  const [total, setTotal]                   = useState(0);
-  const [page, setPage]                     = useState(1);
-  const [sort, setSort]                     = useState("default");
-  const [loadingMore, setLoadingMore]       = useState(false);
-
-  // ── UI interaction state ──
-  const [addedSet, setAddedSet]       = useState<Set<string | number>>(new Set());
-  const [toast, setToast]             = useState({ show: false, msg: "" });
-  const [searchQuery, setSearchQuery] = useState("");
-
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // ── Global cart / favorites ──
-  const {
-    addToCart: ctxAddToCart,
-    toggleFavorite: ctxToggleFavorite,
-    favoriteItems,
-  } = useShop();
-
-  const { merchant } = useMerchantAuth();
-const { customer } = useCustomerAuth();
-const isAuthenticated = !!merchant || !!customer;
-
-  // Derive favSet from context so heart icons stay in sync across pages
-  const favSet = new Set(favoriteItems.map((item) => item.id));
-
-  // ── Toast ──
-  function showToast(msg: string) {
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    setToast({ show: true, msg });
-    toastTimer.current = setTimeout(() => setToast((t) => ({ ...t, show: false })), 2800);
-  }
-
-  // ── Cart ──
-function addToCart(id: string | number, name: string) {
-  if (!isAuthenticated) { showToast('🔒 يجب تسجيل الدخول أولاً لإضافة منتجات للسلة'); return; }
-  const product = products.find((p) => p.id === id);
-  const image = product?.image_url ?? '';
-  const price = parseFloat(String(product?.price ?? '0').replace(/[^\d.]/g, '')) || 0;
-  ctxAddToCart({ id, name, image, price });
-  setAddedSet((s) => new Set([...s, id]));
-  showToast(`✅ أُضيف "${name}" للسلة`);
-  setTimeout(() => {
-    setAddedSet((s) => { const next = new Set(s); next.delete(id); return next; });
-  }, 2500);
+interface Props {
+  shopId: string;
 }
 
+export default function StorePage({ shopId }: Props) {
+  const { store, loading: storeLoading, error: storeError } = useStore(shopId);
+  const { products, total, loading: productsLoading, sort, handleSortChange, handleLoadMore } = useProducts(shopId);
+  const { toast, toastVisible, showToast } = useToast();
 
-  // ── Fav ──
-  function toggleFav(id: string | number) {
-  if (!isAuthenticated) { showToast('🔒 يجب تسجيل الدخول أولاً لإضافة منتجات للمفضلة'); return; }
-  const product = products.find((p) => p.id === id);
-  if (!product) return;
-  const name = product.title || product.name || 'منتج';
-  const image = product.image_url ?? '';
-  const price = parseFloat(String(product.price ?? '0').replace(/[^\d.]/g, '')) || 0;
-  ctxToggleFavorite({ id, name, image, price });
-}
+  const [cartCount, setCartCount] = useState(0);
+  const [wishlist, setWishlist] = useState<Set<string>>(new Set());
+  const [activeColor, setActiveColor] = useState('#2a7a3b');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [openFilters, setOpenFilters] = useState<FilterState>({
+    categories: true,
+    price: true,
+    brands: false,
+    colors: true,
+  });
 
-
-  // ── Fetch products ──
-  const loadProducts = useCallback(
-    async (pg: number, sortKey: string, append: boolean) => {
-      try {
-        const params = new URLSearchParams({ page: String(pg), limit: String(PAGE_SIZE), sort: sortKey });
-        const data = await apiFetch<{ ok: true; products: Product[]; total: number; page: number; limit: number }>(
-          `/api/stores/${shopId}/products?${params}`
-        );
-        setProducts((prev) => (append ? [...prev, ...data.products] : data.products));
-        setTotal(data.total);
-        setProductsStatus("success");
-      } catch (err) {
-        setProductsError((err as Error).message);
-        setProductsStatus("error");
+  function toggleWishlist(e: MouseEvent, id: string) {
+    e.stopPropagation();
+    setWishlist(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+        showToast('تمت الإزالة من المفضلة');
+      } else {
+        next.add(id);
+        showToast('❤ تمت الإضافة للمفضلة');
       }
-    },
-    [shopId]
-  );
-
-  // ── Load more ──
-  async function loadMoreProducts() {
-    setLoadingMore(true);
-    const nextPage = page + 1;
-    setPage(nextPage);
-    await loadProducts(nextPage, sort, true);
-    setLoadingMore(false);
+      return next;
+    });
   }
 
-  // ── Sort change ──
-  async function onSortChange(newSort: string) {
-    setSort(newSort);
-    setPage(1);
-    setProducts([]);
-    setProductsStatus("loading");
-    await loadProducts(1, newSort, false);
+  function addToCart(e: MouseEvent) {
+    e.stopPropagation();
+    setCartCount(c => c + 1);
+    showToast('✓ تمت الإضافة إلى السلة');
   }
 
-  // ── Initial load ──
-  useEffect(() => {
-    async function init() {
-      setStoreStatus("loading");
-      setProductsStatus("loading");
-      try {
-        const [storeRes, productsRes] = await Promise.all([
-          apiFetch<{ ok: true; store: Store }>(`/api/stores/${shopId}`),
-          apiFetch<{ ok: true; products: Product[]; total: number; page: number; limit: number }>(
-            `/api/stores/${shopId}/products?page=1&limit=${PAGE_SIZE}&sort=default`
-          ),
-        ]);
-        setStore(storeRes.store);
-        setStoreStatus("success");
-        setProducts(productsRes.products);
-        setTotal(productsRes.total);
-        setProductsStatus("success");
-
-        // Record this visit
-        supabase.from('Store_visitors').insert({
-          store_id: shopId,
-          visitor_ip: '',
-          page_viewes: window.location.pathname,
-        });
-      } catch (err) {
-        const msg = (err as Error).message;
-        setStoreError(msg);
-        setStoreStatus("error");
-        setProductsError(msg);
-        setProductsStatus("error");
-      }
-    }
-    init();
-  }, [shopId]);
+  function toggleFilter(key: FilterKey) {
+    setOpenFilters(prev => ({ ...prev, [key]: !prev[key] }));
+  }
 
   return (
-    <div dir="rtl" style={{ fontFamily: "'Cairo', sans-serif", background: "var(--bg)", minHeight: "100vh", color: "var(--text-main)" }}>
-
-      <StoreNav searchQuery={searchQuery} onSearchChange={setSearchQuery} cartCount={0} />
-
-      {/* Banner */}
-      <div className="sp-banner">
-        <div className="sp-banner-accent" />
-      </div>
-
-      <StoreHeader
-        status={storeStatus}
+    <>
+      <Topbar cartCount={cartCount} />
+      <StoreNav />
+      <StoreHero
         store={store}
+        loading={storeLoading}
         error={storeError}
       />
-
-      <ProductsSection
-        status={productsStatus}
-        products={products}
-        searchQuery={searchQuery}
-        error={productsError}
-        total={total}
-        sort={sort}
-        loadingMore={loadingMore}
-        addedSet={addedSet}
-        favSet={favSet}
-        onSortChange={onSortChange}
-        onLoadMore={loadMoreProducts}
-        onAddToCart={addToCart}
-        onToggleFav={toggleFav}
-        onRetry={() => loadProducts(1, sort, false)}
-      />
-
-      {/* Toast */}
-      <div className={`sp-toast${toast.show ? " show" : ""}`}>
-        <div className="sp-toast-dot" />
-        <span>{toast.msg}</span>
+      <div className="page-body">
+        <Sidebar
+          openFilters={openFilters}
+          activeColor={activeColor}
+          onToggleFilter={toggleFilter}
+          onColorChange={setActiveColor}
+        />
+        <ProductsSection
+          products={products}
+          total={total}
+          loading={productsLoading}
+          sort={sort}
+          viewMode={viewMode}
+          wishlist={wishlist}
+          onSortChange={handleSortChange}
+          onLoadMore={handleLoadMore}
+          onViewModeChange={setViewMode}
+          onToggleWishlist={toggleWishlist}
+          onAddToCart={addToCart}
+        />
       </div>
-    </div>
+      <Footer store={store} />
+      <Toast message={toast} visible={toastVisible} />
+    </>
   );
 }

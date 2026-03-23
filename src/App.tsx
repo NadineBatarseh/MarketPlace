@@ -1,3 +1,10 @@
+import StoreListPage from './pages/storeList/StoreListPage';
+import DeliveryAgentPage from './pages/delivery agent/DeliveryAgentPage';
+import CollectorPage from './pages/delivery agent/CollectorPage';
+import HubPage from './pages/delivery agent/HubPage';
+import DelivererPage from './pages/delivery agent/DelivererPage';
+
+const myShopId = 'cc76a171-a549-43c8-ad7c-7bcadbd0e9a3';
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import "./App.css";
 import StorePage from "./pages/singleStore/storePage";
@@ -5,7 +12,6 @@ import ProductsPage from "./ProductsPage";
 import ProductDetailPage from "./pages/productDetails/ProductDetailPage";
 import Cart from "./pages/Cart";
 import Favorite from "./pages/Favorite";
-import StoresPage from "./pages/StoresPage";
 import { ShopProvider } from "./context/ShopContext";
 import { CustomerAuthProvider } from "./context/CustomerAuthContext";
 import { MerchantAuthProvider } from "./merchant-dashboard/context/MerchantAuthContext";
@@ -27,6 +33,11 @@ function ShopProviderWithAuth({ children }: { children: React.ReactNode }) {
 }
 
 
+function StorePageWrapper() {
+  const { shopId } = useParams<{ shopId: string }>();
+  return <StorePage shopId={shopId!} />;
+}
+
 export default function App() {
   return (
     <MerchantAuthProvider>
@@ -36,15 +47,22 @@ export default function App() {
             <Routes>
               {/* Landing → stores listing */}
               <Route path="/" element={<Navigate to="/store" replace />} />
-              <Route path="/store" element={<StoresPage />} />
               <Route path="/store/:shopId" element={<StoreWrapper />} />
-              <Route path="/sync" element={<ProductsPage />} />
-              <Route path="/product" element={<ProductDetailPage />} />
-              <Route path="/product/:id" element={<ProductDetailPage />} />
               <Route path="/cart" element={<Cart />} />
               <Route path="/favorites" element={<Favorite />} />
               <Route path="/merchant-dashboard" element={<MerchantDashboard />} />
               <Route path="/admin-dashboard" element={<AdminDashboard />} />
+              <Route path="/" element={<StorePage shopId={myShopId} />} />
+              <Route path="/stores" element={<StoreListPage />} />
+              <Route path="/stores/:shopId" element={<StorePageWrapper />} />
+              <Route path="/sync" element={<ProductsPage />} />
+              <Route path="/product/:id" element={<ProductDetailPage />} />
+              <Route path="/product" element={<ProductDetailPage />} />
+              <Route path="/delivery" element={<DeliveryAgentPage />} />
+              <Route path="/collector" element={<CollectorPage />} />
+              <Route path="/hub" element={<HubPage />} />
+              <Route path="/deliverer" element={<DelivererPage />} />
+
             </Routes>
           </BrowserRouter>
         </ShopProviderWithAuth>

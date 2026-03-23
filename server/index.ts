@@ -5,11 +5,18 @@ import { fileURLToPath } from "url";
 import path from "path";
 import { supabase } from "./supabase.js";
 import { uploadImage } from "./uploadImage.js";
+import logisticsRouter from "../src/pages/delivery agent/LogisticsRoutes.js";
+import webhookRouter from "./webhooks.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+
+// Webhook must be mounted with raw body BEFORE express.json(),
+// because signature verification needs the unparsed buffer.
+app.use("/webhook", express.raw({ type: "application/json" }), webhookRouter);
+
 app.use(express.json());
 
 /* ---------- HELPERS ---------- */
@@ -27,9 +34,9 @@ function parseMetaPrice(raw: string | null | undefined): number | null {
   // Keep only digits, dots, and commas; strip currency symbols & spaces
   const digitsOnly = latin.replace(/[^\d.,]/g, "");
   // Normalise: treat the last . or , as decimal separator
-  const lastDot   = digitsOnly.lastIndexOf(".");
+  const lastDot = digitsOnly.lastIndexOf(".");
   const lastComma = digitsOnly.lastIndexOf(",");
-  let normalised  = digitsOnly;
+  let normalised = digitsOnly;
   if (lastComma > lastDot) {
     // European format "1.299,99" → "1299.99"
     normalised = digitsOnly.replace(/\./g, "").replace(",", ".");
@@ -86,13 +93,13 @@ app.post("/api/sync-products", async (_req: Request, res: Response) => {
           : null;
 
         return {
-          shop_id:         shopId,
+          shop_id: shopId,
           meta_product_id: p.id,
-          title:           p.name ?? `Product ${p.id}`,
-          description:     p.description ?? null,
-          price:           parseMetaPrice(p.price),
-          image_url:       storedImageUrl ? [storedImageUrl] : p.image_url ? [p.image_url] : null,
-          stock_Quantity:  p.quantity_to_sell_on_facebook ?? null,
+          title: p.name ?? `Product ${p.id}`,
+          description: p.description ?? null,
+          price: parseMetaPrice(p.price),
+          image_url: storedImageUrl ? [storedImageUrl] : p.image_url ? [p.image_url] : null,
+          stock_Quantity: p.quantity_to_sell_on_facebook ?? null,
         };
       })
     );
@@ -126,6 +133,9 @@ app.get("/api/products", async (_req: Request, res: Response) => {
   return res.json({ ok: true, products: data });
 });
 
+/* ---------- LOGISTICS ---------- */
+app.use("/api/logistics", logisticsRouter);
+
 /* ---------- DEBUG (remove after fixing) ---------- */
 
 app.get("/api/debug/shops", async (_req: Request, res: Response) => {
@@ -141,7 +151,7 @@ app.get("/api/stores/:id", async (req: Request, res: Response) => {
 
   const { data: store, error } = await supabase
     .from("shops")
-    .select("shop_id, name, description, shopLogo, created_at, whatsapp, instagram, facebook, location")
+    .select("shop_id, name, description, shopLogo, created_at, whatsapp, instagram, facebook, location, shop_ratings(avg_rating, review_count)")
     .eq("shop_id", id)
     .single();
 
@@ -160,17 +170,46 @@ app.get("/api/stores/:id", async (req: Request, res: Response) => {
     shopLogo = urlData.publicUrl;
   }
 
-  return res.json({ ok: true, store: { ...store, shopLogo } });
+  const ratings = (store as any).shop_ratings;
+  const avg_rating = ratings?.[0]?.avg_rating ?? null;
+  const review_count = ratings?.[0]?.review_count ?? 0;
+
+  return res.json({ ok: true, store: { ...store, shopLogo, avg_rating, review_count } });
+});
+
+// POST /api/stores/:id/reviews  — submit a star rating
+app.post("/api/stores/:id/reviews", async (req: Request, res: Response) => {
+  const shop_id = req.params.id;
+  const { rating } = req.body as { rating: number };
+
+  if (!rating || rating < 1 || rating > 5) {
+    return res.status(400).json({ ok: false, error: "التقييم يجب أن يكون بين 1 و 5" });
+  }
+
+  const { error } = await supabase
+    .from("shop_reviews")
+    .insert({ shop_id, rating });
+
+  if (error) return res.status(500).json({ ok: false, error: error.message });
+
+  // Return updated rating
+  const { data } = await supabase
+    .from("shop_ratings")
+    .select("avg_rating, review_count")
+    .eq("shop_id", shop_id)
+    .single();
+
+  return res.json({ ok: true, avg_rating: data?.avg_rating ?? null, review_count: data?.review_count ?? 0 });
 });
 
 // GET /api/stores/:id/products  — paginated product list for a shop
 // Query params: page (default 1), limit (default 12), sort
 app.get("/api/stores/:id/products", async (req: Request, res: Response) => {
-  const id        = req.params.id as string;
-  const page      = Math.max(1, parseInt(req.query.page  as string) || 1);
-  const limit     = Math.min(50, parseInt(req.query.limit as string) || 12);
-  const sort      = (req.query.sort as string) || "default";
-  const offset    = (page - 1) * limit;
+  const id = req.params.id as string;
+  const page = Math.max(1, parseInt(req.query.page as string) || 1);
+  const limit = Math.min(50, parseInt(req.query.limit as string) || 12);
+  const sort = (req.query.sort as string) || "default";
+  const offset = (page - 1) * limit;
 
   const { data: shop } = await supabase
     .from("shops")
@@ -184,11 +223,11 @@ app.get("/api/stores/:id/products", async (req: Request, res: Response) => {
 
   // Map sort option to Supabase order args
   const sortMap: Record<string, { column: string; ascending: boolean }> = {
-    default:    { column: "updated_at",     ascending: false },
-    newest:     { column: "created_at",     ascending: false },
-    price_asc:  { column: "price",          ascending: true  },
-    price_desc: { column: "price",          ascending: false },
-    rating:     { column: "rating",         ascending: false },
+    default: { column: "updated_at", ascending: false },
+    newest: { column: "created_at", ascending: false },
+    price_asc: { column: "price", ascending: true },
+    price_desc: { column: "price", ascending: false },
+    rating: { column: "rating", ascending: false },
   };
   const { column: orderCol, ascending } = sortMap[sort] ?? sortMap["default"];
 
@@ -214,12 +253,35 @@ app.get("/api/stores/:id/products", async (req: Request, res: Response) => {
   }
 
   return res.json({
-    ok:       true,
+    ok: true,
     products: products ?? [],
-    total:    count   ?? 0,
+    total: count ?? 0,
     page,
     limit,
   });
+});
+
+// GET /api/stores — fetch all shops with avg rating + review count
+app.get("/api/stores", async (_req: Request, res: Response) => {
+  const { data: stores, error } = await supabase
+    .from("shops")
+    .select("shop_id, name, shopLogo, location, shop_ratings(avg_rating, review_count)")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    return res.status(500).json({ ok: false, error: error.message });
+  }
+
+  const mapped = (stores ?? []).map((s: any) => ({
+    shop_id: s.shop_id,
+    name: s.name,
+    shopLogo: s.shopLogo,
+    location: s.location,
+    avg_rating: s.shop_ratings?.[0]?.avg_rating ?? null,
+    review_count: s.shop_ratings?.[0]?.review_count ?? 0,
+  }));
+
+  return res.json({ ok: true, stores: mapped });
 });
 
 /* ---------- META AUTH CALLBACK ---------- */
