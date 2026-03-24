@@ -12,11 +12,11 @@
   align-items: center;
   justify-content: center;
   direction: rtl;
-  font-family: 'Cairo', 'Tajawal', 'IBM Plex Sans Arabic', sans-serif;
+  font-family: var(--font-main);
 }
 
 .clm-modal {
-  background: #ffffff;
+  background: var(--color-surface);
   border-radius: 24px;
   padding: 2.5rem 2rem 2rem;
   width: 100%;
@@ -36,11 +36,11 @@
   position: absolute;
   top: 1rem;
   left: 1rem;
-  background: #f3f4f6;
+  background: var(--color-bg);
   border: none;
   font-size: 1rem;
   cursor: pointer;
-  color: #6b7280;
+  color: var(--color-muted);
   width: 32px;
   height: 32px;
   border-radius: 50%;
@@ -49,7 +49,7 @@
   transition: background 0.2s, color 0.2s;
   line-height: 1;
 }
-.clm-close:hover { background: #e5e7eb; color: #111; }
+.clm-close:hover { background: var(--color-border); color: var(--color-text); }
 
 /* ── Header ── */
 .clm-header {
@@ -64,11 +64,11 @@
 .clm-header h2 {
   font-size: 1.4rem;
   font-weight: 800;
-  color: #1a1a2e;
+  color: var(--color-text);
   margin: 0 0 0.3rem;
 }
 .clm-header p {
-  color: #6b7280;
+  color: var(--color-muted);
   font-size: 0.88rem;
   margin: 0;
 }
@@ -76,7 +76,7 @@
 /* ── Tabs ── */
 .clm-tabs {
   display: flex;
-  background: #f3f4f6;
+  background: var(--color-bg);
   border-radius: 12px;
   padding: 4px;
   gap: 4px;
@@ -89,18 +89,18 @@
   border: none;
   border-radius: 9px;
   background: transparent;
-  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 0.9rem;
   font-weight: 600;
-  color: #6b7280;
+  color: var(--color-muted);
   cursor: pointer;
   transition: background 0.18s, color 0.18s;
 }
 
 .clm-tab--active {
-  background: #fff;
-  color: #1a1a2e;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-sm);
 }
 
 /* ── Form ── */
@@ -118,18 +118,18 @@
 .clm-field label {
   font-size: 0.9rem;
   font-weight: 700;
-  color: #1a1a2e;
+  color: var(--color-text);
 }
 .clm-field input {
   padding: 0.8rem 1rem;
-  border: 1.5px solid #e5e7eb;
+  border: 1.5px solid var(--color-border);
   border-radius: 12px;
-  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 0.95rem;
   direction: rtl;
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
-  background: #fafafa;
+  background: var(--color-bg);
 }
 .clm-field input:focus {
   border-color: #e8572a;
@@ -140,10 +140,10 @@
 
 /* ── Error ── */
 .clm-error {
-  background: #fef2f2;
-  color: #dc2626;
+  background: var(--color-danger-light);
+  color: var(--color-danger);
   padding: 0.7rem 1rem;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   font-size: 0.88rem;
   border: 1px solid #fecaca;
   text-align: center;
@@ -152,17 +152,17 @@
 /* ── Submit ── */
 .clm-submit {
   padding: 0.9rem;
-  background: #e8572a;
-  color: #fff;
+  background: var(--color-primary);
+  color: var(--color-surface);
   border: none;
   border-radius: 12px;
-  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 1rem;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.2s, transform 0.1s;
   margin-top: 0.2rem;
 }
-.clm-submit:hover:not(:disabled) { background: #d04820; }
+.clm-submit:hover:not(:disabled) { background: var(--color-primary-dark); }
 .clm-submit:active:not(:disabled) { transform: scale(0.99); }
 .clm-submit:disabled { opacity: 0.6; cursor: not-allowed; }

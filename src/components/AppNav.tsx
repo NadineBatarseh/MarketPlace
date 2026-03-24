@@ -72,50 +72,48 @@ export default function AppNav({
       <nav className="an-nav">
         {/* Logo */}
         <div className="an-logo" onClick={() => navigate('/store')}>
-          سوق <span>لينك</span>
+          <img src="/logo.png" alt="Souq Link" className="an-logo-img" />
+          <div className="an-logo-text">
+            <div className="an-logo-ar">سوق لينك</div>
+            <div className="an-logo-en">SOUQ LINK</div>
+          </div>
         </div>
 
-        {/* Search — only rendered when the store page passes onSearchChange */}
-        {onSearchChange && (
-          <SearchInput
-            className="an-search"
-            value={searchQuery ?? ''}
-            onChange={onSearchChange}
-            placeholder="ابحث في المتجر..."
-          />
-        )}
+        {/* Search bar — always visible */}
+        <SearchInput
+          className="an-search"
+          value={searchQuery ?? ''}
+          onChange={onSearchChange ?? (() => {})}
+          placeholder="ابحث ..."
+        />
 
         {/* Actions */}
         <div className="an-actions">
-          {/* Favorites — only when authenticated */}
-          {isAuthenticated && (
-            <div
-              className={`an-icon-btn${pathname === '/favorites' ? ' an-active' : ''}`}
-              onClick={() => navigate('/favorites')}
-              title="المفضلة"
-            >
-              {favCount > 0 && <div className="an-badge">{favCount}</div>}
-              <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-              </svg>
-            </div>
-          )}
+          {/* Favorites */}
+          <div
+            className={`an-icon-btn${pathname === '/favorites' ? ' an-active' : ''}`}
+            onClick={() => navigate('/favorites')}
+            title="المفضلة"
+          >
+            {favCount > 0 && <div className="an-badge">{favCount}</div>}
+            <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
+          </div>
 
-          {/* Cart — only when authenticated */}
-          {isAuthenticated && (
-            <div
-              className={`an-icon-btn${pathname === '/cart' ? ' an-active' : ''}`}
-              onClick={() => navigate('/cart')}
-              title="سلة التسوق"
-            >
-              {cartCount > 0 && <div className="an-badge">{cartCount}</div>}
-              <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-                <line x1="3" y1="6" x2="21" y2="6" />
-                <path d="M16 10a4 4 0 0 1-8 0" />
-              </svg>
-            </div>
-          )}
+          {/* Cart */}
+          <div
+            className={`an-icon-btn${pathname === '/cart' ? ' an-active' : ''}`}
+            onClick={() => navigate('/cart')}
+            title="سلة التسوق"
+          >
+            {cartCount > 0 && <div className="an-badge">{cartCount}</div>}
+            <svg xmlns="http://www.w3.org/2000/svg" width="17" height="17" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <path d="M16 10a4 4 0 0 1-8 0" />
+            </svg>
+          </div>
 
           {/* Product-detail user icon (existing behaviour) */}
           {onUserClick && (

@@ -53,7 +53,7 @@ export default function App() {
               <Route path="/merchant-dashboard" element={<MerchantDashboard />} />
               <Route path="/admin-dashboard" element={<AdminDashboard />} />
               <Route path="/" element={<StorePage shopId={myShopId} />} />
-              <Route path="/stores" element={<StoreListPage />} />
+              <Route path="/store" element={<StoreListPage />} />
               <Route path="/stores/:shopId" element={<StorePageWrapper />} />
               <Route path="/sync" element={<ProductsPage />} />
               <Route path="/product/:id" element={<ProductDetailPage />} />

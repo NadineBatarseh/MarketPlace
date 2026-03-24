@@ -1,4 +1,53 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&family=Cairo:wght@400;600;700;900&display=swap');
+
+/* ══════════════════════════════════════════
+   SOUQLINK — Global Design Tokens
+   Change values here to update the whole platform
+   ══════════════════════════════════════════ */
+
+:root {
+  /* ── Brand Colors ── */
+  --color-primary:       #136540;   /* main green — buttons, active links, logo */
+  --color-primary-dark:  #0e4f32;   /* hover / pressed state */
+  --color-primary-light: #f0fdf4;   /* green tint backgrounds */
+
+  /* ── Neutral Colors ── */
+  --color-bg:            #f9fafb;   /* page background */
+  --color-surface:       #ffffff;   /* cards, topbar, modals */
+  --color-border:        #e5e7eb;   /* dividers, input borders */
+
+  /* ── Text Colors ── */
+  --color-text:          #1a1a1a;   /* main body text */
+  --color-text-secondary:#374151;   /* secondary text */
+  --color-muted:         #9ca3af;   /* placeholders, labels */
+  --color-title:         #0a3d24;   /* big titles — dark green */
+
+  /* ── Feedback Colors ── */
+  --color-danger:        #dc2626;   /* errors, delete actions */
+  --color-danger-light:  #fef2f2;   /* danger hover backgrounds */
+  --color-badge:         #111111;   /* cart / notification badges */
+
+  /* ── Typography ── */
+  --font-main:      'Tajawal', 'Cairo', sans-serif;
+  --font-size-base: 15px;
+  --font-size-sm:   13px;
+  --font-size-lg:   18px;
+
+  /* ── Spacing & Radius ── */
+  --radius-sm:  6px;
+  --radius-md:  10px;
+  --radius-lg:  16px;
+  --radius-full: 9999px;
+
+  /* ── Shadows ── */
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.10);
+}
+
+/* ══════════════════════════════════════════
+   Base Reset & Global Styles
+   ══════════════════════════════════════════ */
 
 *,
 *::before,
@@ -8,11 +57,36 @@
 
 body {
   margin: 0;
-  padding-top: 68px;
+  padding-top: 0;
   min-width: 320px;
   min-height: 100vh;
   width: 100%;
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: var(--font-main);
+  font-size: var(--font-size-base);
+  color: var(--color-text);
+  background: var(--color-bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  direction: rtl;
+}
+
+/* Big page/section titles */
+h1, h2, h3 {
+  color: var(--color-title);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: var(--font-main);
+  cursor: pointer;
+}
+
+input,
+textarea,
+select {
+  font-family: var(--font-main);
 }

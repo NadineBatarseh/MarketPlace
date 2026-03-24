@@ -6,7 +6,15 @@
       "Bash(npm install -D tailwindcss @tailwindcss/vite)",
       "Bash(find \"c:\\\\Users\\\\hp\\\\Desktop\\\\SOUQLINK\\\\src\\\\pages\\\\singleStore\"\" -type f -name \"* \")",
       "Bash(npx tsc --noEmit)",
-      "Bash(echo \"Exit: $?\")"
+      "Bash(echo \"Exit: $?\")",
+      "Bash(find ./supabase -type f -name *.ts -o -name *.js)",
+      "Bash(grep -r slug ./src --include=*.tsx --include=*.ts)",
+      "Bash(grep -r slug ./server --include=*.ts --include=*.js)",
+      "Bash(find c:UsershpDesktopSOUQLINK/src -name *.ts -o -name *.tsx)",
+      "Bash(grep -r \"\\\\.query\\\\|\\\\.from\\\\\\(\" c:UsershpDesktopSOUQLINK/src --include=*.ts --include=*.tsx)",
+      "Bash(find c:UsershpDesktopSOUQLINK -type f \\\\\\(-name *.ts -o -name *.js \\\\\\) ! -path */node_modules/* ! -path */.git/*)",
+      "Bash(xargs grep:*)",
+      "Bash(find c:UsershpDesktopSOUQLINK -type f -name *.ts ! -path */node_modules/* ! -path */.git/*)"
     ]
   }
 }

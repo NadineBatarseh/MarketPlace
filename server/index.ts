@@ -180,26 +180,50 @@ app.get("/api/stores/:id", async (req: Request, res: Response) => {
 // POST /api/stores/:id/reviews  — submit a star rating
 app.post("/api/stores/:id/reviews", async (req: Request, res: Response) => {
   const shop_id = req.params.id;
-  const { rating } = req.body as { rating: number };
+  const { rating, user_id } = req.body as { rating: number; user_id?: string };
 
   if (!rating || rating < 1 || rating > 5) {
     return res.status(400).json({ ok: false, error: "التقييم يجب أن يكون بين 1 و 5" });
   }
 
+  // Prevent duplicate rating from the same user
+  if (user_id) {
+    const { data: existing } = await supabase
+      .from("shop_reviews")
+      .select("id")
+      .eq("shop_id", shop_id)
+      .eq("user_id", user_id)
+      .maybeSingle();
+
+    if (existing) {
+      return res.status(409).json({ ok: false, error: "لقد قيّمت هذا المتجر مسبقاً" });
+    }
+  }
+
   const { error } = await supabase
     .from("shop_reviews")
-    .insert({ shop_id, rating });
+    .insert({ shop_id, rating, user_id: user_id ?? null });
 
   if (error) return res.status(500).json({ ok: false, error: error.message });
 
-  // Return updated rating
-  const { data } = await supabase
+  // Incremental running average — O(1), reads 1 row regardless of total reviews
+  // Formula: new_avg = (old_avg * old_count + new_rating) / (old_count + 1)
+  const { data: current } = await supabase
     .from("shop_ratings")
     .select("avg_rating, review_count")
     .eq("shop_id", shop_id)
-    .single();
+    .maybeSingle();
 
-  return res.json({ ok: true, avg_rating: data?.avg_rating ?? null, review_count: data?.review_count ?? 0 });
+  const old_count = current?.review_count ?? 0;
+  const old_avg   = current?.avg_rating   ?? 0;
+  const review_count = old_count + 1;
+  const avg_rating   = (old_avg * old_count + rating) / review_count;
+
+  await supabase
+    .from("shop_ratings")
+    .upsert({ shop_id, avg_rating, review_count }, { onConflict: "shop_id" });
+
+  return res.json({ ok: true, avg_rating, review_count });
 });
 
 // GET /api/stores/:id/products  — paginated product list for a shop

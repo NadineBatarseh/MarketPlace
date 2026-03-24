@@ -6,17 +6,17 @@
   --pt-primary:      #1a1a2e;
   --pt-accent:       #e8572a;
   --pt-accent-light: #fff0eb;
-  --pt-surface:      #ffffff;
-  --pt-surface-2:    #f8f7f5;
+  --pt-surface:      var(--color-surface);
+  --pt-surface-2:    var(--color-bg);
   --pt-surface-3:    #f0ede8;
-  --pt-text:         #1a1a2e;
-  --pt-text-sec:     #6b6880;
-  --pt-text-muted:   #a09eb0;
-  --pt-border:       #e8e5f0;
-  --pt-shadow-sm:    0 2px 8px rgba(26,26,46,.06);
-  --pt-shadow-md:    0 8px 32px rgba(26,26,46,.10);
-  --pt-radius:       16px;
-  --pt-radius-sm:    10px;
+  --pt-text:         var(--color-text);
+  --pt-text-sec:     var(--color-text-secondary);
+  --pt-text-muted:   var(--color-muted);
+  --pt-border:       var(--color-border);
+  --pt-shadow-sm:    var(--shadow-sm);
+  --pt-shadow-md:    var(--shadow-md);
+  --pt-radius:       var(--radius-lg);
+  --pt-radius-sm:    var(--radius-md);
 }
 
 /* ── RESET ── */
@@ -39,12 +39,12 @@
   top: 0;
   z-index: 100;
   box-shadow: var(--pt-shadow-sm);
-  font-family: 'IBM Plex Sans Arabic', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   direction: rtl;
 }
 
 .pt-nav-logo {
-  font-family: 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 1.6rem;
   font-weight: 800;
   color: var(--pt-primary);
@@ -108,7 +108,7 @@
 .pt-page {
   min-height: 100vh;
   background: var(--pt-surface-2);
-  font-family: 'IBM Plex Sans Arabic', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   direction: rtl;
   color: var(--pt-text);
 }
@@ -139,7 +139,7 @@
 
 /* ── PAGE TITLE ── */
 .pt-page-title {
-  font-family: 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 1.8rem;
   font-weight: 700;
   color: var(--pt-primary);
@@ -524,7 +524,7 @@
 }
 
 .pt-summary-title {
-  font-family: 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 1.1rem;
   font-weight: 700;
   color: var(--pt-primary);
@@ -604,7 +604,7 @@
 }
 .pt-empty-icon { font-size: 4rem; line-height: 1; }
 .pt-empty h2 {
-  font-family: 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 1.4rem;
   font-weight: 700;
   color: var(--pt-primary);

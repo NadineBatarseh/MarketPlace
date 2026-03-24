@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useCustomerAuth } from '../../../context/CustomerAuthContext';
 
 interface Props {
   shopId: string;
@@ -6,28 +7,37 @@ interface Props {
 }
 
 export default function StoreRating({ shopId, onSubmitted }: Props) {
+  const { customer } = useCustomerAuth();
   const [hovered, setHovered] = useState(0);
   const [selected, setSelected] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function submit() {
     if (!selected || loading) return;
     setLoading(true);
+    setError(null);
     try {
       const r = await fetch(`/api/stores/${shopId}/reviews`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rating: selected }),
+        body: JSON.stringify({ rating: selected, user_id: customer?.id ?? undefined }),
       });
       const data = await r.json();
       if (data.ok) {
         setSubmitted(true);
         onSubmitted(data.avg_rating, data.review_count);
+      } else {
+        setError(data.error);
       }
     } finally {
       setLoading(false);
     }
+  }
+
+  if (!customer) {
+    return <p className="store-rating-thanks">يجب تسجيل الدخول لتتمكن من التقييم</p>;
   }
 
   if (submitted) {
@@ -53,7 +63,8 @@ export default function StoreRating({ shopId, onSubmitted }: Props) {
           </svg>
         ))}
       </div>
-      {selected > 0 && (
+      {error && <p className="store-rating-error">{error}</p>}
+      {selected > 0 && !error && (
         <button className="store-rating-submit" onClick={submit} disabled={loading}>
           {loading ? '...' : 'إرسال'}
         </button>

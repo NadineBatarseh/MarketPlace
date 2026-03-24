@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Topbar from '../../components/Topbar';
+import AppNav from '../../components/AppNav';
+import StoreNav from '../../components/StoreNav';
 import './StoreListPage.css';
 
 interface StoreItem {
@@ -36,7 +37,8 @@ export default function StoreListPage() {
 
   return (
     <div dir="rtl">
-      <Topbar />
+      <AppNav />
+      <StoreNav />
 
       <div className="sl-hero">
         <div className="sl-hero-circle sl-hero-circle--1" />

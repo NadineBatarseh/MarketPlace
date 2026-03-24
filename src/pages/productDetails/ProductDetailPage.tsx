@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
+import AppNav from '../../components/AppNav';
+import StoreNav from '../../components/StoreNav';
 import './ProductDetailPage.css';
 
 const NOT_FOUND = "المعلومة غير متوفرة";
@@ -360,50 +362,8 @@ const ProductDetailPage: React.FC = () => {
 
   return (
     <>
-      {/* NAV */}
-      <nav>
-        <div className="logo">سوق<span>لينك</span></div>
-        <ul className="nav-links">
-          <li>
-            <button
-              onClick={() => navigate('/')}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-                fontSize: 'inherit',
-                color: 'inherit',
-                padding: 0,
-              }}
-            >
-              ← رجوع
-            </button>
-          </li>
-          <li><a href="#">الرئيسية</a></li>
-          <li><a href="#">المتاجر</a></li>
-          <li><a href="#">العروض</a></li>
-          <li><a href="#">تواصل معنا</a></li>
-        </ul>
-        <div className="nav-actions">
-          <button className="nav-icon-btn">🔍</button>
-          <button className="nav-icon-btn">
-            ♡
-            <span className="badge">{favCount}</span>
-          </button>
-          <button className="nav-icon-btn">
-            🛒
-            <span className="badge">{cartCount}</span>
-          </button>
-          <button
-            className={`nav-icon-btn ${currentUser ? 'nav-icon-loggedin' : ''}`}
-            title={currentUser ? currentUser.email : 'تسجيل الدخول'}
-            onClick={() => { if (!currentUser) setShowLoginModal(true); }}
-          >
-            👤
-          </button>
-        </div>
-      </nav>
+      <AppNav />
+      <StoreNav />
 
       {/* LOGIN MODAL */}
       {showLoginModal && (

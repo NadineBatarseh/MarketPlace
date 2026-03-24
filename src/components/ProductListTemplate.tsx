@@ -1,5 +1,6 @@
 import React from 'react';
 import AppNav from './AppNav';
+import StoreNav from './StoreNav';
 import '../styles/productTable.css';
 
 interface ProductListTemplateProps {
@@ -31,8 +32,9 @@ export default function ProductListTemplate({
 }: ProductListTemplateProps) {
   return (
     <div className="pt-page">
-      {/* ── Shared nav (no search on these pages) ── */}
+      {/* ── Shared nav ── */}
       <AppNav />
+      <StoreNav />
 
       {/* ── CONTENT ── */}
       <div className="pt-wrapper">

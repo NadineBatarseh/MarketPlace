@@ -7,9 +7,9 @@
 
 .md-root {
   min-height: 100vh;
-  background: #f8f7f5;
+  background: var(--color-bg);
   direction: rtl;
-  font-family: 'Cairo', 'Tajawal', 'IBM Plex Sans Arabic', sans-serif;
+  font-family: var(--font-main);
   display: flex;
   flex-direction: column;
 }
@@ -61,7 +61,7 @@
   border: none;
   border-radius: 10px;
   padding: 0.55rem 1.1rem;
-  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 0.88rem;
   font-weight: 700;
   cursor: pointer;
@@ -77,7 +77,7 @@
   border: 1px solid rgba(255,255,255,0.2);
   border-radius: 10px;
   padding: 0.55rem 1rem;
-  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
@@ -100,8 +100,8 @@
 .md-pending-banner svg { flex-shrink: 0; color: #f59e0b; }
 
 .md-rejected-banner {
-  background: #fef2f2;
-  border-bottom: 2px solid #ef4444;
+  background: var(--color-danger-light);
+  border-bottom: 2px solid var(--color-danger);
   padding: 0.85rem 2rem;
   display: flex;
   align-items: center;
@@ -110,7 +110,7 @@
   color: #991b1b;
   font-weight: 600;
 }
-.md-rejected-banner svg { flex-shrink: 0; color: #ef4444; }
+.md-rejected-banner svg { flex-shrink: 0; color: var(--color-danger); }
 
 /* ── Not-logged-in login button ── */
 .md-nli-login-btn {
@@ -139,8 +139,8 @@
 /* ── Sidebar (right side in RTL) ── */
 .md-sidebar {
   width: 220px;
-  background: #ffffff;
-  border-left: 1px solid #e5e7eb;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-border);
   padding: 1.5rem 0;
   display: flex;
   flex-direction: column;
@@ -158,7 +158,7 @@
   gap: 0.75rem;
   padding: 0.8rem 1.4rem;
   cursor: pointer;
-  color: #4b5563;
+  color: var(--color-text-secondary);
   font-size: 0.95rem;
   font-weight: 600;
   border-radius: 0;
@@ -169,8 +169,8 @@
   border-right: 3px solid transparent;
 }
 .md-sidebar-item:hover {
-  background: #f8f7f5;
-  color: #1a1a2e;
+  background: var(--color-bg);
+  color: var(--color-text);
 }
 .md-sidebar-item.md-active {
   background: #fff0eb;
@@ -182,7 +182,7 @@
 
 .md-sidebar-divider {
   height: 1px;
-  background: #e5e7eb;
+  background: var(--color-border);
   margin: 0.5rem 1rem;
 }
 
@@ -214,14 +214,14 @@
 }
 
 .mh-stat-card {
-  background: #fff;
+  background: var(--color-surface);
   border-radius: 18px;
   padding: 1.6rem 1.5rem;
-  box-shadow: 0 2px 12px rgba(26,26,46,0.07);
+  box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  border: 1px solid #f0ede8;
+  border: 1px solid var(--color-border);
   transition: box-shadow 0.2s, transform 0.15s;
 }
 .mh-stat-card:hover { box-shadow: 0 6px 24px rgba(26,26,46,0.12); transform: translateY(-2px); }
@@ -284,7 +284,7 @@
   padding: 0.55rem 1rem;
   border: 1.5px solid #e5e7eb;
   border-radius: 10px;
-  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 0.9rem;
   direction: rtl;
   outline: none;
@@ -371,7 +371,7 @@
   padding: 0.65rem 0.9rem;
   border: 1.5px solid #e5e7eb;
   border-radius: 10px;
-  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 0.88rem;
   direction: rtl;
   resize: vertical;
@@ -388,7 +388,7 @@
   border: none;
   border-radius: 9px;
   padding: 0.55rem 1.1rem;
-  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 0.85rem;
   font-weight: 700;
   cursor: pointer;
@@ -447,7 +447,7 @@
   padding: 0.5rem 1.2rem;
   border: none;
   border-radius: 9px;
-  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 0.88rem;
   font-weight: 700;
   cursor: pointer;
@@ -576,7 +576,7 @@
   border: 1.5px solid #e5e7eb;
   border-radius: 8px;
   background: #fff;
-  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
@@ -592,7 +592,7 @@
   padding: 0.75rem 1rem;
   border: 1.5px solid #e5e7eb;
   border-radius: 12px;
-  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 0.95rem;
   direction: rtl;
   outline: none;
@@ -617,7 +617,7 @@
   border-radius: 20px;
   border: 1.5px solid #e5e7eb !important;
   background: #fff !important;
-  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer !important;
@@ -647,7 +647,7 @@
   border: none;
   border-radius: 10px;
   padding: 0.55rem 1.1rem;
-  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 0.88rem;
   font-weight: 700;
   cursor: pointer;
@@ -718,7 +718,7 @@
   color: #fff;
   border: none;
   border-radius: 12px;
-  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 1rem;
   font-weight: 700;
   cursor: pointer;
@@ -769,7 +769,7 @@
   align-items: center;
   justify-content: center;
   direction: rtl;
-  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   padding: 1rem;
 }
 .apm-modal {
@@ -807,7 +807,7 @@
   padding: 0.7rem 0.9rem;
   border: 1.5px solid #e5e7eb;
   border-radius: 10px;
-  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 0.9rem;
   direction: rtl;
   outline: none;
@@ -840,7 +840,7 @@
   color: #fff;
   border: none;
   border-radius: 12px;
-  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 1rem;
   font-weight: 700;
   cursor: pointer;
@@ -880,7 +880,7 @@
   padding: 0.8rem 1rem;
   border: 1.5px solid #e5e7eb;
   border-radius: 12px;
-  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 0.95rem;
   direction: rtl;
   outline: none;
@@ -901,7 +901,7 @@
   border-radius: 20px;
   border: 1.5px solid #e5e7eb !important;
   background: #fff !important;
-  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer !important;
@@ -948,7 +948,7 @@
   color: #fff;
   border: none;
   border-radius: 12px;
-  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 1rem;
   font-weight: 700;
   cursor: pointer;
@@ -1023,7 +1023,7 @@
   min-height: 100vh;
   background: #f8f7f5;
   direction: rtl;
-  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
 }
 .md-nli-box {
   text-align: center;
@@ -1043,7 +1043,7 @@
   color: #fff;
   border: none;
   border-radius: 12px;
-  font-family: 'Cairo', 'Tajawal', sans-serif;
+  font-family: var(--font-main);
   font-size: 0.95rem;
   font-weight: 700;
   cursor: pointer;

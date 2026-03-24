@@ -7,9 +7,9 @@
 
 .ad-root {
   min-height: 100vh;
-  background: #f8f7f5;
+  background: var(--color-bg);
   direction: rtl;
-  font-family: 'Cairo', 'Tajawal', 'IBM Plex Sans Arabic', sans-serif;
+  font-family: var(--font-main);
   padding: 0 0 4rem;
 }
 
@@ -46,10 +46,10 @@
 /* ── Error ── */
 .ad-error {
   margin: 1.5rem 2.5rem 0;
-  background: #fef2f2;
+  background: var(--color-danger-light);
   border: 1px solid #fecaca;
-  color: #dc2626;
-  border-radius: 10px;
+  color: var(--color-danger);
+  border-radius: var(--radius-md);
   padding: 0.9rem 1.2rem;
   font-size: 0.9rem;
 }
@@ -68,16 +68,16 @@
   padding: 0.6rem 1.3rem;
   border-radius: 999px;
   border: 2px solid transparent;
-  background: #fff;
+  background: var(--color-surface);
   font-family: inherit;
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.18s;
-  color: #555;
+  color: var(--color-muted);
 }
 
-.ad-tab:hover { background: #f0f0f0; }
+.ad-tab:hover { background: var(--color-bg); }
 
 .ad-tab--pending.ad-tab--active  { background: #fff7ed; border-color: #f59e0b; color: #b45309; }
 .ad-tab--approved.ad-tab--active { background: #f0fdf4; border-color: #16a34a; color: #15803d; }
@@ -113,9 +113,9 @@
 }
 
 .ad-card {
-  background: #fff;
+  background: var(--color-surface);
   border-radius: 14px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+  box-shadow: var(--shadow-sm);
   padding: 1.4rem;
   display: flex;
   gap: 1.2rem;
@@ -131,7 +131,7 @@
   width: 72px;
   height: 72px;
   border-radius: 12px;
-  background: #f0f0f0;
+  background: var(--color-bg);
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -157,7 +157,7 @@
 .ad-card-name {
   font-size: 1.1rem;
   font-weight: 700;
-  color: #1a1a2e;
+  color: var(--color-text);
 }
 
 .ad-card-owner {

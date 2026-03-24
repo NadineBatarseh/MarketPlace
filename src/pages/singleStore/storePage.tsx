@@ -6,8 +6,8 @@ import { useStore } from './hooks/useStore';
 import { useProducts } from './hooks/useProducts';
 import { useToast } from './hooks/useToast';
 
-import Topbar from '../../components/Topbar';
-import StoreNav from './components/StoreNav';
+import AppNav from '../../components/AppNav';
+import StoreNav from '../../components/StoreNav';
 import StoreHero from './components/StoreHero';
 import Sidebar from './components/Sidebar';
 import type { FilterKey, FilterState } from './components/Sidebar';
@@ -24,7 +24,6 @@ export default function StorePage({ shopId }: Props) {
   const { products, total, loading: productsLoading, sort, handleSortChange, handleLoadMore } = useProducts(shopId);
   const { toast, toastVisible, showToast } = useToast();
 
-  const [cartCount, setCartCount] = useState(0);
   const [wishlist, setWishlist] = useState<Set<string>>(new Set());
   const [activeColor, setActiveColor] = useState('#2a7a3b');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -52,7 +51,6 @@ export default function StorePage({ shopId }: Props) {
 
   function addToCart(e: MouseEvent) {
     e.stopPropagation();
-    setCartCount(c => c + 1);
     showToast('✓ تمت الإضافة إلى السلة');
   }
 
@@ -62,7 +60,7 @@ export default function StorePage({ shopId }: Props) {
 
   return (
     <>
-      <Topbar cartCount={cartCount} />
+      <AppNav />
       <StoreNav />
       <StoreHero
         store={store}
