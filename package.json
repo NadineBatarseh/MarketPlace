@@ -9,11 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "@googlemaps/google-maps-services-js": "^3.4.2",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@supabase/supabase-js": "^2.45.0",
     "dotenv": "^16.4.0",
     "express": "^4.22.1",
+    "groq-sdk": "^1.1.1",
     "lucide-react": "^0.575.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
