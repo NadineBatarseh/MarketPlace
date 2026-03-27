@@ -1,11 +1,13 @@
 export default function SearchInput({
   value,
   onChange,
+  onKeyDown,
   placeholder = "ابحث...",
   className = "sp-nav-search",
 }: {
   value: string;
   onChange: (q: string) => void;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   placeholder?: string;
   className?: string;
 }) {
@@ -29,6 +31,7 @@ export default function SearchInput({
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onKeyDown}
       />
     </div>
   );

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import AppNav from '../../components/AppNav';
 import StoreNav from '../../components/StoreNav';
 import './StoreListPage.css';
+import SearchInput from '../../components/SearchInput';
 
 interface StoreItem {
   shop_id: string;
@@ -22,7 +23,14 @@ export default function StoreListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeCity, setActiveCity] = useState<string | null>(null);
+  const [heroSearch, setHeroSearch] = useState('');
   const navigate = useNavigate();
+
+  const handleHeroSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && heroSearch.trim()) {
+      navigate(`/search?q=${encodeURIComponent(heroSearch.trim())}`);
+    }
+  };
 
   useEffect(() => {
     fetch('/api/stores')
@@ -43,7 +51,15 @@ export default function StoreListPage() {
       <div className="sl-hero">
         <div className="sl-hero-circle sl-hero-circle--1" />
         <div className="sl-hero-circle sl-hero-circle--2" />
-        <h1 className="sl-hero-title">استكشف متاجرنا </h1>
+        <h1 className="sl-hero-title">استكشف متاجرنا</h1>
+        <SearchInput
+          className="sl-hero-search"
+          value={heroSearch}
+          onChange={setHeroSearch}
+          onKeyDown={handleHeroSearch}
+          placeholder="ابحث عن منتج أو متجر... مثال: بنطال أسود رخيص من رام الله"
+        />
+        <p className="sl-hero-hint">اضغط Enter للبحث بالذكاء الاصطناعي</p>
       </div>
 
       <div className="sl-page">

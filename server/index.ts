@@ -7,6 +7,7 @@ import { supabase } from "./supabase.js";
 import { uploadImage } from "./uploadImage.js";
 import logisticsRouter from "../src/pages/delivery agent/LogisticsRoutes.js";
 import webhookRouter from "./webhooks.js";
+import { runSearchAgent } from "./search/agentLoop.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -350,6 +351,22 @@ app.get("/auth/callback", async (req: Request, res: Response) => {
     res.send(`<h1>تم الربط والحفظ في Supabase بنجاح! 🎉</h1><p>يمكنك إغلاق هذه الصفحة والعودة للتطبيق.</p>`);
   } catch (err: any) {
     res.status(500).send(`<h2>خطأ في السيرفر</h2><p>${err.message}</p>`);
+  }
+});
+
+/* ---------- AI AGENT SEARCH ---------- */
+
+app.post("/api/agent-search", async (req: Request, res: Response) => {
+  const q = (req.body?.q ?? "").trim();
+  if (!q) return res.status(400).json({ ok: false, error: "Query is required" });
+  if (!process.env.GROQ_API_KEY)
+    return res.status(503).json({ ok: false, error: "Search service not configured" });
+
+  try {
+    const result = await runSearchAgent(q);
+    return res.json({ ok: true, ...result });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: err.message });
   }
 });
 
