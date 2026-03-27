@@ -6,7 +6,8 @@
       "Bash(npm install -D tailwindcss @tailwindcss/vite)",
       "Bash(find \"c:\\\\Users\\\\hp\\\\Desktop\\\\SOUQLINK\\\\src\\\\pages\\\\singleStore\"\" -type f -name \"* \")",
       "Bash(npx tsc --noEmit)",
-      "Bash(echo \"Exit: $?\")"
+      "Bash(echo \"Exit: $?\")",
+      "Bash(curl -s http://localhost:4000/api/stores)"
     ]
   }
 }

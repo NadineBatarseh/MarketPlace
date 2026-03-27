@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './Topbar.css';
 
 interface Props {
@@ -5,6 +7,15 @@ interface Props {
 }
 
 export default function Topbar({ cartCount = 0 }: Props) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const navigate = useNavigate();
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && searchQuery.trim()) {
+      navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+    }
+  };
+
   return (
     <header className="topbar">
       <a href="#" className="logo">
@@ -16,8 +27,14 @@ export default function Topbar({ cartCount = 0 }: Props) {
       </a>
 
       <div className="search-bar">
-        <input type="text" placeholder="ابحث  ..." />
-        <div className="search-icon">
+        <input
+          type="text"
+          placeholder="ابحث بالعربي أو الإنجليزي..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyDown={handleSearchKeyDown}
+        />
+        <div className="search-icon" onClick={() => searchQuery.trim() && navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`)}>
           <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
           </svg>
