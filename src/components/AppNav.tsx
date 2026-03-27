@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useShop } from '../context/ShopContext';
 import { useMerchantAuth } from '../merchant-dashboard/context/MerchantAuthContext';
 import { useCustomerAuth } from '../context/CustomerAuthContext';
@@ -12,6 +12,11 @@ interface AppNavProps {
   /** Pass these only on the store page to show the search bar */
   searchQuery?: string;
   onSearchChange?: (q: string) => void;
+  /**
+   * When provided, pressing Enter / clicking the search icon calls this
+   * instead of navigating to /search. Use on pages that filter in-place.
+   */
+  onSearchSubmit?: (q: string) => void;
   /** Pass these only on the product detail page to show a user icon */
   currentUser?: { email?: string } | null;
   onUserClick?: () => void;
@@ -20,11 +25,30 @@ interface AppNavProps {
 export default function AppNav({
   searchQuery,
   onSearchChange,
+  onSearchSubmit,
   currentUser,
   onUserClick,
 }: AppNavProps) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const [searchParams] = useSearchParams();
+
+  // Global nav search: seed from URL when on the search page, else empty
+  const [navQuery, setNavQuery] = useState(
+    pathname === '/search' ? (searchParams.get('q') ?? '') : ''
+  );
+
+  function handleNavSearch(q: string) {
+    setNavQuery(q);
+    if (onSearchChange) onSearchChange(q);
+  }
+
+  function submitSearch(q: string) {
+    if (onSearchSubmit) { onSearchSubmit(q); return; }
+    const trimmed = q.trim();
+    if (!trimmed) return;
+    navigate(`/search?q=${encodeURIComponent(trimmed)}`);
+  }
   const { cartCount, favCount } = useShop();
   const { merchant, logout: merchantLogout } = useMerchantAuth();
   const { customer, logout: customerLogout } = useCustomerAuth();
@@ -82,8 +106,9 @@ export default function AppNav({
         {/* Search bar — always visible */}
         <SearchInput
           className="an-search"
-          value={searchQuery ?? ''}
-          onChange={onSearchChange ?? (() => {})}
+          value={searchQuery ?? navQuery}
+          onChange={handleNavSearch}
+          onSubmit={submitSearch}
           placeholder="ابحث ..."
         />
 

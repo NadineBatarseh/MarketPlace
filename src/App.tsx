@@ -1,4 +1,5 @@
 import StoreListPage from './pages/storeList/StoreListPage';
+import SearchResultsPage from './pages/search/SearchResultsPage';
 import DeliveryAgentPage from './pages/delivery agent/DeliveryAgentPage';
 import CollectorPage from './pages/delivery agent/CollectorPage';
 import HubPage from './pages/delivery agent/HubPage';
@@ -62,7 +63,7 @@ export default function App() {
               <Route path="/collector" element={<CollectorPage />} />
               <Route path="/hub" element={<HubPage />} />
               <Route path="/deliverer" element={<DelivererPage />} />
-
+              <Route path="/search" element={<SearchResultsPage />} />
             </Routes>
           </BrowserRouter>
         </ShopProviderWithAuth>

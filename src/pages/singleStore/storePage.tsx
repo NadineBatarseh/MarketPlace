@@ -1,10 +1,11 @@
 import type { MouseEvent } from 'react';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import './storePage.css';
 
 import { useStore } from './hooks/useStore';
 import { useProducts } from './hooks/useProducts';
 import { useToast } from './hooks/useToast';
+import type { Product } from './types';
 
 import AppNav from '../../components/AppNav';
 import StoreNav from '../../components/StoreNav';
@@ -34,6 +35,39 @@ export default function StorePage({ shopId }: Props) {
     colors: true,
   });
 
+  // ── In-store search ──────────────────────────────────────────
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Product[]>([]);
+  const [searchTotal, setSearchTotal] = useState(0);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    const q = searchQuery.trim();
+    if (!q) { setSearchResults([]); setSearchTotal(0); return; }
+
+    debounceRef.current = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const res = await fetch(
+          `/api/search?q=${encodeURIComponent(q)}&shop_id=${shopId}&limit=50`
+        );
+        const data = await res.json();
+        if (data.ok) { setSearchResults(data.products); setSearchTotal(data.total); }
+      } catch { /* silent */ } finally {
+        setSearchLoading(false);
+      }
+    }, 350);
+
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [searchQuery, shopId]);
+
+  const isSearching = searchQuery.trim().length > 0;
+  const displayedProducts = isSearching ? searchResults : products;
+  const displayedTotal    = isSearching ? searchTotal   : total;
+  const displayedLoading  = isSearching ? searchLoading : productsLoading;
+
   function toggleWishlist(e: MouseEvent, id: string) {
     e.stopPropagation();
     setWishlist(prev => {
@@ -60,7 +94,11 @@ export default function StorePage({ shopId }: Props) {
 
   return (
     <>
-      <AppNav />
+      <AppNav
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        onSearchSubmit={setSearchQuery}
+      />
       <StoreNav />
       <StoreHero
         store={store}
@@ -75,14 +113,14 @@ export default function StorePage({ shopId }: Props) {
           onColorChange={setActiveColor}
         />
         <ProductsSection
-          products={products}
-          total={total}
-          loading={productsLoading}
+          products={displayedProducts}
+          total={displayedTotal}
+          loading={displayedLoading}
           sort={sort}
           viewMode={viewMode}
           wishlist={wishlist}
           onSortChange={handleSortChange}
-          onLoadMore={handleLoadMore}
+          onLoadMore={isSearching ? () => {} : handleLoadMore}
           onViewModeChange={setViewMode}
           onToggleWishlist={toggleWishlist}
           onAddToCart={addToCart}

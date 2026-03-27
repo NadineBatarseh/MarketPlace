@@ -7,6 +7,7 @@ import { supabase } from "./supabase.js";
 import { uploadImage } from "./uploadImage.js";
 import logisticsRouter from "../src/pages/delivery agent/LogisticsRoutes.js";
 import webhookRouter from "./webhooks.js";
+import searchRouter from "./search/searchRouter.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -132,6 +133,9 @@ app.get("/api/products", async (_req: Request, res: Response) => {
 
   return res.json({ ok: true, products: data });
 });
+
+/* ---------- SEARCH ---------- */
+app.use("/api/search", searchRouter);
 
 /* ---------- LOGISTICS ---------- */
 app.use("/api/logistics", logisticsRouter);
