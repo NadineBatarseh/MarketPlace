@@ -1,5 +1,4 @@
 import StoreListPage from './pages/storeList/StoreListPage';
-import SearchResultsPage from './pages/search/SearchResultsPage';
 import DeliveryAgentPage from './pages/delivery agent/DeliveryAgentPage';
 import CollectorPage from './pages/delivery agent/CollectorPage';
 import HubPage from './pages/delivery agent/HubPage';
