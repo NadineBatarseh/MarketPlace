@@ -1,6 +1,31 @@
 import { supabase } from '../supabase.js';
 import { expandKeywords } from './synonyms.js';
 
+// Palestinian city name variants (handles free-text inconsistencies in shop registration)
+const CITY_VARIANTS: Record<string, string[]> = {
+  'رام الله':  ['رام الله', 'البيرة', 'Ramallah'],
+  'القدس':     ['القدس', 'Jerusalem'],
+  'الخليل':    ['الخليل', 'Hebron'],
+  'نابلس':     ['نابلس', 'Nablus'],
+  'بيت لحم':  ['بيت لحم', 'Bethlehem'],
+  'جنين':      ['جنين', 'Jenin'],
+  'طولكرم':    ['طولكرم', 'Tulkarm'],
+  'قلقيلية':   ['قلقيلية', 'Qalqilya'],
+  'أريحا':     ['أريحا', 'Jericho'],
+  'سلفيت':    ['سلفيت', 'Salfit'],
+  'طوباس':     ['طوباس', 'Tubas'],
+};
+
+function buildLocationVariants(location: string): string[] {
+  const lower = location.trim().toLowerCase();
+  for (const [key, variants] of Object.entries(CITY_VARIANTS)) {
+    if (variants.some(v => lower.includes(v.toLowerCase()) || v.toLowerCase().includes(lower))) {
+      return variants;
+    }
+  }
+  return [location.trim()];
+}
+
 // ─── SCHEMAS (sent to Claude API) ──────────────────────────────────────────
 
 export const TOOL_SCHEMAS = [
@@ -106,15 +131,25 @@ export async function executeSearchProducts(input: {
   console.log('[search] input:', JSON.stringify(input));
   console.log('[search] expanded keywords:', allKeywords);
 
-  // Resolve shop filter
+  // Pre-filter shops by status (always required)
   let shopIds: string[] | null = null;
   if (input.store_name || input.location) {
+    // Build location variants to handle free-text inconsistencies (e.g. "رام الله" vs "رام الله والبيرة")
+    const locationVariants = input.location ? buildLocationVariants(input.location) : [];
+
     let shopQ = supabase.from('shops').select('shop_id').eq('status', 'approved');
     if (input.store_name) shopQ = shopQ.ilike('name', `%${input.store_name}%`);
-    if (input.location)   shopQ = shopQ.ilike('location', `%${input.location}%`);
-    const { data: shops } = await shopQ.limit(20);
+    if (locationVariants.length > 0) {
+      const locFilter = locationVariants.map(v => `location.ilike.%${v}%`).join(',');
+      shopQ = shopQ.or(locFilter);
+    }
+    const { data: shops } = await shopQ.limit(50);
     shopIds = (shops ?? []).map((s: any) => s.shop_id);
-    if (shopIds.length === 0) return { products: [], total: 0 };
+    console.log('[search] shops found for location:', shopIds.length);
+    // If location specified but no matching shops found, search without location restriction
+    // so users still get relevant products (AI answer will explain no results in that area)
+    if (shopIds.length === 0 && !input.store_name) shopIds = null;
+    if (shopIds !== null && shopIds.length === 0) return { products: [], total: 0 };
   }
 
   let q = supabase
@@ -142,7 +177,7 @@ export async function executeSearchProducts(input: {
   const { data, count, error } = await q.limit(limit);
   console.log('[search] result count:', count, '| error:', error?.message);
 
-  const products: ProductResult[] = (data ?? []).map((p: any) => ({
+  let products: ProductResult[] = (data ?? []).map((p: any) => ({
     id:            p.id,
     title:         p.title,
     description:   p.description,
@@ -153,7 +188,19 @@ export async function executeSearchProducts(input: {
     shop_location: p.shops?.location,
   }));
 
-  return { products, total: count ?? products.length };
+  // Post-filter by location to catch any DB-level leakage
+  if (input.location) {
+    const locationVariantsForFilter = buildLocationVariants(input.location);
+    const filtered = products.filter(p =>
+      p.shop_location && locationVariantsForFilter.some(v =>
+        p.shop_location!.toLowerCase().includes(v.toLowerCase())
+      )
+    );
+    // Only apply strict filter if it yields results; otherwise keep all (no data in that city)
+    if (filtered.length > 0) products = filtered;
+  }
+
+  return { products, total: products.length };
 }
 
 export async function executeSearchStores(input: {

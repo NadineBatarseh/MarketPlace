@@ -1,6 +1,7 @@
 import Groq from 'groq-sdk';
-import { TOOL_SCHEMAS, executeTool } from './tools.js';
+import { TOOL_SCHEMAS, executeTool, executeSearchProducts } from './tools.js';
 import { SYSTEM_PROMPT } from './systemPrompt.js';
+import { expandKeywords } from './synonyms.js';
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -51,6 +52,17 @@ function slimOutput(toolName: string, output: unknown): unknown {
   return output;
 }
 
+// Fallback: direct keyword search without AI when the agent fails
+async function directSearch(query: string): Promise<AgentResult> {
+  const keywords = query.trim().split(/\s+/).filter(Boolean);
+  const expanded = expandKeywords(keywords);
+  const { products } = await executeSearchProducts({ keywords: expanded, limit: 20 });
+  const answer = products.length > 0
+    ? `وجدنا ${products.length} نتيجة لـ "${query}".`
+    : `لم نجد نتائج لـ "${query}". جرّب كلمات مختلفة.`;
+  return { answer, products, stores: [], tools_called: ['direct_search'] };
+}
+
 export async function runSearchAgent(query: string): Promise<AgentResult> {
   const cacheKey = query.trim().toLowerCase();
   const cached = cache.get(cacheKey);
@@ -65,47 +77,63 @@ export async function runSearchAgent(query: string): Promise<AgentResult> {
   let allStores: unknown[] = [];
   const toolsCalled: string[] = [];
 
-  for (let i = 0; i < 5; i++) {
-    const response = await groq.chat.completions.create({
-      model:      'llama-3.1-8b-instant',
-      max_tokens: 512,
-      tools:      GROQ_TOOLS,
-      tool_choice: i === 0 ? 'required' : 'auto',
-      messages,
-    });
+  try {
+    for (let i = 0; i < 5; i++) {
+      const response = await groq.chat.completions.create({
+        model:      'llama-3.3-70b-versatile',
+        max_tokens: 512,
+        tools:      GROQ_TOOLS,
+        tool_choice: i === 0 ? 'required' : 'auto',
+        messages,
+      });
 
-    const msg = response.choices[0].message;
-    messages.push(msg);
+      const msg = response.choices[0].message;
+      messages.push(msg);
 
-    if (!msg.tool_calls || msg.tool_calls.length === 0) {
-      // No tool calls → final answer
-      const answer = msg.content ?? '';
-      const result: AgentResult = { answer, products: allProducts, stores: allStores, tools_called: toolsCalled };
-      cache.set(cacheKey, { result, ts: Date.now() });
-      return result;
-    }
-
-    // Execute each tool call
-    for (const tc of msg.tool_calls) {
-      toolsCalled.push(tc.function.name);
-      let toolOutput: unknown;
-
-      try {
-        const input = JSON.parse(tc.function.arguments);
-        toolOutput = await executeTool(tc.function.name, input);
-        if (tc.function.name === 'search_products') allProducts = (toolOutput as any).products ?? [];
-        if (tc.function.name === 'search_stores')   allStores   = toolOutput as any[];
-      } catch (err: any) {
-        toolOutput = { error: err.message };
+      if (!msg.tool_calls || msg.tool_calls.length === 0) {
+        // No tool calls → final answer
+        const answer = msg.content ?? '';
+        const result: AgentResult = { answer, products: allProducts, stores: allStores, tools_called: toolsCalled };
+        cache.set(cacheKey, { result, ts: Date.now() });
+        return result;
       }
 
-      messages.push({
-        role:         'tool',
-        tool_call_id: tc.id,
-        content:      JSON.stringify(slimOutput(tc.function.name, toolOutput)),
-      });
+      // Execute each tool call
+      for (const tc of msg.tool_calls) {
+        toolsCalled.push(tc.function.name);
+        let toolOutput: unknown;
+
+        try {
+          const input = JSON.parse(tc.function.arguments);
+          toolOutput = await executeTool(tc.function.name, input);
+          if (tc.function.name === 'search_products') allProducts = (toolOutput as any).products ?? [];
+          if (tc.function.name === 'search_stores')   allStores   = toolOutput as any[];
+        } catch (err: any) {
+          toolOutput = { error: err.message };
+        }
+
+        messages.push({
+          role:         'tool',
+          tool_call_id: tc.id,
+          content:      JSON.stringify(slimOutput(tc.function.name, toolOutput)),
+        });
+      }
     }
+  } catch (err: any) {
+    console.error('[search] AI agent failed, falling back to direct search:', err.message);
+    const result = await directSearch(query);
+    cache.set(cacheKey, { result, ts: Date.now() });
+    return result;
   }
 
-  return { answer: 'عذراً، لم أتمكن من معالجة طلبك.', products: [], stores: [], tools_called: toolsCalled };
+  // Max iterations reached — if we have products return them, else fallback
+  if (allProducts.length > 0 || allStores.length > 0) {
+    const result: AgentResult = { answer: '', products: allProducts, stores: allStores, tools_called: toolsCalled };
+    cache.set(cacheKey, { result, ts: Date.now() });
+    return result;
+  }
+
+  const result = await directSearch(query);
+  cache.set(cacheKey, { result, ts: Date.now() });
+  return result;
 }

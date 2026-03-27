@@ -1,21 +1,22 @@
 export const SYNONYM_GROUPS: string[][] = [
-  ['بنطال', 'بنطلون', 'بناطيل', 'pants', 'trousers', 'jeans', 'slacks', 'دينم'],
-  ['قميص', 'قمصان', 'shirt', 'shirts', 'تيشيرت', 'تيشيرتات', 't-shirt', 'بلوزة'],
-  ['حذاء', 'أحذية', 'كندرة', 'كنادر', 'shoes', 'shoe', 'sneakers', 'sandals'],
-  ['فستان', 'فساتين', 'dress', 'dresses', 'روب'],
-  ['جاكيت', 'جاكيتات', 'معطف', 'معاطف', 'jacket', 'coat', 'blazer', 'hoodie', 'هودي'],
-  ['حقيبة', 'حقائب', 'شنطة', 'شنط', 'bag', 'bags', 'purse', 'backpack'],
+  ['بنطال', 'بنطلون', 'بناطيل', 'بنطلونات', 'pants', 'trousers', 'jeans', 'slacks', 'دينم', 'denim'],
+  ['قميص', 'قمصان', 'قمصانة', 'shirt', 'shirts', 'تيشيرت', 'تيشيرتات', 't-shirt', 'تي شيرت'],
+  ['بلوزة', 'بلوزات', 'بلايز', 'blouse', 'blouses', 'top', 'tops'],
+  ['حذاء', 'أحذية', 'احذية', 'كندرة', 'كنادر', 'shoes', 'shoe', 'sneakers', 'sandals', 'حذاء رياضي', 'سنيكرز'],
+  ['فستان', 'فساتين', 'dress', 'dresses', 'روب', 'ثوب', 'ثياب'],
+  ['جاكيت', 'جاكيتات', 'معطف', 'معاطف', 'jacket', 'coat', 'blazer', 'hoodie', 'هودي', 'كنزة', 'كنز', 'سترة', 'ستر'],
+  ['حقيبة', 'حقائب', 'شنطة', 'شنط', 'bag', 'bags', 'purse', 'backpack', 'شنطة ظهر', 'حقيبة يد'],
   ['ساعة', 'ساعات', 'watch', 'watches', 'ساعة يد'],
-  ['نظارة', 'نظارات', 'glasses', 'sunglasses', 'نظارة شمسية'],
-  ['قبعة', 'قبعات', 'hat', 'hats', 'كاب', 'كابات'],
-  ['جوارب', 'sock', 'socks'],
-  ['ملابس داخلية', 'underwear', 'lingerie'],
-  ['ملابس رياضية', 'sportswear', 'athletic wear'],
-  ['ملابس رسمية', 'formal wear', 'suit', 'suits'],
-  ['ملابس أطفال', 'children clothing', 'kids clothing'],
-  
-    ['تنورة', ' تنانير', ' skirt', 'skirts'],
-
+  ['نظارة', 'نظارات', 'glasses', 'sunglasses', 'نظارة شمسية', 'نظارات شمسية'],
+  ['قبعة', 'قبعات', 'hat', 'hats', 'كاب', 'كابات', 'طاقية', 'طواقي'],
+  ['جوارب', 'جورب', 'شراب', 'شرابات', 'sock', 'socks'],
+  ['ملابس داخلية', 'انتيريه', 'underwear', 'lingerie'],
+  ['ملابس رياضية', 'sportswear', 'athletic wear', 'ترينج', 'ترنج'],
+  ['ملابس رسمية', 'formal wear', 'suit', 'suits', 'بدلة', 'بدلات'],
+  ['ملابس أطفال', 'ملابس اطفال', 'children clothing', 'kids clothing', 'baby clothes'],
+  ['تنورة', 'تنانير', 'skirt', 'skirts'],
+  ['عطر', 'عطور', 'بخور', 'perfume', 'perfumes', 'cologne', 'fragrance'],
+  ['مجوهرات', 'مجوهر', 'اكسسوارات', 'اكسسوار', 'jewelry', 'jewellery', 'accessories', 'خاتم', 'خواتم', 'سوار', 'اساور', 'قلادة', 'قلائد'],
 ];
 
 export function expandKeywords(terms: string[]): string[] {
