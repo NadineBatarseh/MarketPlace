@@ -1,16 +1,30 @@
 export default function SearchInput({
   value,
   onChange,
+<<<<<<< HEAD
   onKeyDown,
+=======
+  onSubmit,
+>>>>>>> searching
   placeholder = "ابحث...",
   className = "sp-nav-search",
 }: {
   value: string;
   onChange: (q: string) => void;
+<<<<<<< HEAD
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+=======
+  onSubmit?: (q: string) => void;
+>>>>>>> searching
   placeholder?: string;
   className?: string;
 }) {
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter' && onSubmit) {
+      onSubmit(value);
+    }
+  }
+
   return (
     <div className={className}>
       <svg
@@ -22,6 +36,8 @@ export default function SearchInput({
         viewBox="0 0 24 24"
         stroke="currentColor"
         strokeWidth="2"
+        style={{ cursor: onSubmit ? 'pointer' : undefined }}
+        onClick={() => onSubmit?.(value)}
       >
         <circle cx="11" cy="11" r="8" />
         <path d="m21 21-4.35-4.35" />
@@ -31,7 +47,11 @@ export default function SearchInput({
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+<<<<<<< HEAD
         onKeyDown={onKeyDown}
+=======
+        onKeyDown={handleKeyDown}
+>>>>>>> searching
       />
     </div>
   );
