@@ -7,7 +7,7 @@ type Product = {
   title: string | null;
   description: string | null;
   price: string | null;
-  image_url: string | null;
+  image_urls: string[] | null;
   stock_Quantity: number | null;
 };
 
@@ -70,9 +70,9 @@ export default function ProductsPage() {
               alignItems: "center",
             }}
           >
-            {p.image_url ? (
+            {p.image_urls?.[0] ? (
               <img
-                src={p.image_url}
+                src={p.image_urls[0]}
                 alt={p.title ?? "product"}
                 width={80}
                 height={80}

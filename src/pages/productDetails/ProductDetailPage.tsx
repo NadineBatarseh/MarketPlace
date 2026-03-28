@@ -289,7 +289,7 @@ const ProductDetailPage: React.FC = () => {
         // 1) Product
         const { data: productData, error: pErr } = await supabase
           .from("products")
-          .select("id, title, description, price, stock_Quantity, shop_id, image_url")
+          .select("id, title, description, price, stock_Quantity, shop_id, image_urls")
           .eq("id", productId)
           .single();
 
@@ -308,8 +308,8 @@ const ProductDetailPage: React.FC = () => {
           setShopName(shopData?.name ?? null);
         }
 
-        // 2) Images — image_url is text[] in Postgres, Supabase returns it as a JS string[]
-        const rawImg = productData?.image_url;
+        // 2) Images — image_urls is text[] in Postgres, Supabase returns it as a JS string[]
+        const rawImg = productData?.image_urls;
         let urls: string[] = [];
         if (Array.isArray(rawImg)) {
           urls = (rawImg as string[]).filter(Boolean);

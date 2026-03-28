@@ -57,9 +57,9 @@ export default function StoreListPage() {
           value={heroSearch}
           onChange={setHeroSearch}
           onKeyDown={handleHeroSearch}
-          placeholder="ابحث عن منتج أو متجر... مثال: بنطال أسود رخيص من رام الله"
+          placeholder="...ابحث عن منتج "
         />
-        <p className="sl-hero-hint">اضغط Enter للبحث بالذكاء الاصطناعي</p>
+        <p className="sl-hero-hint">اضغط Enter للبحث</p>
       </div>
 
       <div className="sl-page">

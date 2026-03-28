@@ -77,7 +77,7 @@ router.get('/', async (req: Request, res: Response) => {
   // 3. Build base query
   let dbQuery = supabase
     .from('products')
-    .select('id, shop_id, title, description, price, image_url, stock_Quantity', { count: 'exact' })
+    .select('id, shop_id, title, description, price, image_urls, stock_Quantity', { count: 'exact' })
     .or(orParts.join(','));
 
   if (shopId)         dbQuery = dbQuery.eq('shop_id', shopId);

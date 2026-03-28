@@ -14,7 +14,8 @@
       "Bash(grep -r \"\\\\.query\\\\|\\\\.from\\\\\\(\" c:UsershpDesktopSOUQLINK/src --include=*.ts --include=*.tsx)",
       "Bash(find c:UsershpDesktopSOUQLINK -type f \\\\\\(-name *.ts -o -name *.js \\\\\\) ! -path */node_modules/* ! -path */.git/*)",
       "Bash(xargs grep:*)",
-      "Bash(find c:UsershpDesktopSOUQLINK -type f -name *.ts ! -path */node_modules/* ! -path */.git/*)"
+      "Bash(find c:UsershpDesktopSOUQLINK -type f -name *.ts ! -path */node_modules/* ! -path */.git/*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

@@ -120,7 +120,7 @@ async function handleCatalogChange(change: WebhookChange) {
   if (value.name)        row.title       = value.name;
   if (value.description) row.description = value.description;
   if (value.price)       row.price       = parseFloat(value.price);
-  if (value.image_url)   row.image_url   = [value.image_url];
+  if (value.image_url)   row.image_urls  = [value.image_url];
 
   const { error } = await supabase
     .from("products")

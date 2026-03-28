@@ -11,9 +11,7 @@ interface Props {
 
 export default function ProductCard({ product, inWishlist, onToggleWishlist, onAddToCart }: Props) {
   const navigate = useNavigate();
-  const imgSrc = Array.isArray(product.image_url)
-    ? (product.image_url[0] ?? null)
-    : (product.image_url ?? null);
+  const imgSrc = product.image_urls?.[0] ?? null;
 
   return (
     <div className="product-card" onClick={() => navigate(`/product/${product.id}`)}>

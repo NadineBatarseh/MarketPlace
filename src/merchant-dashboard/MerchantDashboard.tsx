@@ -5,10 +5,11 @@ import MerchantHome from './pages/MerchantHome';
 import MerchantReviews from './pages/MerchantReviews';
 import MerchantBilling from './pages/MerchantBilling';
 import MerchantEditPage from './pages/MerchantEditPage';
+import BulkUploadPage from './pages/BulkUploadPage';
 import MerchantLoginModal from './components/MerchantLoginModal';
 import './MerchantDashboard.css';
 
-type DashPage = 'home' | 'reviews' | 'billing' | 'editPage';
+type DashPage = 'home' | 'reviews' | 'billing' | 'editPage' | 'bulkUpload';
 
 function SidebarItem({
   icon,
@@ -94,6 +95,7 @@ export default function MerchantDashboard() {
     if (currentPage === 'editPage') return <MerchantEditPage />;
     if (currentPage === 'reviews') return <MerchantReviews />;
     if (currentPage === 'billing') return <MerchantBilling />;
+    if (currentPage === 'bulkUpload') return <BulkUploadPage />;
     return <MerchantHome />;
   };
 
@@ -167,6 +169,19 @@ export default function MerchantDashboard() {
             label="تعديل الصفحة"
             active={currentPage === 'editPage'}
             onClick={() => setCurrentPage('editPage')}
+          />
+
+          <SidebarItem
+            icon={
+              <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+            }
+            label="رفع بالجملة"
+            active={currentPage === 'bulkUpload'}
+            onClick={() => setCurrentPage('bulkUpload')}
           />
         </aside>
 

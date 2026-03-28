@@ -13,17 +13,22 @@
     "@googlemaps/google-maps-services-js": "^3.4.2",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@supabase/supabase-js": "^2.45.0",
+    "cors": "^2.8.6",
     "dotenv": "^16.4.0",
     "express": "^4.22.1",
     "groq-sdk": "^1.1.1",
     "lucide-react": "^0.575.0",
+    "multer": "^2.1.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^7.13.1"
+    "react-router-dom": "^7.13.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.1",
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.0",
+    "@types/multer": "^2.1.0",
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",

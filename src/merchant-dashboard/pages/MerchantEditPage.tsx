@@ -14,7 +14,7 @@ interface DBProduct {
   title: string;
   description: string | null;
   price: number;
-  image_url: string | null;
+  image_urls: string[] | null;
   stock_Quantity: number;
 }
 
@@ -49,26 +49,37 @@ function AddProductModal({ shopId, onAdd, onClose }: { shopId: string; onAdd: (p
     setSaving(true);
     setError('');
 
-    const { data, error: insertErr } = await supabase
-      .from('products')
-      .insert({
-        shop_id: shopId,
-        title: form.name.trim(),
-        description: form.description.trim() || null,
-        price: parseFloat(form.price) || 0,
-        image_url: form.imageUrl,
-        stock_Quantity: parseInt(form.quantity) || 0,
-      })
-      .select()
-      .single();
-
-    if (insertErr || !data) {
-      setError('تعذّر إضافة المنتج: ' + (insertErr?.message ?? 'خطأ غير معروف'));
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      setError('انتهت جلستك — يرجى تسجيل الدخول مجدداً');
       setSaving(false);
       return;
     }
 
-    onAdd(data as DBProduct);
+    const res = await fetch('http://localhost:4000/api/products', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        title: form.name.trim(),
+        description: form.description.trim() || undefined,
+        price: parseFloat(form.price) || 0,
+        stock_Quantity: parseInt(form.quantity) || 0,
+        image_urls: form.imageUrl ? [form.imageUrl] : undefined,
+      }),
+    });
+
+    const json = await res.json();
+
+    if (!res.ok || !json.ok) {
+      setError('تعذّر إضافة المنتج: ' + (json.error ?? 'خطأ غير معروف'));
+      setSaving(false);
+      return;
+    }
+
+    onAdd(json.product as DBProduct);
     onClose();
   };
 
@@ -175,8 +186,16 @@ export default function MerchantEditPage() {
 
   const deleteProduct = async (id: string) => {
     if (!activeShopId) return;
-    const { error } = await supabase.from('products').delete().eq('id', id).eq('shop_id', activeShopId);
-    if (!error) setProducts(prev => prev.filter(p => p.id !== id));
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const res = await fetch(`http://localhost:4000/api/products/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (res.ok) setProducts(prev => prev.filter(p => p.id !== id));
   };
 
   const handleSave = async () => {
@@ -367,7 +386,7 @@ export default function MerchantEditPage() {
                 <div key={p.id} className="mep-product-card">
                   <button type="button" className="mep-product-del-btn" onClick={() => deleteProduct(p.id)} title="حذف المنتج">🗑</button>
                   <div className="mep-product-img">
-                    {p.image_url ? <img src={p.image_url} alt={p.title} /> : '📦'}
+                    {p.image_urls?.[0] ? <img src={p.image_urls[0]} alt={p.title} /> : '📦'}
                   </div>
                   <div className="mep-product-name">{p.title}</div>
                   {p.description && <div className="mep-product-desc">{p.description}</div>}

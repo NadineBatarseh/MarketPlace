@@ -100,7 +100,7 @@ export interface ProductResult {
   title: string;
   description: string | null;
   price: number | null;
-  image_url: string | null;
+  image_urls: string | null;
   shop_id: string;
   shop_name?: string;
   shop_location?: string;
@@ -154,7 +154,7 @@ export async function executeSearchProducts(input: {
 
   let q = supabase
     .from('products')
-    .select('id, title, description, price, image_url, shop_id, shops!inner(name, location)', { count: 'exact' });
+    .select('id, title, description, price, image_urls, shop_id, shops!inner(name, location)', { count: 'exact' });
 
   if (shopIds) q = q.in('shop_id', shopIds);
 
@@ -182,7 +182,7 @@ export async function executeSearchProducts(input: {
     title:         p.title,
     description:   p.description,
     price:         p.price,
-    image_url:     Array.isArray(p.image_url) ? p.image_url[0] : p.image_url,
+    image_urls:    Array.isArray(p.image_urls) ? p.image_urls[0] : p.image_urls,
     shop_id:       p.shop_id,
     shop_name:     p.shops?.name,
     shop_location: p.shops?.location,

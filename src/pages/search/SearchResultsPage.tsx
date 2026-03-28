@@ -9,7 +9,7 @@ interface Product {
   title: string;
   description: string | null;
   price: number | null;
-  image_url: string[] | string | null;
+  image_urls: string[] | string | null;
   stock_Quantity: number | null;
 }
 
@@ -26,10 +26,10 @@ interface SearchResponse {
 
 const LIMIT = 20;
 
-function getFirstImage(image_url: Product['image_url']): string | null {
-  if (!image_url) return null;
-  if (Array.isArray(image_url)) return image_url[0] ?? null;
-  return image_url;
+function getFirstImage(image_urls: Product['image_urls']): string | null {
+  if (!image_urls) return null;
+  if (Array.isArray(image_urls)) return image_urls[0] ?? null;
+  return image_urls;
 }
 
 export default function SearchResultsPage() {
@@ -203,7 +203,7 @@ export default function SearchResultsPage() {
               <>
                 <div className="sr-grid">
                   {results.products.map(product => {
-                    const img = getFirstImage(product.image_url);
+                    const img = getFirstImage(product.image_urls);
                     return (
                       <div
                         key={product.id}

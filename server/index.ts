@@ -1,4 +1,5 @@
 import express from "express";
+import cors from "cors";
 import "dotenv/config";
 import type { Request, Response } from "express";
 import { fileURLToPath } from "url";
@@ -8,17 +9,23 @@ import { uploadImage } from "./uploadImage.js";
 import logisticsRouter from "../src/pages/delivery agent/LogisticsRoutes.js";
 import webhookRouter from "./webhooks.js";
 import searchRouter from "./search/searchRouter.js";
+import productUploadRouter from "./routes/productUploadRouter.js";
+import metaCatalogRouter from "./routes/metaCatalogAPIRouter.js";
+import productCRUDRouter from "./routes/productCRUDRouter.js";
+import supabaseProductWebhookRouter from "./routes/supabaseProductWebhookRouter.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 
+app.use(cors({ origin: ["http://localhost:5173", "http://localhost:4000"] }));
+
 // Webhook must be mounted with raw body BEFORE express.json(),
 // because signature verification needs the unparsed buffer.
 app.use("/webhook", express.raw({ type: "application/json" }), webhookRouter);
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 /* ---------- HELPERS ---------- */
 
@@ -99,7 +106,7 @@ app.post("/api/sync-products", async (_req: Request, res: Response) => {
           title: p.name ?? `Product ${p.id}`,
           description: p.description ?? null,
           price: parseMetaPrice(p.price),
-          image_url: storedImageUrl ? [storedImageUrl] : p.image_url ? [p.image_url] : null,
+          image_urls: storedImageUrl ? [storedImageUrl] : p.image_url ? [p.image_url] : null,
           stock_Quantity: p.quantity_to_sell_on_facebook ?? null,
         };
       })
@@ -136,6 +143,18 @@ app.get("/api/products", async (_req: Request, res: Response) => {
 
 /* ---------- SEARCH ---------- */
 app.use("/api/search", searchRouter);
+
+/* ---------- PRODUCT BULK UPLOAD ---------- */
+app.use("/api/products", productUploadRouter);
+
+/* ---------- META CATALOG SYNC ---------- */
+app.use("/api/catalog", metaCatalogRouter);
+
+/* ---------- PRODUCT CRUD (create / delete + auto Meta sync) ---------- */
+app.use("/api/products", productCRUDRouter);
+
+/* ---------- SUPABASE DB WEBHOOK (auto-sync on direct DB changes) ---------- */
+app.use("/api/webhooks/supabase-products", supabaseProductWebhookRouter);
 
 /* ---------- LOGISTICS ---------- */
 app.use("/api/logistics", logisticsRouter);
@@ -264,7 +283,7 @@ app.get("/api/stores/:id/products", async (req: Request, res: Response) => {
     await Promise.all([
       supabase
         .from("products")
-        .select("id, title, description, price, image_url, stock_Quantity")
+        .select("id, title, description, price, image_urls, stock_Quantity")
         .eq("shop_id", shop.shop_id)
         .order(orderCol, { ascending })
         .range(offset, offset + limit - 1),

@@ -1,10 +1,11 @@
 import StoreListPage from './pages/storeList/StoreListPage';
+import SearchResultsPage from './pages/search/SearchResultsPage';
 import DeliveryAgentPage from './pages/delivery agent/DeliveryAgentPage';
 import CollectorPage from './pages/delivery agent/CollectorPage';
 import HubPage from './pages/delivery agent/HubPage';
 import DelivererPage from './pages/delivery agent/DelivererPage';
-import SearchResultsPage from './pages/search/SearchResultsPage';
 
+const myShopId = 'cc76a171-a549-43c8-ad7c-7bcadbd0e9a3';
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
 import "./App.css";
 import StorePage from "./pages/singleStore/storePage";
@@ -45,13 +46,15 @@ export default function App() {
         <ShopProviderWithAuth>
           <BrowserRouter>
             <Routes>
+              {/* Landing → stores listing */}
               <Route path="/" element={<Navigate to="/store" replace />} />
               <Route path="/store/:shopId" element={<StoreWrapper />} />
               <Route path="/cart" element={<Cart />} />
               <Route path="/favorites" element={<Favorite />} />
               <Route path="/merchant-dashboard" element={<MerchantDashboard />} />
               <Route path="/admin-dashboard" element={<AdminDashboard />} />
-              <Route path="/stores" element={<StoreListPage />} />
+              <Route path="/" element={<StorePage shopId={myShopId} />} />
+              <Route path="/store" element={<StoreListPage />} />
               <Route path="/stores/:shopId" element={<StorePageWrapper />} />
               <Route path="/sync" element={<ProductsPage />} />
               <Route path="/product/:id" element={<ProductDetailPage />} />

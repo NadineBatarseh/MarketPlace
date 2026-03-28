@@ -170,7 +170,7 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
 
       const { data: items, error } = await supabase
         .from('cart_items')
-        .select('produc_id, quantity, products(id, title, image_url, price)')
+        .select('produc_id, quantity, products(id, title, image_urls, price)')
         .eq('cartSerial_id', serialId);
 
       if (error) { console.error('[ShopContext] load cart_items failed:', error); return; }
@@ -179,7 +179,7 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
       setCartItems((items as any[]).map((item) => ({
         id: item.produc_id,
         name: item.products?.title ?? 'منتج',
-        image: item.products?.image_url ?? '',
+        image: item.products?.image_urls?.[0] ?? '',
         price: parseFloat(String(item.products?.price ?? '0').replace(/[^\d.]/g, '')) || 0,
         quantity: item.quantity ?? 1,
       })));
@@ -203,7 +203,7 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
 
       const { data: items, error } = await supabase
         .from('favorite_items')
-        .select('product_id, created_at, products(id, title, image_url, price)')
+        .select('product_id, created_at, products(id, title, image_urls, price)')
         .eq('favoriteSerial_id', serialId);
 
       if (error) { console.error('[ShopContext] load favorite_items failed:', error); return; }
@@ -212,7 +212,7 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
       setFavoriteItems((items as any[]).map((item) => ({
         id: item.product_id,
         name: item.products?.title ?? 'منتج',
-        image: item.products?.image_url ?? '',
+        image: item.products?.image_urls?.[0] ?? '',
         price: parseFloat(String(item.products?.price ?? '0').replace(/[^\d.]/g, '')) || 0,
         dateAdded: item.created_at?.split('T')[0] ?? new Date().toISOString().split('T')[0],
         inStock: true,
