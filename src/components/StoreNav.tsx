@@ -1,3 +1,5 @@
+import './StoreNav.css';
+
 export default function StoreNav() {
   return (
     <nav className="nav">
