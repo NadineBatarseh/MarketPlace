@@ -54,6 +54,41 @@
   font-size: 0.9rem;
 }
 
+/* ── Section Toggle ── */
+.ad-section-toggle {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1.5rem 2.5rem 0;
+}
+
+.ad-section-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.6rem;
+  border-radius: 12px;
+  border: 2px solid #e5e7eb;
+  background: #fff;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.18s;
+  color: #555;
+}
+
+.ad-section-btn:hover { background: #f5f5f5; }
+
+.ad-section-btn--active {
+  background: #1a1a2e;
+  border-color: #1a1a2e;
+  color: #fff;
+}
+
+.ad-section-btn--active .ad-tab-count {
+  background: #e8572a;
+}
+
 /* ── Tabs ── */
 .ad-tabs {
   display: flex;
@@ -244,6 +279,173 @@
 .ad-btn--reject {
   background: #ef4444;
   color: #fff;
+}
+
+/* ── Card header row ── */
+.ad-card-header-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.ad-type-chip {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 999px;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* ── Meta row (phone + city) ── */
+.ad-meta-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* ── Pictures ── */
+.ad-pics-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
+.ad-pic-thumb {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1.5px solid #e5e7eb;
+  transition: transform 0.15s;
+}
+
+.ad-pic-thumb:hover { transform: scale(1.06); }
+
+/* ── Delete button ── */
+.ad-btn--delete {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.ad-btn--delete:hover:not(:disabled) {
+  background: #e5e7eb;
+}
+
+/* ── Lightbox ── */
+.ad-lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  cursor: zoom-out;
+}
+
+.ad-lightbox img {
+  max-width: 90vw;
+  max-height: 90vh;
+  border-radius: 12px;
+  object-fit: contain;
+}
+
+/* ── Reject Modal ── */
+.ad-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.ad-modal {
+  background: #fff;
+  border-radius: 16px;
+  padding: 2rem;
+  width: 100%;
+  max-width: 520px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.ad-modal-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1a1a2e;
+}
+
+.ad-modal-to {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #555;
+}
+
+.ad-modal-textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 0.88rem;
+  line-height: 1.7;
+  direction: rtl;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.ad-modal-textarea:focus { border-color: #ef4444; }
+
+.ad-modal-error {
+  margin: 0;
+  font-size: 0.84rem;
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+}
+
+.ad-modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ad-modal-label {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+.ad-modal-input {
+  padding: 11px 14px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  direction: rtl;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.ad-modal-input:focus { border-color: #16a34a; }
+
+.ad-modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
 }
 
 /* ── Responsive ── */

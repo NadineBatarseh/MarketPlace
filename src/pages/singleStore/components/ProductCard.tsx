@@ -11,9 +11,7 @@ interface Props {
 
 export default function ProductCard({ product, inWishlist, onToggleWishlist, onAddToCart }: Props) {
   const navigate = useNavigate();
-  const imgSrc = Array.isArray(product.image_url)
-    ? (product.image_url[0] ?? null)
-    : (product.image_url ?? null);
+  const imgSrc = product.image_urls?.[0] ?? null;
 
   return (
     <div className="product-card" onClick={() => navigate(`/product/${product.id}`)}>
@@ -29,8 +27,11 @@ export default function ProductCard({ product, inWishlist, onToggleWishlist, onA
           }}>🛍</div>
         )}
         <button
+         type="button"
           className={`wishlist-btn${inWishlist ? ' active' : ''}`}
           onClick={e => onToggleWishlist(e, product.id)}
+          title={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
+          aria-label={inWishlist ? 'Remove from wishlist' : 'Add to wishlist'}
         >
           <svg
             fill={inWishlist ? 'currentColor' : 'none'}

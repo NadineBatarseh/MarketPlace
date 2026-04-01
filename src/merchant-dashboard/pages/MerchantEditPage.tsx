@@ -14,7 +14,7 @@ interface DBProduct {
   title: string;
   description: string | null;
   price: number;
-  image_url: string | null;
+  image_urls: string[] | null;
   stock_Quantity: number;
 }
 
@@ -23,21 +23,29 @@ interface ProductForm {
   description: string;
   price: string;
   quantity: string;
-  imageUrl: string | null;
 }
 
-function AddProductModal({ shopId, onAdd, onClose }: { shopId: string; onAdd: (p: DBProduct) => void; onClose: () => void }) {
-  const [form, setForm] = useState<ProductForm>({ name: '', description: '', price: '', quantity: '', imageUrl: null });
+function AddProductModal({ shopId, onAdd, onClose }: { shopId: string; shopName: string; onAdd: (p: DBProduct) => void; onClose: () => void }) {
+  const [form, setForm] = useState<ProductForm>({ name: '', description: '', price: '', quantity: '' });
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const imgInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => setForm(f => ({ ...f, imageUrl: ev.target?.result as string }));
-    reader.readAsDataURL(file);
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    e.target.value = '';
+    const previews = files.map(f => URL.createObjectURL(f));
+    setPendingFiles(prev => [...prev, ...files]);
+    setPreviewUrls(prev => [...prev, ...previews]);
+  };
+
+  const removeImage = (idx: number) => {
+    URL.revokeObjectURL(previewUrls[idx]);
+    setPendingFiles(prev => prev.filter((_, i) => i !== idx));
+    setPreviewUrls(prev => prev.filter((_, i) => i !== idx));
   };
 
   const handleAdd = async () => {
@@ -49,6 +57,7 @@ function AddProductModal({ shopId, onAdd, onClose }: { shopId: string; onAdd: (p
     setSaving(true);
     setError('');
 
+    // Step 1: Insert product without images to get the product ID
     const { data, error: insertErr } = await supabase
       .from('products')
       .insert({
@@ -56,7 +65,7 @@ function AddProductModal({ shopId, onAdd, onClose }: { shopId: string; onAdd: (p
         title: form.name.trim(),
         description: form.description.trim() || null,
         price: parseFloat(form.price) || 0,
-        image_url: form.imageUrl,
+        image_urls: null,
         stock_Quantity: parseInt(form.quantity) || 0,
       })
       .select()
@@ -68,7 +77,31 @@ function AddProductModal({ shopId, onAdd, onClose }: { shopId: string; onAdd: (p
       return;
     }
 
-    onAdd(data as DBProduct);
+    const productId = data.id as string;
+
+    // Step 2: Upload images to {productId}/{index}.{ext}
+    const uploadedUrls: string[] = [];
+    for (let i = 0; i < pendingFiles.length; i++) {
+      const file = pendingFiles[i];
+      const ext = file.name.split('.').pop();
+      const path = `${productId}/${i}.${ext}`;
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from('product-images')
+        .upload(path, file, { upsert: true });
+      if (uploadErr) { setError('تعذّر رفع الصورة: ' + uploadErr.message); continue; }
+      const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(uploadData.path);
+      uploadedUrls.push(urlData.publicUrl);
+    }
+
+    // Step 3: Update product with image URLs if any were uploaded
+    if (uploadedUrls.length > 0) {
+      await supabase.from('products').update({
+        image_urls: uploadedUrls,
+      }).eq('id', productId);
+    }
+
+    previewUrls.forEach(url => URL.revokeObjectURL(url));
+    onAdd({ ...data, image_urls: uploadedUrls.length > 0 ? uploadedUrls : null } as DBProduct);
     onClose();
   };
 
@@ -82,14 +115,20 @@ function AddProductModal({ shopId, onAdd, onClose }: { shopId: string; onAdd: (p
 
         <div className="apm-fields">
           <div className="apm-field">
-            <label>صورة المنتج</label>
-            <div className="apm-img-preview" onClick={() => imgInputRef.current?.click()}>
-              {form.imageUrl
-                ? <img src={form.imageUrl} alt="معاينة المنتج" />
-                : <div className="apm-img-placeholder"><span>📷</span>انقر لاختيار صورة</div>
-              }
+            <label>صور المنتج</label>
+            <div className="apm-imgs-row">
+              {previewUrls.map((url, idx) => (
+                <div key={idx} className="apm-img-thumb">
+                  <img src={url} alt={`صورة ${idx + 1}`} />
+                  <button type="button" className="apm-img-remove" onClick={() => removeImage(idx)}>✕</button>
+                </div>
+              ))}
+              <div className="apm-img-add" onClick={() => imgInputRef.current?.click()}>
+                <span>📷</span>
+                <span>إضافة صورة</span>
+              </div>
             </div>
-            <input ref={imgInputRef} type="file" accept="image/*" onChange={handleImageChange} className="mep-file-hidden" aria-label="اختر صورة المنتج" />
+            <input ref={imgInputRef} type="file" accept="image/*" multiple onChange={handleImageChange} className="mep-file-hidden" aria-label="اختر صور المنتج" />
           </div>
 
           <div className="apm-field">
@@ -153,7 +192,7 @@ export default function MerchantEditPage() {
     if (!shop?.shop_id) { setLoadingProducts(false); return; }
     supabase
       .from('products')
-      .select('*')
+      .select('id, shop_id, title, description, price, image_urls, stock_Quantity')
       .eq('shop_id', shop.shop_id)
       .then(({ data, error }) => {
         if (!error && data) setProducts(data as DBProduct[]);
@@ -175,6 +214,14 @@ export default function MerchantEditPage() {
 
   const deleteProduct = async (id: string) => {
     if (!activeShopId) return;
+
+    // List and delete all files inside the product's folder {productId}/
+    const { data: files } = await supabase.storage.from('product-images').list(id);
+    if (files && files.length > 0) {
+      const paths = files.map(f => `${id}/${f.name}`);
+      await supabase.storage.from('product-images').remove(paths);
+    }
+
     const { error } = await supabase.from('products').delete().eq('id', id).eq('shop_id', activeShopId);
     if (!error) setProducts(prev => prev.filter(p => p.id !== id));
   };
@@ -367,7 +414,7 @@ export default function MerchantEditPage() {
                 <div key={p.id} className="mep-product-card">
                   <button type="button" className="mep-product-del-btn" onClick={() => deleteProduct(p.id)} title="حذف المنتج">🗑</button>
                   <div className="mep-product-img">
-                    {p.image_url ? <img src={p.image_url} alt={p.title} /> : '📦'}
+                    {p.image_urls?.[0] ? <img src={p.image_urls[0]} alt={p.title} /> : '📦'}
                   </div>
                   <div className="mep-product-name">{p.title}</div>
                   {p.description && <div className="mep-product-desc">{p.description}</div>}
@@ -396,6 +443,7 @@ export default function MerchantEditPage() {
       {showAddModal && activeShopId && (
         <AddProductModal
           shopId={activeShopId}
+          shopName={name}
           onAdd={p => setProducts(prev => [...prev, p])}
           onClose={() => setShowAddModal(false)}
         />

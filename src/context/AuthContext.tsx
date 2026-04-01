@@ -1,0 +1,77 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import supabase from '../lib/supabase';
+
+export interface SharedAuthState {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rawUser: any | null;
+  role: string | null;
+  name: string | null;
+  status: string | null;
+  isLoading: boolean;
+}
+
+const AuthContext = createContext<SharedAuthState | null>(null);
+
+async function fetchUserData(userId: string) {
+  const { data } = await supabase
+    .from('Users')
+    .select('role, name, status')
+    .eq('user_id', userId)
+    .maybeSingle();
+  return {
+    role: data?.role?.trim() ?? null,
+    name: data?.name ?? null,
+    status: data?.status?.trim() ?? null,
+  };
+}
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [rawUser, setRawUser] = useState<any | null>(undefined); // undefined = not yet resolved
+  const [role, setRole] = useState<string | null>(null);
+  const [name, setName] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Step 1: listen for auth changes — no async DB work here
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        setRawUser(null);
+      } else if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+        setRawUser(session.user);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Step 2: fetch DB data separately, after the auth lock is released
+  useEffect(() => {
+    if (rawUser === undefined) return; // not yet resolved
+    if (rawUser === null) {
+      setRole(null);
+      setName(null);
+      setStatus(null);
+      setIsLoading(false);
+      return;
+    }
+    fetchUserData(rawUser.id).then(userData => {
+      setRole(userData.role);
+      setName(userData.name);
+      setStatus(userData.status);
+      setIsLoading(false);
+    });
+  }, [rawUser?.id]);
+
+  return (
+    <AuthContext.Provider value={{ rawUser, role, name, status, isLoading }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useSharedAuth(): SharedAuthState {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useSharedAuth must be inside AuthProvider');
+  return ctx;
+}

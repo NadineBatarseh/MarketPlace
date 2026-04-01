@@ -12,9 +12,17 @@ import ProductsPage from "./ProductsPage";
 import ProductDetailPage from "./pages/productDetails/ProductDetailPage";
 import Cart from "./pages/Cart";
 import Favorite from "./pages/Favorite";
+import CheckoutPage from "./pages/checkout/CheckoutPage";
+import Login from "./pages/auth/Login";
+import CustomerSignup from "./pages/auth/CustomerSignup";
+import MerchantApplication from "./pages/auth/MerchantApplication";
+import DeliveryApplication from "./pages/auth/DeliveryApplication";
+import HubWorkerApplication from "./pages/auth/HubWorkerApplication";
+import Activate from "./pages/auth/Activate";
 import { ShopProvider } from "./context/ShopContext";
 import { CustomerAuthProvider } from "./context/CustomerAuthContext";
 import { MerchantAuthProvider } from "./merchant-dashboard/context/MerchantAuthContext";
+import { AuthProvider } from "./context/AuthContext";
 import MerchantDashboard from "./merchant-dashboard/MerchantDashboard";
 import AdminDashboard from "./merchant-dashboard/pages/AdminDashboard";
 import { useMerchantAuth } from './merchant-dashboard/context/MerchantAuthContext';
@@ -40,6 +48,7 @@ function StorePageWrapper() {
 
 export default function App() {
   return (
+    <AuthProvider>
     <MerchantAuthProvider>
       <CustomerAuthProvider>
         <ShopProviderWithAuth>
@@ -49,6 +58,7 @@ export default function App() {
               <Route path="/" element={<Navigate to="/store" replace />} />
               <Route path="/store/:shopId" element={<StoreWrapper />} />
               <Route path="/cart" element={<Cart />} />
+              <Route path="/checkout" element={<CheckoutPage />} />
               <Route path="/favorites" element={<Favorite />} />
               <Route path="/merchant-dashboard" element={<MerchantDashboard />} />
               <Route path="/admin-dashboard" element={<AdminDashboard />} />
@@ -58,6 +68,12 @@ export default function App() {
               <Route path="/sync" element={<ProductsPage />} />
               <Route path="/product/:id" element={<ProductDetailPage />} />
               <Route path="/product" element={<ProductDetailPage />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<CustomerSignup />} />
+              <Route path="/merchant-application" element={<MerchantApplication />} />
+              <Route path="/delivery-application" element={<DeliveryApplication />} />
+              <Route path="/hubworker-application" element={<HubWorkerApplication />} />
+              <Route path="/activate" element={<Activate />} />
               <Route path="/delivery" element={<DeliveryAgentPage />} />
               <Route path="/collector" element={<CollectorPage />} />
               <Route path="/hub" element={<HubPage />} />
@@ -68,5 +84,6 @@ export default function App() {
         </ShopProviderWithAuth>
       </CustomerAuthProvider>
     </MerchantAuthProvider>
+    </AuthProvider>
   );
 }
