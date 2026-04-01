@@ -224,7 +224,7 @@
 .filter-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 16px;
-  cursor: pointer; user-select: none;
+  cursor: pointer; -webkit-user-select: none; user-select: none;
 }
 .filter-header span { font-size: 14px; font-weight: 700; }
 .filter-header svg { width: 16px; height: 16px; color: var(--color-muted); transition: transform 0.2s; }
