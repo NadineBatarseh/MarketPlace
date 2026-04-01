@@ -29,6 +29,8 @@ const ProductDetailPage: React.FC = () => {
   const [qty, setQty] = useState(1);
   const [isFav, setIsFav] = useState(false);
   const [activeThumb, setActiveThumb] = useState(0);
+  const [thumbOffset, setThumbOffset] = useState(0);
+  const THUMBS_PER_PAGE = 7;
   const [mainImage, setMainImage] = useState<string>(
     'https://via.placeholder.com/600x600?text=SouqLink'
   );
@@ -162,6 +164,7 @@ const ProductDetailPage: React.FC = () => {
         rating: reviewRating,
         review_text: reviewText.trim(),
       };
+      //in that line is a column in the Reviews table, not the products table. It stores the photo the customer uploads with their review (like a customer photo of the product they bought).
       if (photoUrl) row.image_url = photoUrl;
 
       const { error: insErr } = await supabase.from('Reviews').insert(row);
@@ -250,12 +253,14 @@ const ProductDetailPage: React.FC = () => {
   };
 
   const prevImage = () => {
-    const newIdx = (activeThumb - 1 + allImages.length) % allImages.length;
+    if (activeThumb === 0) return;
+    const newIdx = activeThumb - 1;
     handleImageChange(newIdx, allImages[newIdx]);
   };
 
   const nextImage = () => {
-    const newIdx = (activeThumb + 1) % allImages.length;
+    if (activeThumb === allImages.length - 1) return;
+    const newIdx = activeThumb + 1;
     handleImageChange(newIdx, allImages[newIdx]);
   };
 
@@ -308,13 +313,11 @@ const ProductDetailPage: React.FC = () => {
           setShopName(shopData?.name ?? null);
         }
 
-        // 2) Images — image_urls is text[] in Postgres, Supabase returns it as a JS string[]
-        const rawImg = productData?.image_urls;
+        // 2) Images from image_urls array
+        const rawImgs = productData?.image_urls;
         let urls: string[] = [];
-        if (Array.isArray(rawImg)) {
-          urls = (rawImg as string[]).filter(Boolean);
-        } else if (typeof rawImg === 'string' && rawImg.trim()) {
-          urls = [rawImg];
+        if (Array.isArray(rawImgs) && rawImgs.length > 0) {
+          urls = (rawImgs as string[]).filter(Boolean);
         }
         if (urls.length > 0) {
           setAllImages(urls);
@@ -528,16 +531,37 @@ const ProductDetailPage: React.FC = () => {
 
                 {/* Thumbnails row below the main image */}
                 {allImages.length > 0 && (
-                  <div className="thumbs">
-                    {allImages.map((img, idx) => (
-                      <div
-                        key={idx}
-                        className={`thumb ${activeThumb === idx ? 'active' : ''}`}
-                        onClick={() => handleImageChange(idx, img)}
-                      >
-                        <img src={img} alt={`Product view ${idx + 1}`} />
-                      </div>
-                    ))}
+                  <div className="thumbs-wrap">
+                    {allImages.length > THUMBS_PER_PAGE && (
+                      <button
+                        type="button"
+                        className="thumbs-arrow thumbs-arrow-prev"
+                        onClick={() => setThumbOffset(o => Math.max(0, o - 1))}
+                        disabled={thumbOffset === 0}
+                      >‹</button>
+                    )}
+                    <div className="thumbs">
+                      {allImages.slice(thumbOffset, thumbOffset + THUMBS_PER_PAGE).map((img, idx) => {
+                        const realIdx = thumbOffset + idx;
+                        return (
+                          <div
+                            key={realIdx}
+                            className={`thumb ${activeThumb === realIdx ? 'active' : ''}`}
+                            onClick={() => handleImageChange(realIdx, img)}
+                          >
+                            <img src={img} alt={`Product view ${realIdx + 1}`} />
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {allImages.length > THUMBS_PER_PAGE && (
+                      <button
+                        type="button"
+                        className="thumbs-arrow thumbs-arrow-next"
+                        onClick={() => setThumbOffset(o => Math.min(allImages.length - THUMBS_PER_PAGE, o + 1))}
+                        disabled={thumbOffset >= allImages.length - THUMBS_PER_PAGE}
+                      >›</button>
+                    )}
                   </div>
                 )}
               </div>

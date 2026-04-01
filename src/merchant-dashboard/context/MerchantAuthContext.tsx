@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import supabase from '../../lib/supabase';
+import { useSharedAuth } from '../../context/AuthContext';
 
 export interface MerchantShop {
   shop_id: string;
@@ -15,9 +16,9 @@ export interface MerchantShop {
 }
 
 export interface Merchant {
-  id: string;           // = auth.users.id
+  id: string;
   email: string;
-  displayName: string;  // from user_metadata.full_name, falls back to email prefix
+  displayName: string;
   shop: MerchantShop | null;
 }
 
@@ -31,23 +32,6 @@ interface MerchantAuthContextType {
 }
 
 const MerchantAuthContext = createContext<MerchantAuthContextType | null>(null);
-
-/** Returns true only if the user has role='merchant' in public.users */
-async function isMerchantRole(userId: string): Promise<boolean> {
-  const { data, error } = await supabase
-    .from('Users')
-    .select('role, user_id, email')
-    .eq('user_id', userId)
-    .single();
-
-  console.log('Checking merchant role for userId:', userId);
-  console.log('Users row:', data);
-  console.log('Users query error:', error);
-
-  if (error) return false;
-
-  return data?.role?.trim() === 'merchant';
-}
 
 async function fetchMerchantShop(userId: string): Promise<MerchantShop | null> {
   const { data, error } = await supabase
@@ -87,36 +71,35 @@ function buildMerchant(user: any, shop: MerchantShop | null): Merchant {
 }
 
 export function MerchantAuthProvider({ children }: { children: React.ReactNode }) {
-  const [merchant, setMerchant] = useState<Merchant | null>(null);
-  const [isLoading, setIsLoading] = useState(true); // stays true until session is resolved
+  const { rawUser, role, status, isLoading: authLoading } = useSharedAuth();
+  const [shop, setShop] = useState<MerchantShop | null>(null);
+  const [shopLoading, setShopLoading] = useState(false);
+
+  const isMerchantApproved = rawUser && role === 'merchant' && status === 'approved';
 
   useEffect(() => {
-    // Restore existing session on page load — only if the user is actually a merchant
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        const isMerchant = await isMerchantRole(session.user.id);
-        if (isMerchant) {
-          const shop = await fetchMerchantShop(session.user.id);
-          setMerchant(buildMerchant(session.user, shop));
-        }
-      }
-      setIsLoading(false);
+    if (!rawUser || role !== 'merchant' || status !== 'approved') {
+      setShop(null);
+      setShopLoading(false);
+      return;
+    }
+    setShopLoading(true);
+    fetchMerchantShop(rawUser.id).then(s => {
+      setShop(s);
+      setShopLoading(false);
     });
+  }, [rawUser?.id, role, status]);
 
-    // Keep in sync with auth state changes (token refresh, sign-out, etc.)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' || !session) setMerchant(null);
-    });
+  const merchant: Merchant | null = isMerchantApproved
+    ? buildMerchant(rawUser, shop)
+    : null;
 
-    return () => subscription.unsubscribe();
-  }, []);
+  const isLoading = authLoading || shopLoading;
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    setIsLoading(true);
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error || !data.user) {
-      setIsLoading(false);
       const msg =
         error?.message === 'Invalid login credentials'
           ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة'
@@ -124,33 +107,39 @@ export function MerchantAuthProvider({ children }: { children: React.ReactNode }
       return { success: false, error: msg };
     }
 
-    // Verify the user has the merchant role in public.users
-    const isMerchant = await isMerchantRole(data.user.id);
-    if (!isMerchant) {
+    // Direct DB check needed here — shared auth state hasn't updated yet
+    const { data: userData } = await supabase
+      .from('Users')
+      .select('role, status')
+      .eq('user_id', data.user.id)
+      .maybeSingle();
+
+    if (userData?.role?.trim() !== 'merchant') {
       await supabase.auth.signOut();
-      setIsLoading(false);
       return { success: false, error: 'هذا الحساب ليس حساب تاجر — يرجى التواصل مع الإدارة' };
     }
 
-    const shop = await fetchMerchantShop(data.user.id);
-    setMerchant(buildMerchant(data.user, shop));
-    setIsLoading(false);
+    if (userData?.status?.trim() !== 'approved') {
+      await supabase.auth.signOut();
+      return { success: false, error: 'طلبك قيد المراجعة من الإدارة. سيتم التواصل معك بعد الموافقة.' };
+    }
+
     return { success: true };
   };
 
   const logout = async () => {
     await supabase.auth.signOut();
-    setMerchant(null);
+    setShop(null);
   };
 
   const refreshShop = async () => {
-    if (!merchant) return;
-    const shop = await fetchMerchantShop(merchant.id);
-    setMerchant(prev => prev ? { ...prev, shop } : null);
+    if (!rawUser) return;
+    const s = await fetchMerchantShop(rawUser.id);
+    setShop(s);
   };
 
-  const updateShopLocally = (shop: MerchantShop) => {
-    setMerchant(prev => prev ? { ...prev, shop } : null);
+  const updateShopLocally = (s: MerchantShop) => {
+    setShop(s);
   };
 
   return (
