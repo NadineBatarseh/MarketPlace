@@ -35,11 +35,13 @@ export default function ProductsSection({
       <div className="products-toolbar">
         <div className="label">عرض {products.length} من {total} منتج</div>
         <div className="toolbar-right">
-          <select
-            className="sort-select"
-            value={sort}
-            onChange={e => onSortChange(e.target.value)}
-          >
+          
+<select
+  title="ترتيب المنتجات"
+  className="sort-select"
+  value={sort}
+ onChange={e => onSortChange(e.target.value)}
+>
             {SORT_OPTIONS.map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
