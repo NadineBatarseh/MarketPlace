@@ -57,7 +57,7 @@
 
 body {
   margin: 0;
-  padding-top: 0;
+  padding-top: 68px; /* matches fixed Topbar height */
   min-width: 320px;
   min-height: 100vh;
   width: 100%;

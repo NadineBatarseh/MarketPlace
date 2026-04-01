@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import AppNav from '../../components/AppNav';
+import Topbar from '../../components/Topbar';
 import './SearchResultsPage.css';
 
 interface Product {
@@ -102,7 +102,7 @@ export default function SearchResultsPage() {
 
   return (
     <div dir="rtl" className="sr-root">
-      <AppNav />
+      <Topbar />
 
       <div className="sr-container">
         {/* ── Header ── */}

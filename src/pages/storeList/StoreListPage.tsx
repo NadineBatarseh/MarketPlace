@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import AppNav from '../../components/AppNav';
+import Topbar from '../../components/Topbar';
 import StoreNav from '../../components/StoreNav';
 import './StoreListPage.css';
 import SearchInput from '../../components/SearchInput';
@@ -45,7 +45,7 @@ export default function StoreListPage() {
 
   return (
     <div dir="rtl">
-      <AppNav />
+      <Topbar />
       <StoreNav />
 
       <div className="sl-hero">

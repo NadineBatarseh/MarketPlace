@@ -2,7 +2,7 @@ import { useState } from 'react';
 import ProductListTemplate from '../components/ProductListTemplate';
 import ProductRow from '../components/ProductRow';
 import QuantitySelector from '../components/QuantitySelector';
-import AppNav from '../components/AppNav';
+import Topbar from '../components/Topbar';
 import { useShop } from '../context/ShopContext';
 import '../styles/productTable.css';
 
@@ -117,7 +117,7 @@ export default function Cart() {
   if (cartItems.length === 0) {
     return (
       <div className="pt-page">
-        <AppNav />
+        <Topbar />
         <div className="pt-empty">
           <div className="pt-empty-icon">🛒</div>
           <h2>سلة التسوق فارغة</h2>

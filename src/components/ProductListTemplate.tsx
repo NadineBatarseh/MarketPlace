@@ -1,5 +1,5 @@
 import React from 'react';
-import AppNav from './AppNav';
+import Topbar from './Topbar';
 import StoreNav from './StoreNav';
 import '../styles/productTable.css';
 
@@ -33,7 +33,7 @@ export default function ProductListTemplate({
   return (
     <div className="pt-page">
       {/* ── Shared nav ── */}
-      <AppNav />
+      <Topbar />
       <StoreNav />
 
       {/* ── CONTENT ── */}

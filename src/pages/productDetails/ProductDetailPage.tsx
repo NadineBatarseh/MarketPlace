@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
-import AppNav from '../../components/AppNav';
+import Topbar from '../../components/Topbar';
 import StoreNav from '../../components/StoreNav';
 import './ProductDetailPage.css';
 
@@ -365,7 +365,7 @@ const ProductDetailPage: React.FC = () => {
 
   return (
     <>
-      <AppNav />
+      <Topbar />
       <StoreNav />
 
       {/* LOGIN MODAL */}
