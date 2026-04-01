@@ -2,7 +2,54 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { MetaService } from "../services/metaService.js";
-import { executeSearchProducts, executeSearchStores } from "../../server/search/tools.js";
+import { supabase } from "../../server/supabase.js";
+
+async function executeSearchProducts(input: {
+  keywords?: string[];
+  color?: string;
+  location?: string;
+  store_name?: string;
+  price_sort?: 'asc' | 'desc';
+  max_price?: number;
+  limit?: number;
+}) {
+  let query = supabase
+    .from('products')
+    .select('id, title, description, price, image_urls, shop_id, shops!inner(name, location)');
+
+  const terms = [
+    ...(input.keywords ?? []),
+    ...(input.color ? [input.color] : []),
+  ];
+
+  if (terms.length > 0) {
+    const orParts = terms.flatMap(t => [
+      `title.ilike.%${t}%`,
+      `description.ilike.%${t}%`,
+    ]);
+    query = query.or(orParts.join(','));
+  }
+
+  if (input.store_name) query = (query as any).ilike('shops.name', `%${input.store_name}%`);
+  if (input.location)   query = (query as any).ilike('shops.location', `%${input.location}%`);
+  if (input.max_price)  query = query.lte('price', input.max_price);
+  if (input.price_sort) query = query.order('price', { ascending: input.price_sort === 'asc' });
+
+  query = query.limit(input.limit ?? 20);
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+async function executeSearchStores(input: { name?: string; location?: string }) {
+  let query = supabase.from('shops').select('id, name, location, description, logo_url');
+  if (input.name)     query = query.ilike('name', `%${input.name}%`);
+  if (input.location) query = query.ilike('location', `%${input.location}%`);
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
 
 export function registerTools(server: McpServer, metaService: MetaService) {
 

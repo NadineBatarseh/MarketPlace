@@ -13,6 +13,7 @@ interface Product {
   id: string;
   title: string;
   image_urls: string[] | null;
+  price: number | null;
 }
 
 interface OrderDetail {
@@ -34,20 +35,20 @@ interface Order {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const STEPS = ['تم الطلب', 'جارٍ التعبئة', 'في الطريق', 'خارج للتوصيل', 'تم التوصيل'];
+const STEPS = ['تم الطلب', 'في المخزن', 'بانتظار التجميع', 'في الطريق إليك', 'تم التوصيل'];
 
 type StatusCfg = { label: string; badgeClass: string; step: number; filterKey: string };
 
 const STATUS_CONFIG: Record<string, StatusCfg> = {
-  pending_collection: { label: 'قيد المعالجة',    badgeClass: 'badge-processing', step: 1, filterKey: 'processing' },
-  at_hub:            { label: 'في الطريق',         badgeClass: 'badge-shipped',    step: 2, filterKey: 'shipped'    },
-  delivering:        { label: 'خارج للتوصيل',      badgeClass: 'badge-shipped',    step: 3, filterKey: 'shipped'    },
+  pending_collection: { label: 'في المخزن',          badgeClass: 'badge-processing', step: 1, filterKey: 'processing' },
+  at_hub:            { label: 'بانتظار التجميع',     badgeClass: 'badge-shipped',    step: 2, filterKey: 'shipped'    },
+  delivering:        { label: 'في الطريق إليك',      badgeClass: 'badge-shipped',    step: 3, filterKey: 'shipped'    },
   completed:         { label: 'تم التوصيل',        badgeClass: 'badge-delivered',  step: 4, filterKey: 'delivered'  },
   cancelled:         { label: 'ملغي',              badgeClass: 'badge-cancelled',  step: 0, filterKey: 'cancelled'  },
 };
 
 const FALLBACK_CFG: StatusCfg = {
-  label: 'قيد المعالجة', badgeClass: 'badge-processing', step: 0, filterKey: 'processing',
+  label: 'في المخزن', badgeClass: 'badge-processing', step: 0, filterKey: 'processing',
 };
 
 const FILTER_LABELS: Record<string, string> = {
@@ -114,7 +115,7 @@ export default function OrderHistoryPage() {
         if (productIds.length > 0) {
           const { data: prods } = await supabase
             .from('products')
-            .select('id, title, image_urls')
+            .select('id, title, image_urls, price')
             .in('id', productIds);
           prods?.forEach(p => productMap.set(p.id, p));
         }
@@ -272,8 +273,9 @@ export default function OrderHistoryPage() {
 // ── OrderCard ─────────────────────────────────────────────────────────────────
 
 function OrderCard({ order, idx }: { order: Order; idx: number }) {
-  const cfg   = STATUS_CONFIG[order.status ?? ''] ?? FALLBACK_CFG;
-  const items = order.order_details;
+  const cfg      = STATUS_CONFIG[order.status ?? ''] ?? FALLBACK_CFG;
+  const items    = order.order_details;
+  const navigate = useNavigate();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const firstName = items[0]?.product?.title ?? 'منتج';
@@ -287,10 +289,11 @@ function OrderCard({ order, idx }: { order: Order; idx: number }) {
   const pct       = Math.round((cfg.step / (STEPS.length - 1)) * 100);
 
   const drawerItems: DrawerItemData[] = items.map(d => ({
-    imageUrl: d.product?.image_urls?.[0] ?? null,
-    name:     d.product?.title ?? 'منتج',
-    price:    `₪${(d.unit_price ?? 0).toFixed(2)}`,
-    qty:      d.qty,
+    imageUrl:  d.product?.image_urls?.[0] ?? null,
+    name:      d.product?.title ?? 'منتج',
+    price:     `₪${(d.unit_price || d.product?.price || 0).toFixed(2)}`,
+    qty:       d.qty,
+    productId: d.product_id ?? null,
   }));
 
   return (
@@ -309,7 +312,13 @@ function OrderCard({ order, idx }: { order: Order; idx: number }) {
       <div className="oh-card-body">
         <div className="oh-thumbs">
           {items.slice(0, 2).map(d => (
-            <div key={d.id} className="oh-thumb">
+            <div
+              key={d.id}
+              className="oh-thumb"
+              style={d.product_id ? { cursor: 'pointer' } : undefined}
+              onClick={d.product_id ? () => navigate(`/product/${d.product_id}`) : undefined}
+              title={d.product?.title}
+            >
               {d.product?.image_urls?.[0]
                 ? <img src={d.product.image_urls[0]} alt={d.product.title} />
                 : <span>📦</span>

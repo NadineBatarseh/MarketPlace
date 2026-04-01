@@ -128,7 +128,7 @@
   top: -5px;
   right: -5px;
   background: var(--color-badge);
-  color: var(--color-surface);
+  color: #ffffff;
   font-size: 0.65rem;
   font-weight: 700;
   width: 18px;

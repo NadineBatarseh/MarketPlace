@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const C = {
   primary:     '#136540',
@@ -18,14 +19,17 @@ export interface DrawerItemData {
   name:      string;
   price:     string;
   qty:       number | null;
+  productId: string | null;
 }
 
 function DrawerItem({ item }: { item: DrawerItemData }) {
   const [hov, setHov] = useState(false);
+  const navigate = useNavigate();
   return (
     <div
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
+      onClick={item.productId ? () => navigate(`/product/${item.productId}`) : undefined}
       style={{
         background: hov ? '#f8fdf9' : C.bg,
         padding: '14px 16px',
@@ -34,6 +38,7 @@ function DrawerItem({ item }: { item: DrawerItemData }) {
         alignItems: 'center',
         transition: 'background 0.15s',
         direction: 'rtl',
+        cursor: item.productId ? 'pointer' : 'default',
       }}
     >
       {/* Thumbnail */}

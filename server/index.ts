@@ -238,7 +238,7 @@ app.post("/api/stores/:id/reviews", async (req: Request, res: Response) => {
     .maybeSingle();
 
   const old_count = current?.review_count ?? 0;
-  const old_avg   = current?.avg_rating   ?? 0;
+  const old_avg   = parseFloat(current?.avg_rating ?? '0') || 0;
   const review_count = old_count + 1;
   const avg_rating   = (old_avg * old_count + rating) / review_count;
 

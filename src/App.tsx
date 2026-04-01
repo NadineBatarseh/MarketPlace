@@ -5,6 +5,7 @@ import CollectorPage from './pages/delivery agent/CollectorPage';
 import HubPage from './pages/delivery agent/HubPage';
 import DelivererPage from './pages/delivery agent/DelivererPage';
 import OrderHistoryPage from './pages/orderHistory/OrderHistoryPage';
+import MetaConnectPage from './pages/MetaConnectPage';
 
 
 const myShopId = 'cc76a171-a549-43c8-ad7c-7bcadbd0e9a3';
@@ -67,7 +68,7 @@ export default function App() {
               <Route path="/deliverer" element={<DelivererPage />} />
               <Route path="/search" element={<SearchResultsPage />} />
               <Route path="/orders" element={<OrderHistoryPage />} />
-
+              <Route path="/meta-connect" element={<MetaConnectPage />} />
             </Routes>
           </BrowserRouter>
         </ShopProviderWithAuth>
