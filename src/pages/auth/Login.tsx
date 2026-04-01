@@ -46,7 +46,7 @@ export default function Login() {
     } else if (role === 'delivery') {
       navigate('/delivery');
     } else {
-      navigate('/stores');
+      navigate('/store');
     }
   };
 
