@@ -57,11 +57,6 @@ function AddProductModal({ shopId, onAdd, onClose }: { shopId: string; shopName:
     setSaving(true);
     setError('');
 
-<<<<<<< HEAD
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      setError('انتهت جلستك — يرجى تسجيل الدخول مجدداً');
-=======
     // Step 1: Insert product without images to get the product ID
     const { data, error: insertErr } = await supabase
       .from('products')
@@ -78,37 +73,10 @@ function AddProductModal({ shopId, onAdd, onClose }: { shopId: string; shopName:
 
     if (insertErr || !data) {
       setError('تعذّر إضافة المنتج: ' + (insertErr?.message ?? 'خطأ غير معروف'));
->>>>>>> frontend-paymentPage
       setSaving(false);
       return;
     }
 
-<<<<<<< HEAD
-    const res = await fetch('http://localhost:4000/api/products', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({
-        title: form.name.trim(),
-        description: form.description.trim() || undefined,
-        price: parseFloat(form.price) || 0,
-        stock_Quantity: parseInt(form.quantity) || 0,
-        image_urls: form.imageUrl ? [form.imageUrl] : undefined,
-      }),
-    });
-
-    const json = await res.json();
-
-    if (!res.ok || !json.ok) {
-      setError('تعذّر إضافة المنتج: ' + (json.error ?? 'خطأ غير معروف'));
-      setSaving(false);
-      return;
-    }
-
-    onAdd(json.product as DBProduct);
-=======
     const productId = data.id as string;
 
     // Step 2: Upload images to {productId}/{index}.{ext}
@@ -134,7 +102,6 @@ function AddProductModal({ shopId, onAdd, onClose }: { shopId: string; shopName:
 
     previewUrls.forEach(url => URL.revokeObjectURL(url));
     onAdd({ ...data, image_urls: uploadedUrls.length > 0 ? uploadedUrls : null } as DBProduct);
->>>>>>> frontend-paymentPage
     onClose();
   };
 
@@ -248,17 +215,6 @@ export default function MerchantEditPage() {
   const deleteProduct = async (id: string) => {
     if (!activeShopId) return;
 
-<<<<<<< HEAD
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-
-    const res = await fetch(`http://localhost:4000/api/products/${id}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${session.access_token}` },
-    });
-
-    if (res.ok) setProducts(prev => prev.filter(p => p.id !== id));
-=======
     // List and delete all files inside the product's folder {productId}/
     const { data: files } = await supabase.storage.from('product-images').list(id);
     if (files && files.length > 0) {
@@ -268,7 +224,6 @@ export default function MerchantEditPage() {
 
     const { error } = await supabase.from('products').delete().eq('id', id).eq('shop_id', activeShopId);
     if (!error) setProducts(prev => prev.filter(p => p.id !== id));
->>>>>>> frontend-paymentPage
   };
 
   const handleSave = async () => {

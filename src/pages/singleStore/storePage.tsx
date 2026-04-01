@@ -7,7 +7,6 @@ import { useProducts } from './hooks/useProducts';
 import { useToast } from './hooks/useToast';
 import type { Product } from './types';
 
-import AppNav from '../../components/AppNav';
 import StoreNav from '../../components/StoreNav';
 import StoreHero from './components/StoreHero';
 import Sidebar from './components/Sidebar';
@@ -15,7 +14,7 @@ import type { FilterKey, FilterState } from './components/Sidebar';
 import ProductsSection from './components/ProductsSection';
 import Footer from './components/Footer';
 import Toast from './components/Toast';
-
+import Topbar from '../../components/Topbar';
 interface Props {
   shopId: string;
 }
@@ -94,11 +93,7 @@ export default function StorePage({ shopId }: Props) {
 
   return (
     <>
-      <AppNav
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        onSearchSubmit={setSearchQuery}
-      />
+      <Topbar />
       <StoreNav />
       <StoreHero
         store={store}
