@@ -3,9 +3,6 @@ import { randomUUID } from 'crypto';
 import type { Request, Response } from 'express';
 import { supabase } from '../supabase.js';
 import { uploadImage } from '../uploadImage.js';
-import { validateProducts } from '../metaCatalog/metaCatalogAPIValidator.js';
-import { syncProductsToMeta } from '../metaCatalog/metaCatalogAPISync.js';
-import type { ProductSyncInput } from '../metaCatalog/metaCatalogAPITypes.js';
 
 const router = Router();
 
@@ -47,9 +44,8 @@ async function resolveShopId(req: Request, res: Response): Promise<string | null
 /* ------------------------------------------------------------------ */
 /*  POST /api/products                                                  */
 /*                                                                      */
-/*  Creates a product in Supabase then immediately syncs it to Meta.   */
-/*  A Meta sync failure does NOT roll back the Supabase insert —       */
-/*  the product is saved either way; the metaSync field reports status.*/
+/*  Creates a product in Supabase. Meta sync is handled automatically  */
+/*  by the Supabase DB webhook (supabaseProductWebhookRouter).         */
 /*                                                                      */
 /*  Auth:  Authorization: Bearer <supabase-access-token>               */
 /*  Body:  { title, description?, price, stock_Quantity?, image_urls? }*/
@@ -106,40 +102,14 @@ router.post('/', async (req: Request, res: Response) => {
     return res.status(500).json({ ok: false, error: `Database error: ${dbErr?.message ?? 'unknown'}` });
   }
 
-  // Sync to Meta — non-blocking failure
-  const syncInput: ProductSyncInput = {
-    id: (product as any).id,
-    meta_product_id: (product as any).meta_product_id ?? null,
-    title: (product as any).title,
-    description: (product as any).description,
-    price: (product as any).price,
-    stock_Quantity: (product as any).stock_Quantity,
-    image_urls: (product as any).image_urls,
-    currency: 'ILS',
-  };
-
-  const { valid, failures } = validateProducts([syncInput]);
-  let metaSync: { ok: boolean; handles?: string[]; error?: string } = { ok: true };
-
-  if (valid.length > 0) {
-    const [result] = await syncProductsToMeta({ products: valid });
-    metaSync = { ok: result.ok, handles: result.handles, error: result.error };
-  } else {
-    metaSync = { ok: false, error: failures[0]?.errors.join(', ') };
-  }
-
-  if (metaSync.ok) {
-    await supabase.from('products').update({ meta_product_id: id }).eq('id', id);
-  }
-
-  return res.status(201).json({ ok: true, product, metaSync });
+  return res.status(201).json({ ok: true, product });
 });
 
 /* ------------------------------------------------------------------ */
 /*  DELETE /api/products/:id                                            */
 /*                                                                      */
-/*  Deletes a product from Supabase then removes it from Meta catalog. */
-/*  A Meta removal failure does NOT restore the Supabase row.         */
+/*  Deletes a product from Supabase. Meta removal is handled           */
+/*  automatically by the Supabase DB webhook.                          */
 /*                                                                      */
 /*  Auth:  Authorization: Bearer <supabase-access-token>               */
 /* ------------------------------------------------------------------ */
@@ -149,10 +119,9 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
   const productId = req.params.id;
 
-  // Fetch before deleting so we have meta_product_id for the Meta removal
-  const { data: product, error: fetchErr } = await supabase
+  const { error: fetchErr, data: product } = await supabase
     .from('products')
-    .select('id, meta_product_id')
+    .select('id')
     .eq('id', productId)
     .eq('shop_id', shop_id)
     .maybeSingle();
@@ -175,20 +144,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     return res.status(500).json({ ok: false, error: `Database error: ${deleteErr.message}` });
   }
 
-  // Remove from Meta catalog — non-blocking failure
-  const deleteInput: ProductSyncInput = {
-    id: (product as any).id,
-    meta_product_id: (product as any).meta_product_id ?? null,
-    title: '',
-    deleted: true,
-  };
-
-  const [metaResult] = await syncProductsToMeta({ products: [deleteInput] });
-
-  return res.status(200).json({
-    ok: true,
-    metaSync: { ok: metaResult.ok, error: metaResult.error },
-  });
+  return res.status(200).json({ ok: true });
 });
 
 export default router;
