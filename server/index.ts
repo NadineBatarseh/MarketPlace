@@ -238,7 +238,7 @@ app.post("/api/stores/:id/reviews", async (req: Request, res: Response) => {
     .maybeSingle();
 
   const old_count = current?.review_count ?? 0;
-  const old_avg   = current?.avg_rating   ?? 0;
+  const old_avg   = parseFloat(current?.avg_rating ?? '0') || 0;
   const review_count = old_count + 1;
   const avg_rating   = (old_avg * old_count + rating) / review_count;
 
@@ -329,6 +329,101 @@ app.get("/api/stores", async (_req: Request, res: Response) => {
   }));
 
   return res.json({ ok: true, stores: mapped });
+});
+
+/* ---------- ACTIVATE ACCOUNT ---------- */
+
+app.post("/api/activate", async (req: Request, res: Response) => {
+  const { platformEmail, password } = req.body as { platformEmail: string; password: string };
+
+  if (!platformEmail || !password) {
+    return res.status(400).json({ ok: false, error: "Missing email or password" });
+  }
+
+  // 1. Find approved application (merchant → delivery → hubworker)
+  let applicantName: string | null = null;
+  let role: "merchant" | "delivery" | "hubworker" = "merchant";
+
+  const { data: merchantApp } = await supabase
+    .from("merchant_applications")
+    .select("name_of_owner")
+    .eq("platform_email", platformEmail.trim())
+    .eq("status", "approved")
+    .maybeSingle();
+
+  if (merchantApp) {
+    applicantName = merchantApp.name_of_owner;
+    role = "merchant";
+  } else {
+    const { data: deliveryApp } = await supabase
+      .from("delivery_applications")
+      .select("name")
+      .eq("platform_email", platformEmail.trim())
+      .eq("status", "approved")
+      .maybeSingle();
+
+    if (deliveryApp) {
+      applicantName = deliveryApp.name;
+      role = "delivery";
+    } else {
+      const { data: hubApp } = await supabase
+        .from("hubworker_applications")
+        .select("name")
+        .eq("platform_email", platformEmail.trim())
+        .eq("status", "approved")
+        .maybeSingle();
+
+      if (hubApp) {
+        applicantName = hubApp.name;
+        role = "hubworker";
+      }
+    }
+  }
+
+  if (!applicantName) {
+    return res.status(404).json({
+      ok: false,
+      error: "هذا البريد الإلكتروني غير مرتبط بطلب معتمد. تحقق من البريد الذي أرسلناه لك.",
+    });
+  }
+
+  // 2. Create fully-confirmed auth user via admin API (no email confirmation needed)
+  const { data: created, error: createError } = await supabase.auth.admin.createUser({
+    email: platformEmail.trim(),
+    password,
+    email_confirm: true,
+    user_metadata: { full_name: applicantName },
+  });
+
+  if (createError) {
+    if (
+      createError.message?.toLowerCase().includes("already been registered") ||
+      createError.message?.toLowerCase().includes("already registered")
+    ) {
+      return res.status(409).json({
+        ok: false,
+        error: "هذا البريد الإلكتروني مسجل مسبقاً — يمكنك تسجيل الدخول مباشرة.",
+      });
+    }
+    return res.status(500).json({ ok: false, error: createError.message });
+  }
+
+  const userId = created.user?.id;
+  if (!userId) {
+    return res.status(500).json({ ok: false, error: "فشل في إنشاء حساب المستخدم." });
+  }
+
+  // 3. Insert into public.Users using service-role key (bypasses RLS)
+  const { error: insertError } = await supabase.from("Users").upsert(
+    { user_id: userId, email: platformEmail.trim(), role, status: "approved", name: applicantName },
+    { onConflict: "user_id" }
+  );
+
+  if (insertError) {
+    return res.status(500).json({ ok: false, error: insertError.message });
+  }
+
+  return res.json({ ok: true });
 });
 
 /* ---------- META AUTH CALLBACK ---------- */

@@ -12,17 +12,26 @@ interface Props {
 
 export default function ProductCard({ product, inWishlist, onToggleWishlist, onAddToCart }: Props) {
   const navigate = useNavigate();
-  const images = product.image_urls ?? [];
-  const [index, setIndex] = useState(0);
+  const images = product.image_urls?.filter(Boolean) ?? [];
+  const hasMultiple = images.length > 1;
+  const [idx, setIdx] = useState(0);
 
-  const prev = (e: MouseEvent) => {
+  const goPrev = (e: MouseEvent) => {
     e.stopPropagation();
-    setIndex(i => (i - 1 + images.length) % images.length);
+    setIdx(i => (i - 1 + images.length) % images.length);
   };
-  const next = (e: MouseEvent) => {
+
+  const goDot = (e: MouseEvent, i: number) => {
     e.stopPropagation();
-    setIndex(i => (i + 1) % images.length);
+    setIdx(i);
   };
+
+  const goNext = (e: MouseEvent) => {
+    e.stopPropagation();
+    setIdx(i => (i + 1) % images.length);
+  };
+
+  const imgSrc = images[idx] ?? null;
 
   return (
     <div className="product-card" onClick={() => navigate(`/product/${product.id}`)}>
@@ -38,39 +47,37 @@ export default function ProductCard({ product, inWishlist, onToggleWishlist, onA
           }}>🛍</div>
         )}
 
-        {images.length > 1 && (
+        {/* Wishlist */}
+        <button
+          type="button"
+          className={`wishlist-btn${inWishlist ? ' active' : ''}`}
+          onClick={e => onToggleWishlist(e, product.id)}
+          aria-label={inWishlist ? 'إزالة من قائمة الرغبات' : 'إضافة إلى قائمة الرغبات'}
+        >
+          <svg fill={inWishlist ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+          </svg>
+        </button>
+
+        {/* Prev / Next arrows — only when multiple images */}
+        {hasMultiple && (
           <>
-            <button className="img-nav img-nav--prev" onClick={prev} aria-label="الصورة السابقة">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6"/></svg>
-            </button>
-            <button className="img-nav img-nav--next" onClick={next} aria-label="الصورة التالية">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
-            </button>
-            <div className="img-dots">
+            <button className="pc-arrow pc-arrow-prev" onClick={goPrev} aria-label="صورة سابقة">‹</button>
+            <button className="pc-arrow pc-arrow-next" onClick={goNext} aria-label="صورة تالية">›</button>
+
+            {/* Dot indicators */}
+            <div className="pc-dots">
               {images.map((_, i) => (
-                <span
+                <button
                   key={i}
-                  className={`img-dot${i === index ? ' img-dot--active' : ''}`}
-                  onClick={e => { e.stopPropagation(); setIndex(i); }}
+                  className={`pc-dot${i === idx ? ' active' : ''}`}
+                  onClick={e => goDot(e, i)}
+                  aria-label={`صورة ${i + 1}`}
                 />
               ))}
             </div>
           </>
         )}
-
-        <button
-          className={`wishlist-btn${inWishlist ? ' active' : ''}`}
-          onClick={e => onToggleWishlist(e, product.id)}
-        >
-          <svg
-            fill={inWishlist ? 'currentColor' : 'none'}
-            stroke="currentColor"
-            strokeWidth="2"
-            viewBox="0 0 24 24"
-          >
-            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-          </svg>
-        </button>
       </div>
 
       <div className="product-body">
