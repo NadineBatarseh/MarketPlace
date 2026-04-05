@@ -89,6 +89,7 @@ router.post('/', async (req: Request, res: Response) => {
     .insert({
       id,
       shop_id,
+      meta_product_id: id,
       title: title.trim(),
       description: description?.trim() || null,
       price: Number(price),

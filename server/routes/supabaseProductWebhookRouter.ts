@@ -61,16 +61,6 @@ router.post('/', async (req: Request, res: Response) => {
 
   console.log(`[ProductWebhook] event=${type} id=${(record ?? old_record)?.id}`);
 
-  // Guard: skip if this UPDATE was triggered by us writing meta_product_id back after INSERT.
-  // In that case no real product data changed, so there's nothing to push to Meta.
-  if (type === 'UPDATE' && !old_record?.meta_product_id && record?.meta_product_id) {
-    const significantChange = ['title', 'price', 'description', 'stock_Quantity', 'image_urls']
-      .some(key => JSON.stringify(old_record?.[key]) !== JSON.stringify(record?.[key]));
-    if (!significantChange) {
-      console.log('[ProductWebhook] Skipping — only meta_product_id was set, no product data changed');
-      return;
-    }
-  }
 
   if (type === 'DELETE') {
     const row = old_record;
@@ -124,20 +114,6 @@ router.post('/', async (req: Request, res: Response) => {
     console.error(`[ProductWebhook] Meta sync failed — ${result.error}`);
   } else {
     console.log(`[ProductWebhook] Synced ${row.id} to Meta catalog (${type})`);
-
-    // After the first successful CREATE, record meta_product_id = id so future
-    // edits send UPDATE instead of CREATE.
-    if (type === 'INSERT' && !row.meta_product_id) {
-      const { error: updateErr } = await supabase
-        .from('products')
-        .update({ meta_product_id: row.id })
-        .eq('id', row.id);
-      if (updateErr) {
-        console.warn('[ProductWebhook] Failed to set meta_product_id:', updateErr.message);
-      } else {
-        console.log(`[ProductWebhook] Set meta_product_id=${row.id}`);
-      }
-    }
   }
 });
 
