@@ -94,21 +94,27 @@ export default function OrderHistoryPage() {
       setLoading(true);
       setError(null);
       try {
+        // Step 1: fetch orders for this user
         const { data: ordersData, error: ordErr } = await supabase
           .from('orders')
-          .select('id, total_price, status, created_at, order_details(id, product_id, qty, unit_price, package_status)')
+          .select('id, total_price, status, created_at')
           .eq('user_id', customer!.id)
           .order('created_at', { ascending: false });
-
         if (ordErr) throw ordErr;
         if (!ordersData?.length) { if (!cancelled) { setOrders([]); setLoading(false); } return; }
 
+        // Step 2: fetch order_details for those order ids (avoids needing a FK join)
+        const orderIds = ordersData.map(o => o.id);
+        const { data: detailsData, error: detErr } = await supabase
+          .from('order_details')
+          .select('id, order_id, product_id, qty, unit_price, package_status')
+          .in('order_id', orderIds);
+        if (detErr) throw detErr;
+
+        // Step 3: fetch products
         const productIds = [
           ...new Set(
-            ordersData.flatMap(o =>
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              (o.order_details as any[]).map((d: any) => d.product_id as string | null).filter(Boolean)
-            )
+            (detailsData ?? []).map((d: any) => d.product_id as string | null).filter(Boolean)
           ),
         ] as string[];
 
@@ -121,13 +127,19 @@ export default function OrderHistoryPage() {
           prods?.forEach(p => productMap.set(p.id, p));
         }
 
+        // Step 4: merge
+        const detailsByOrder = new Map<number, any[]>();
+        (detailsData ?? []).forEach((d: any) => {
+          if (!detailsByOrder.has(d.order_id)) detailsByOrder.set(d.order_id, []);
+          detailsByOrder.get(d.order_id)!.push(d);
+        });
+
         const merged: Order[] = ordersData.map(o => ({
           id:          o.id,
           total_price: o.total_price,
           status:      o.status,
           created_at:  o.created_at,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          order_details: (o.order_details as any[]).map((d: any) => ({
+          order_details: (detailsByOrder.get(o.id) ?? []).map((d: any) => ({
             id:             d.id,
             product_id:     d.product_id,
             qty:            d.qty,

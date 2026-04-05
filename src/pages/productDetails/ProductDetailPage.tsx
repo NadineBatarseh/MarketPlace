@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from './supabaseClient';
+import supabase from '../../lib/supabase';
 import Topbar from '../../components/Topbar';
 import StoreNav from '../../components/StoreNav';
 import './ProductDetailPage.css';

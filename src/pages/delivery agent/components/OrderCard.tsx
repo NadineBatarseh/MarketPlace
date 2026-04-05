@@ -4,7 +4,7 @@
  */
 import { useRef, useState } from "react";
 import type { DelivererOrder } from "../api";
-import { supabase } from "../supabaseClient";
+import supabase from "../../../lib/supabase";
 
 interface OrderCardProps {
   order: DelivererOrder;

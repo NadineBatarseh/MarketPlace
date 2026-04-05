@@ -1,14 +1,9 @@
-import { createClient } from '@supabase/supabase-js';
 import { useEffect, useRef, useState } from 'react';
 import AppNav from '../components/Topbar';
 import StoreNav from '../components/StoreNav';
 import './MetaConnectPage.css';
 import Topbar from '../components/Topbar';
-
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
+import supabase from '../lib/supabase';
 
 const APP_ID = '1539852660587503';
 const REDIRECT_URI = 'https://attently-hard-juanita.ngrok-free.dev/auth/callback';
