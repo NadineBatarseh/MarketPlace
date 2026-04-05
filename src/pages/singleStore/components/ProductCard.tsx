@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Product } from '../types';
@@ -11,13 +12,23 @@ interface Props {
 
 export default function ProductCard({ product, inWishlist, onToggleWishlist, onAddToCart }: Props) {
   const navigate = useNavigate();
-  const imgSrc = product.image_urls?.[0] ?? null;
+  const images = product.image_urls ?? [];
+  const [index, setIndex] = useState(0);
+
+  const prev = (e: MouseEvent) => {
+    e.stopPropagation();
+    setIndex(i => (i - 1 + images.length) % images.length);
+  };
+  const next = (e: MouseEvent) => {
+    e.stopPropagation();
+    setIndex(i => (i + 1) % images.length);
+  };
 
   return (
     <div className="product-card" onClick={() => navigate(`/product/${product.id}`)}>
       <div className="product-img-wrap">
-        {imgSrc ? (
-          <img src={imgSrc} alt={product.title} loading="lazy" />
+        {images.length > 0 ? (
+          <img src={images[index]} alt={product.title} loading="lazy" />
         ) : (
           <div style={{
             width: '100%', height: '100%',
@@ -26,6 +37,27 @@ export default function ProductCard({ product, inWishlist, onToggleWishlist, onA
             color: 'var(--green)', fontSize: '32px',
           }}>🛍</div>
         )}
+
+        {images.length > 1 && (
+          <>
+            <button className="img-nav img-nav--prev" onClick={prev} aria-label="الصورة السابقة">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+            </button>
+            <button className="img-nav img-nav--next" onClick={next} aria-label="الصورة التالية">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+            <div className="img-dots">
+              {images.map((_, i) => (
+                <span
+                  key={i}
+                  className={`img-dot${i === index ? ' img-dot--active' : ''}`}
+                  onClick={e => { e.stopPropagation(); setIndex(i); }}
+                />
+              ))}
+            </div>
+          </>
+        )}
+
         <button
           className={`wishlist-btn${inWishlist ? ' active' : ''}`}
           onClick={e => onToggleWishlist(e, product.id)}
