@@ -37,7 +37,7 @@ export default function ProductCard({ product, inWishlist, onToggleWishlist, onA
     <div className="product-card" onClick={() => navigate(`/product/${product.id}`)}>
       <div className="product-img-wrap">
         {images.length > 0 ? (
-          <img src={images[index]} alt={product.title} loading="lazy" />
+          <img src={images[idx]} alt={product.title} loading="lazy" />
         ) : (
           <div style={{
             width: '100%', height: '100%',
