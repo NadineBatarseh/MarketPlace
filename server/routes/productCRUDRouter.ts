@@ -73,15 +73,14 @@ router.post('/', async (req: Request, res: Response) => {
 
   // Upload any base64 data URLs to Supabase Storage so Meta gets a real HTTPS URL
   const resolvedImageUrls: string[] | null = image_urls
-    ? await Promise.all(
+    ? (await Promise.all(
         image_urls.map(async (url, i) => {
           if (url.startsWith('data:')) {
-            const stored = await uploadImage(url, id, i);
-            return stored ?? url;
+            return await uploadImage(url, id, i); // null if upload fails — filtered out below
           }
           return url;
         })
-      )
+      )).filter((url): url is string => url !== null)
     : null;
 
   const { data: product, error: dbErr } = await supabase

@@ -160,21 +160,51 @@
   position: relative;
 }
 
+/* The actual wrapper class used in JSX */
+.nav-action-dropdown {
+  position: relative;
+}
+
 /* ── Dropdown ── */
 .topbar-dropdown {
   position: absolute;
-  top: calc(100% + 10px);
+  top: calc(100% + 8px);
   left: 0;
   background: var(--color-surface);
   border: 1.5px solid var(--color-border);
   border-radius: 14px;
   box-shadow: var(--shadow-md);
-  min-width: 200px;
+  min-width: 210px;
   z-index: 500;
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   animation: topbar-dropdown-appear 0.18s ease;
+}
+
+/* Clip inner content but let the caret overflow */
+.topbar-dropdown > * {
+  overflow: hidden;
+}
+.topbar-dropdown > *:first-child {
+  border-radius: 14px 14px 0 0;
+}
+.topbar-dropdown > *:last-child {
+  border-radius: 0 0 14px 14px;
+}
+
+/* Upward-pointing caret — centered over the account button (~30px from left) */
+.topbar-dropdown::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 28px;
+  transform: rotate(45deg);
+  width: 14px;
+  height: 14px;
+  background: var(--color-surface);
+  border-top: 1.5px solid var(--color-border);
+  border-left: 1.5px solid var(--color-border);
 }
 
 @keyframes topbar-dropdown-appear {

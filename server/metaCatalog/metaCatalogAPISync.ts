@@ -58,7 +58,7 @@ function buildBatchRequest(product: ProductSyncInput): MetaBatchRequest {
       price: formatMetaPrice(product.price!, currency),
       availability: toMetaAvailability(product.stock_Quantity),
       condition: product.condition ?? 'new',
-      image_url: product.image_urls?.[0] ?? undefined,
+      image_link: product.image_urls?.[0] ?? undefined,
       // url is required by Meta — falls back to the app's public base URL
       url: `${process.env.APP_BASE_URL ?? 'https://attently-hard-juanita.ngrok-free.dev'}/product/${retailer_id}`,
     },

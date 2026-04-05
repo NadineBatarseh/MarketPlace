@@ -4,6 +4,9 @@
   align-items: center;
   justify-content: center;
   gap: 0;
+  position: sticky;
+  top: 68px;
+  z-index: 98;
 }
 .nav a {
   color: rgba(255, 255, 255, 0.85);

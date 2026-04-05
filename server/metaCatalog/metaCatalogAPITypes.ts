@@ -23,7 +23,7 @@ export interface MetaCatalogItemData {
   currency?: MetaCurrency;
   availability: MetaAvailability;
   condition: MetaCondition;
-  image_url?: string;
+  image_link?: string;
   url?: string;
   brand?: string;
 }
