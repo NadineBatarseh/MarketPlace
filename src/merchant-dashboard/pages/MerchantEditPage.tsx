@@ -25,6 +25,169 @@ interface ProductForm {
   quantity: string;
 }
 
+function EditProductModal({ product, onSave, onClose }: { product: DBProduct; onSave: (p: DBProduct) => void; onClose: () => void }) {
+  const [form, setForm] = useState<ProductForm>({
+    name: product.title,
+    description: product.description ?? '',
+    price: String(product.price),
+    quantity: String(product.stock_Quantity),
+  });
+  const [existingUrls, setExistingUrls] = useState<string[]>(product.image_urls ?? []);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const imgInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    e.target.value = '';
+    const previews = files.map(f => URL.createObjectURL(f));
+    setPendingFiles(prev => [...prev, ...files]);
+    setPreviewUrls(prev => [...prev, ...previews]);
+  };
+
+  const removeExisting = (idx: number) => {
+    setExistingUrls(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const removeNew = (idx: number) => {
+    URL.revokeObjectURL(previewUrls[idx]);
+    setPendingFiles(prev => prev.filter((_, i) => i !== idx));
+    setPreviewUrls(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleSave = async () => {
+    if (!form.name.trim() || !form.price.trim() || !form.quantity.trim()) {
+      setError('يرجى ملء الحقول المطلوبة');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+
+    // Upload new images
+    const uploadedUrls: string[] = [];
+    for (let i = 0; i < pendingFiles.length; i++) {
+      const file = pendingFiles[i];
+      const ext = file.name.split('.').pop();
+      const path = `${product.id}/${Date.now()}_${i}.${ext}`;
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from('product-images')
+        .upload(path, file, { upsert: true });
+      if (uploadErr) { setError('تعذّر رفع الصورة: ' + uploadErr.message); continue; }
+      const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(uploadData.path);
+      uploadedUrls.push(urlData.publicUrl);
+    }
+
+    // Delete removed existing images from storage
+    const removedUrls = (product.image_urls ?? []).filter(u => !existingUrls.includes(u));
+    for (const url of removedUrls) {
+      const storagePath = url.split('/product-images/')[1];
+      if (storagePath) {
+        await supabase.storage.from('product-images').remove([storagePath]);
+      }
+    }
+
+    const finalUrls = [...existingUrls, ...uploadedUrls];
+
+    const { error: updateErr } = await supabase
+      .from('products')
+      .update({
+        title: form.name.trim(),
+        description: form.description.trim() || null,
+        price: parseFloat(form.price) || 0,
+        stock_Quantity: parseInt(form.quantity) || 0,
+        image_urls: finalUrls.length > 0 ? finalUrls : null,
+      })
+      .eq('id', product.id);
+
+    if (updateErr) {
+      setError('تعذّر تحديث المنتج: ' + updateErr.message);
+      setSaving(false);
+      return;
+    }
+
+    previewUrls.forEach(url => URL.revokeObjectURL(url));
+    onSave({
+      ...product,
+      title: form.name.trim(),
+      description: form.description.trim() || null,
+      price: parseFloat(form.price) || 0,
+      stock_Quantity: parseInt(form.quantity) || 0,
+      image_urls: finalUrls.length > 0 ? finalUrls : null,
+    });
+    onClose();
+  };
+
+  return (
+    <div className="apm-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="apm-modal">
+        <div className="apm-header">
+          <h3>تعديل المنتج</h3>
+          <button type="button" className="apm-close" onClick={onClose}>✕</button>
+        </div>
+
+        <div className="apm-fields">
+          <div className="apm-field">
+            <label>صور المنتج</label>
+            <div className="apm-imgs-row">
+              {existingUrls.map((url, idx) => (
+                <div key={`ex-${idx}`} className="apm-img-thumb">
+                  <img src={url} alt={`صورة ${idx + 1}`} />
+                  <button type="button" className="apm-img-remove" onClick={() => removeExisting(idx)}>✕</button>
+                </div>
+              ))}
+              {previewUrls.map((url, idx) => (
+                <div key={`new-${idx}`} className="apm-img-thumb">
+                  <img src={url} alt={`صورة جديدة ${idx + 1}`} />
+                  <button type="button" className="apm-img-remove" onClick={() => removeNew(idx)}>✕</button>
+                </div>
+              ))}
+              <div className="apm-img-add" onClick={() => imgInputRef.current?.click()}>
+                <span>📷</span>
+                <span>إضافة صورة</span>
+              </div>
+            </div>
+            <input ref={imgInputRef} type="file" accept="image/*" multiple onChange={handleImageChange} className="mep-file-hidden" aria-label="اختر صور المنتج" />
+          </div>
+
+          <div className="apm-field">
+            <label>اسم المنتج *</label>
+            <input type="text" placeholder="مثال: قميص صيفي" value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+          </div>
+
+          <div className="apm-field">
+            <label>وصف المنتج</label>
+            <textarea placeholder="اكتب وصفاً مختصراً..." value={form.description}
+              onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+          </div>
+
+          <div className="apm-field">
+            <label>السعر (ر.س) *</label>
+            <input type="number" min="0" step="0.5" placeholder="150" value={form.price}
+              onChange={e => setForm(f => ({ ...f, price: e.target.value }))} />
+          </div>
+
+          <div className="apm-field">
+            <label>الكمية المتاحة *</label>
+            <input type="number" min="0" placeholder="20" value={form.quantity}
+              onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} />
+          </div>
+
+          {error && <div className="md-page-error">{error}</div>}
+
+          <button type="button" className="apm-add-btn" onClick={handleSave} disabled={saving}>
+            {saving ? 'جاري الحفظ...' : '💾 حفظ التعديلات'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AddProductModal({ shopId, onAdd, onClose }: { shopId: string; shopName: string; onAdd: (p: DBProduct) => void; onClose: () => void }) {
   const [form, setForm] = useState<ProductForm>({ name: '', description: '', price: '', quantity: '' });
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
@@ -178,6 +341,7 @@ export default function MerchantEditPage() {
   const [logoUrl, setLogoUrl] = useState<string | null>(shop?.shopLogo ?? null);
   const [products, setProducts] = useState<DBProduct[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<DBProduct | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -412,7 +576,10 @@ export default function MerchantEditPage() {
             <div className="mep-products-grid mep-products-gap">
               {products.map(p => (
                 <div key={p.id} className="mep-product-card">
-                  <button type="button" className="mep-product-del-btn" onClick={() => deleteProduct(p.id)} title="حذف المنتج">🗑</button>
+                  <div className="mep-product-actions">
+                    <button type="button" className="mep-product-edit-btn" onClick={() => setEditingProduct(p)} title="تعديل المنتج">✏️</button>
+                    <button type="button" className="mep-product-del-btn" onClick={() => deleteProduct(p.id)} title="حذف المنتج">🗑</button>
+                  </div>
                   <div className="mep-product-img">
                     {p.image_urls?.[0] ? <img src={p.image_urls[0]} alt={p.title} /> : '📦'}
                   </div>
@@ -446,6 +613,14 @@ export default function MerchantEditPage() {
           shopName={name}
           onAdd={p => setProducts(prev => [...prev, p])}
           onClose={() => setShowAddModal(false)}
+        />
+      )}
+
+      {editingProduct && (
+        <EditProductModal
+          product={editingProduct}
+          onSave={updated => setProducts(prev => prev.map(p => p.id === updated.id ? updated : p))}
+          onClose={() => setEditingProduct(null)}
         />
       )}
     </div>

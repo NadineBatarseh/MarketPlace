@@ -694,10 +694,16 @@
 .mep-product-price { font-weight: 800; color: #e8572a; font-size: 1rem; }
 .mep-product-qty { font-size: 0.8rem; color: #9ca3af; }
 
-.mep-product-del-btn {
+.mep-product-actions {
   position: absolute;
   top: 0.5rem;
   left: 0.5rem;
+  display: flex;
+  gap: 0.25rem;
+}
+
+.mep-product-del-btn,
+.mep-product-edit-btn {
   background: #fef2f2;
   color: #dc2626;
   border: none;
@@ -711,6 +717,12 @@
   transition: background 0.2s;
 }
 .mep-product-del-btn:hover { background: #fee2e2; }
+
+.mep-product-edit-btn {
+  background: #eff6ff;
+  color: #2563eb;
+}
+.mep-product-edit-btn:hover { background: #dbeafe; }
 
 .mep-save-btn {
   padding: 0.85rem 2rem;
