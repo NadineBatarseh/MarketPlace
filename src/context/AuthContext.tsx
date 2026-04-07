@@ -55,10 +55,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
       return;
     }
-    fetchUserData(rawUser.id).then(userData => {
-      setRole(userData.role);
-      setName(userData.name);
-      setStatus(userData.status);
+    fetchUserData(rawUser.id).then(async userData => {
+      if (userData.role) {
+        setRole(userData.role);
+        setName(userData.name);
+        setStatus(userData.status);
+        setIsLoading(false);
+        return;
+      }
+
+      // No public.Users row but user exists in auth and email is confirmed
+      // Only auto-create for customers — merchants/delivery/hub go through admin approval
+      if (rawUser.email_confirmed_at) {
+        const role = rawUser.user_metadata?.role?.trim() || 'customer';
+        if (role === 'customer') {
+          const name = rawUser.user_metadata?.full_name ?? rawUser.email?.split('@')[0] ?? null;
+          await supabase.from('Users').insert({
+            user_id: rawUser.id,
+            email: rawUser.email,
+            name,
+            role: 'customer',
+            status: 'approved',
+          });
+          setRole('customer');
+          setName(name);
+          setStatus('approved');
+        }
+      }
       setIsLoading(false);
     });
   }, [rawUser?.id]);

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import supabase from '../../lib/supabase';
+import { validateIsraeliId } from '../../utils/validateIsraeliId';
 import './Auth.css';
 
 export default function DeliveryApplication() {
@@ -22,12 +23,13 @@ export default function DeliveryApplication() {
     e.preventDefault();
     setError('');
 
-    if (!/^\d{10}$/.test(form.nationalId.trim())) {
-      setError('رقم الهوية غير صحيح — يجب أن يتكون من 10 أرقام فقط');
+    const idCheck = validateIsraeliId(form.nationalId);
+    if (!idCheck.valid) {
+      setError(idCheck.reason);
       return;
     }
-    if (!/^(05\d{8}|\+9665\d{8})$/.test(form.phone.trim())) {
-      setError('رقم الهاتف غير صحيح — يجب أن يبدأ بـ 05 ويتكون من 10 أرقام (مثال: 0512345678)');
+    if (!/^(05\d{8}|\+9725\d{8})$/.test(form.phone.trim())) {
+      setError('رقم الهاتف غير صحيح — يجب أن يبدأ بـ 05 ويتكون من 10 أرقام (مثال: 0547479568)');
       return;
     }
 
@@ -87,7 +89,7 @@ export default function DeliveryApplication() {
             </div>
             <div className="auth-field">
               <label>رقم الهوية الوطنية</label>
-              <input placeholder="1xxxxxxxxx" value={form.nationalId} onChange={set('nationalId')} required maxLength={10} />
+              <input placeholder="xxxxxxxxx" value={form.nationalId} onChange={set('nationalId')} required maxLength={9} />
             </div>
           </div>
 
@@ -98,7 +100,7 @@ export default function DeliveryApplication() {
 
           <div className="auth-field">
             <label>رقم الهاتف</label>
-            <input type="tel" placeholder="+966 5x xxx xxxx" value={form.phone} onChange={set('phone')} required />
+            <input type="tel" placeholder="05xxxxxxxx" value={form.phone} onChange={set('phone')} required />
           </div>
 
           <div className="auth-field">
