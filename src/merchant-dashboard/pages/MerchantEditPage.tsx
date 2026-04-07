@@ -16,7 +16,18 @@ interface DBProduct {
   price: number;
   image_urls: string[] | null;
   stock_Quantity: number;
+  capacity_units: number | null;
 }
+
+const CAPACITY_LABELS: Record<number, string> = {
+  1: 'صغير جداً',
+  2: 'صغير',
+  3: 'متوسط',
+  4: 'كبير',
+  5: 'كبير جداً',
+};
+
+const API_BASE = 'http://localhost:4000';
 
 interface ProductForm {
   name: string;
@@ -35,6 +46,7 @@ function EditProductModal({ product, onSave, onClose }: { product: DBProduct; on
   const [existingUrls, setExistingUrls] = useState<string[]>(product.image_urls ?? []);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [capacityUnits, setCapacityUnits] = useState<number>(product.capacity_units ?? 3);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const imgInputRef = useRef<HTMLInputElement>(null);
@@ -100,6 +112,7 @@ function EditProductModal({ product, onSave, onClose }: { product: DBProduct; on
         price: parseFloat(form.price) || 0,
         stock_Quantity: parseInt(form.quantity) || 0,
         image_urls: finalUrls.length > 0 ? finalUrls : null,
+        capacity_units: capacityUnits,
       })
       .eq('id', product.id);
 
@@ -117,6 +130,7 @@ function EditProductModal({ product, onSave, onClose }: { product: DBProduct; on
       price: parseFloat(form.price) || 0,
       stock_Quantity: parseInt(form.quantity) || 0,
       image_urls: finalUrls.length > 0 ? finalUrls : null,
+      capacity_units: capacityUnits,
     });
     onClose();
   };
@@ -175,6 +189,20 @@ function EditProductModal({ product, onSave, onClose }: { product: DBProduct; on
             <label>الكمية المتاحة *</label>
             <input type="number" min="0" placeholder="20" value={form.quantity}
               onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} />
+          </div>
+
+          <div className="apm-field">
+            <label>حجم المنتج للتوصيل</label>
+            <select
+              className="cap-select"
+              value={capacityUnits}
+              onChange={e => setCapacityUnits(Number(e.target.value))}
+            >
+              {[1, 2, 3, 4, 5].map(v => (
+                <option key={v} value={v}>{v} — {CAPACITY_LABELS[v]}</option>
+              ))}
+            </select>
+            <span className="cap-hint">يُستخدم لحساب سعة الشاحنة عند التوصيل</span>
           </div>
 
           {error && <div className="md-page-error">{error}</div>}
@@ -263,8 +291,24 @@ function AddProductModal({ shopId, onAdd, onClose }: { shopId: string; shopName:
       }).eq('id', productId);
     }
 
+    // Step 4: Auto-classify capacity_units via backend
+    let capacity_units: number | null = null;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        const resp = await fetch(`${API_BASE}/api/products/${productId}/capacity`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${session.access_token}` },
+        });
+        if (resp.ok) {
+          const json = await resp.json();
+          capacity_units = json.capacity_units ?? null;
+        }
+      }
+    } catch { /* non-blocking — product still saved without capacity */ }
+
     previewUrls.forEach(url => URL.revokeObjectURL(url));
-    onAdd({ ...data, image_urls: uploadedUrls.length > 0 ? uploadedUrls : null } as DBProduct);
+    onAdd({ ...data, image_urls: uploadedUrls.length > 0 ? uploadedUrls : null, capacity_units } as DBProduct);
     onClose();
   };
 
@@ -356,7 +400,7 @@ export default function MerchantEditPage() {
     if (!shop?.shop_id) { setLoadingProducts(false); return; }
     supabase
       .from('products')
-      .select('id, shop_id, title, description, price, image_urls, stock_Quantity')
+      .select('id, shop_id, title, description, price, image_urls, stock_Quantity, capacity_units')
       .eq('shop_id', shop.shop_id)
       .then(({ data, error }) => {
         if (!error && data) setProducts(data as DBProduct[]);
@@ -589,6 +633,13 @@ export default function MerchantEditPage() {
                     <span className="mep-product-price">{Number(p.price).toLocaleString('ar-SA')} ر.س</span>
                     <span className="mep-product-qty">الكمية: {p.stock_Quantity}</span>
                   </div>
+                  {p.capacity_units != null && (
+                    <div className="mep-product-capacity" title="حجم المنتج للتوصيل">
+                      <span className="cap-badge cap-badge--{p.capacity_units}">
+                        📦 {p.capacity_units} — {CAPACITY_LABELS[p.capacity_units]}
+                      </span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

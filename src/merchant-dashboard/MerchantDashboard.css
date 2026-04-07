@@ -694,6 +694,35 @@
 .mep-product-price { font-weight: 800; color: #e8572a; font-size: 1rem; }
 .mep-product-qty { font-size: 0.8rem; color: #9ca3af; }
 
+/* ── Capacity badge on product card ── */
+.mep-product-capacity { margin-top: 0.4rem; }
+.cap-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 20px;
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+/* ── Capacity select & hint inside EditProductModal ── */
+.cap-select {
+  width: 100%;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  background: #fff;
+  color: #111827;
+  cursor: pointer;
+}
+.cap-select:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 3px #eef2ff; }
+.cap-hint { font-size: 0.75rem; color: #9ca3af; margin-top: 0.25rem; display: block; }
+
 .mep-product-actions {
   position: absolute;
   top: 0.5rem;

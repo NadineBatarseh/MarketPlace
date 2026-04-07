@@ -19,6 +19,7 @@ import {
   type LatLng,
   type RouteStop,
 } from "./mapsService.js";
+import { createBatches, type ShopPickup } from "../../server/services/batchingService.js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -548,6 +549,118 @@ export async function getCollectorRoute(req: Request, res: Response) {
       totalDistanceMeters: route.totalDistanceMeters,
       totalDurationSeconds: route.totalDurationSeconds,
     });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// BATCHING — Group pending shop pickups into driver batches
+// ════════════════════════════════════════════════════════════════════════════
+
+// GET /api/logistics/batches
+// Reads BatchConfig from the batch_config table, builds shopPickups from
+// pending order_details, and returns the computed driver batches.
+export async function getBatches(_req: Request, res: Response) {
+  try {
+    // 1. Load config from Supabase so values can be changed without a redeploy
+    const { data: cfg, error: cfgErr } = await supabase
+      .from("batch_config")
+      .select("max_driver_capacity, max_stops_per_batch, max_allowed_wait, max_distance_km")
+      .single();
+
+    if (cfgErr || !cfg)
+      return res.status(500).json({ ok: false, error: "فشل تحميل إعدادات التجميع" });
+
+    // 2. Fetch all pending order_details (each row = one line item)
+    const { data: details, error: detErr } = await supabase
+      .from("order_details")
+      .select("order_id, shop_id, product_id, qty")
+      .eq("package_status", "pending");
+
+    if (detErr) return res.status(500).json({ ok: false, error: detErr.message });
+    if (!details?.length) return res.json({ ok: true, batches: [] });
+
+    const shopIds  = [...new Set(details.map((d) => d.shop_id))];
+    const orderIds = [...new Set(details.map((d) => d.order_id))];
+    const productIds = [...new Set(details.map((d) => d.product_id).filter(Boolean))];
+
+    // 3. Fetch shop locations
+    const { data: shops } = await supabase
+      .from("shops")
+      .select("shop_id, shop_lat, shop_lng")
+      .in("shop_id", shopIds);
+
+    const shopMap = new Map((shops ?? []).map((s) => [s.shop_id, s]));
+
+    // 4. Fetch orders to get ready_time (falls back to created_at when null)
+    const { data: orders } = await supabase
+      .from("orders")
+      .select("id, ready_time, created_at")
+      .in("id", orderIds);
+
+    const orderTimeMap = new Map(
+      (orders ?? []).map((o) => [
+        o.id,
+        new Date(o.ready_time ?? o.created_at).getTime(),
+      ])
+    );
+
+    // 5. Fetch product capacity_units for volume calculation
+    const { data: products } = await supabase
+      .from("products")
+      .select("id, capacity_units")
+      .in("id", productIds);
+
+    const capacityMap = new Map(
+      (products ?? []).map((p) => [p.id, (p.capacity_units as number) ?? 3])
+    );
+
+    // 6. Aggregate order_details into one ShopPickup per shop
+    const shopPickupMap = new Map<string, ShopPickup>();
+
+    for (const d of details) {
+      const shop = shopMap.get(d.shop_id);
+      if (!shop?.shop_lat || !shop?.shop_lng) continue; // skip shops with no location
+
+      if (!shopPickupMap.has(d.shop_id)) {
+        shopPickupMap.set(d.shop_id, {
+          shop_id:      d.shop_id,
+          lat:          shop.shop_lat,
+          lng:          shop.shop_lng,
+          ready_time:   orderTimeMap.get(d.order_id) ?? Date.now(),
+          total_volume: 0,
+          order_ids:    [],
+        });
+      }
+
+      const entry = shopPickupMap.get(d.shop_id)!;
+
+      // Use the earliest ready_time across all orders for this shop
+      const t = orderTimeMap.get(d.order_id) ?? Date.now();
+      if (t < entry.ready_time) entry.ready_time = t;
+
+      // Accumulate volume: qty × capacity_units (default 3 if unknown)
+      const units = capacityMap.get(d.product_id) ?? 3;
+      entry.total_volume += (d.qty ?? 1) * units;
+
+      // Collect unique order IDs
+      if (!entry.order_ids.includes(d.order_id)) {
+        entry.order_ids.push(d.order_id);
+      }
+    }
+
+    const shopPickups = Array.from(shopPickupMap.values());
+
+    // 7. Run the batching algorithm with the config from Supabase
+    const batches = createBatches(shopPickups, {
+      MAX_DRIVER_CAPACITY: cfg.max_driver_capacity,
+      MAX_STOPS_PER_BATCH: cfg.max_stops_per_batch,
+      MAX_ALLOWED_WAIT:    cfg.max_allowed_wait,
+      MAX_DISTANCE_KM:     cfg.max_distance_km,
+    });
+
+    return res.json({ ok: true, batches });
   } catch (err: any) {
     return res.status(500).json({ ok: false, error: err.message });
   }

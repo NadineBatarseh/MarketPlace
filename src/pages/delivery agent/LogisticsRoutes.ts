@@ -10,6 +10,7 @@ import {
   completeLastMileDelivery,
   getCollectorRoute,
   getDelivererRoute,
+  getBatches,
 } from "./LogisticsController.js";
 
 const router = Router();
@@ -31,5 +32,8 @@ router.patch("/delivery/complete", completeLastMileDelivery);
 // Route Maps
 router.post("/collector/route", getCollectorRoute);
 router.post("/deliverer/route", getDelivererRoute);
+
+// Batching
+router.get("/batches", getBatches);
 
 export default router;

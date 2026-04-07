@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import type { Request, Response } from 'express';
 import { supabase } from '../supabase.js';
 import { uploadImage } from '../uploadImage.js';
+import { estimateCapacityUnits, clampCapacity } from '../services/capacityClassifier.js';
 
 const router = Router();
 
@@ -83,6 +84,12 @@ router.post('/', async (req: Request, res: Response) => {
       )).filter((url): url is string => url !== null)
     : null;
 
+  // Estimate capacity before insert so it's stored atomically with the product
+  const capacity_units = await estimateCapacityUnits({
+    title: title.trim(),
+    description: description?.trim() ?? null,
+  });
+
   const { data: product, error: dbErr } = await supabase
     .from('products')
     .insert({
@@ -94,6 +101,7 @@ router.post('/', async (req: Request, res: Response) => {
       price: Number(price),
       stock_Quantity: stock_Quantity ?? null,
       image_urls: resolvedImageUrls,
+      capacity_units,
     })
     .select()
     .single();
@@ -146,5 +154,93 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
   return res.status(200).json({ ok: true });
 });
+
+/* ------------------------------------------------------------------ */
+/*  POST /api/products/:id/capacity                                     */
+/*                                                                      */
+/*  Classify (or manually override) capacity_units for a product.      */
+/*                                                                      */
+/*  Body (optional):                                                    */
+/*    { capacity_units: 1–5 }  → manual override, skips AI            */
+/*    {}  or no body           → auto-classify via AI + fallback       */
+/*                                                                      */
+/*  Auth:  Authorization: Bearer <supabase-access-token>               */
+/* ------------------------------------------------------------------ */
+router.post('/:id/capacity', async (req: Request, res: Response) => {
+  const shop_id = await resolveShopId(req, res);
+  if (!shop_id) return;
+
+  const productId = req.params.id;
+
+  const { data: product, error: fetchErr } = await supabase
+    .from('products')
+    .select('id, title, description')
+    .eq('id', productId)
+    .eq('shop_id', shop_id)
+    .maybeSingle();
+
+  if (fetchErr || !product) {
+    return res.status(404).json({ ok: false, error: 'Product not found or does not belong to this shop.' });
+  }
+
+  let capacity_units: number;
+
+  const override = req.body?.capacity_units;
+  if (override !== undefined) {
+    // Manual override — validate and clamp
+    const parsed = Number(override);
+    if (isNaN(parsed)) {
+      return res.status(400).json({ ok: false, error: 'capacity_units must be a number between 1 and 5' });
+    }
+    capacity_units = clampCapacity(parsed);
+  } else {
+    // Auto-classify
+    capacity_units = await estimateCapacityUnits({
+      title: product.title,
+      description: product.description,
+    });
+  }
+
+  const { error: updateErr } = await supabase
+    .from('products')
+    .update({ capacity_units })
+    .eq('id', productId)
+    .eq('shop_id', shop_id);
+
+  if (updateErr) {
+    return res.status(500).json({ ok: false, error: `Database error: ${updateErr.message}` });
+  }
+
+  return res.json({ ok: true, capacity_units });
+});
+
+/* ------------------------------------------------------------------ */
+/*  Helper exported for order capacity calculation                      */
+/*                                                                      */
+/*  calcOrderCapacityUnits(items)                                       */
+/*    items: Array<{ product_id: string; quantity: number }>           */
+/*    Looks up capacity_units by meta_product_id and returns           */
+/*    sum(capacity_units * quantity). Missing products count as 3.     */
+/* ------------------------------------------------------------------ */
+export async function calcOrderCapacityUnits(
+  items: Array<{ product_id: string; quantity: number }>
+): Promise<number> {
+  if (!items || items.length === 0) return 0;
+
+  const ids = items.map(i => i.product_id);
+  const { data: products } = await supabase
+    .from('products')
+    .select('meta_product_id, capacity_units')
+    .in('meta_product_id', ids);
+
+  const capacityMap = new Map<string, number>(
+    (products ?? []).map(p => [p.meta_product_id as string, (p.capacity_units as number) ?? 3])
+  );
+
+  return items.reduce((sum, item) => {
+    const units = capacityMap.get(item.product_id) ?? 3;
+    return sum + units * item.quantity;
+  }, 0);
+}
 
 export default router;
