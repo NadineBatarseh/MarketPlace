@@ -6,10 +6,11 @@ import MerchantReviews from './pages/MerchantReviews';
 import MerchantBilling from './pages/MerchantBilling';
 import MerchantEditPage from './pages/MerchantEditPage';
 import BulkUploadPage from './pages/BulkUploadPage';
+import MerchantOrders from './pages/MerchantOrders';
 import MerchantLoginModal from './components/MerchantLoginModal';
 import './MerchantDashboard.css';
 
-type DashPage = 'home' | 'reviews' | 'billing' | 'editPage' | 'bulkUpload';
+type DashPage = 'home' | 'reviews' | 'billing' | 'editPage' | 'bulkUpload' | 'orders';
 
 function SidebarItem({
   icon,
@@ -96,6 +97,7 @@ export default function MerchantDashboard() {
     if (currentPage === 'reviews') return <MerchantReviews />;
     if (currentPage === 'billing') return <MerchantBilling />;
     if (currentPage === 'bulkUpload') return <BulkUploadPage />;
+    if (currentPage === 'orders') return <MerchantOrders />;
     return <MerchantHome />;
   };
 
@@ -155,6 +157,18 @@ export default function MerchantDashboard() {
             label="الفواتير"
             active={currentPage === 'billing'}
             onClick={() => setCurrentPage('billing')}
+          />
+
+          <SidebarItem
+            icon={
+              <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path d="M9 17H5a2 2 0 0 0-2 2v0a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v0a2 2 0 0 0-2-2h-4" />
+                <rect x="9" y="3" width="6" height="14" rx="1" />
+              </svg>
+            }
+            label="الطلبات"
+            active={currentPage === 'orders'}
+            onClick={() => setCurrentPage('orders')}
           />
 
           <div className="md-sidebar-divider" />
