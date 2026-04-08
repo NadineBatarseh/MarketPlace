@@ -2,20 +2,6 @@ import { useState, useEffect } from 'react';
 import { useMerchantAuth } from '../context/MerchantAuthContext';
 import supabase from '../../lib/supabase';
 
-/**
- * ⚠️  MISSING: The `Reviews` table has no `customer_name` column — only `user_id`.
- *    To display real customer names, create a `profiles` table:
- *
- *    CREATE TABLE profiles (
- *      id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
- *      full_name TEXT,
- *      phone TEXT,
- *      address TEXT
- *    );
- *
- *    Until then, we show a truncated user_id as a placeholder.
- */
-
 interface Reply {
   id: string;
   reply_text: string;
@@ -27,6 +13,8 @@ interface Review {
   rating: number;
   review_text: string;
   user_id: string;
+  customerName: string;
+  image_urls: string[];
   product_id: string;
   productTitle: string;
   reply: Reply | null;
@@ -89,6 +77,7 @@ export default function MerchantReviews() {
           created_at,
           rating,
           review_text,
+          image_urls,
           user_id,
           product_id,
           review_replies ( id, reply_text )
@@ -97,15 +86,27 @@ export default function MerchantReviews() {
         .order('created_at', { ascending: false });
       if (rErr) throw rErr;
 
+      // 3. Fetch customer names from Users table
+      const userIds = [...new Set((rows ?? []).map((r: any) => r.user_id))];
+      let nameMap: Record<string, string> = {};
+      if (userIds.length > 0) {
+        const { data: users } = await supabase
+          .from('Users')
+          .select('user_id, name')
+          .in('user_id', userIds);
+        (users ?? []).forEach((u: any) => { nameMap[u.user_id] = u.name; });
+      }
+
       const mapped: Review[] = (rows ?? []).map((r: any) => ({
         id: r.id,
         created_at: r.created_at,
         rating: r.rating,
         review_text: r.review_text,
+        image_urls: Array.isArray(r.image_urls) ? r.image_urls : [],
         user_id: r.user_id,
+        customerName: nameMap[r.user_id] ?? `عميل #${r.user_id.slice(0, 6)}`,
         product_id: r.product_id,
         productTitle: productMap[r.product_id] ?? 'منتج',
-        // review_replies is an array (one-to-many), but we use UNIQUE constraint so max 1
         reply: Array.isArray(r.review_replies) && r.review_replies.length > 0
           ? r.review_replies[0]
           : null,
@@ -188,14 +189,20 @@ export default function MerchantReviews() {
               <div key={review.id} className="mr-review-card">
                 <div className="mr-review-top">
                   <div>
-                    {/* No customer name in DB — shows truncated user_id until profiles table is added */}
-                    <div className="mr-reviewer">عميل #{review.user_id.slice(0, 8)}</div>
+                    <div className="mr-reviewer">{review.customerName}</div>
                     <Stars count={review.rating} />
                   </div>
                   <span className="mr-product-tag">{review.productTitle}</span>
                 </div>
                 <div className="mr-date">{formatDate(review.created_at)}</div>
                 <p className="mr-comment">{review.review_text}</p>
+                {review.image_urls.length > 0 && (
+                  <div className="mr-review-photos">
+                    {review.image_urls.map((url, idx) => (
+                      <img key={idx} src={url} alt={`صورة ${idx + 1}`} className="mr-review-photo" />
+                    ))}
+                  </div>
+                )}
 
                 <div className="mr-reply-form">
                   <textarea
@@ -226,13 +233,20 @@ export default function MerchantReviews() {
               <div key={review.id} className="mr-review-card">
                 <div className="mr-review-top">
                   <div>
-                    <div className="mr-reviewer">عميل #{review.user_id.slice(0, 8)}</div>
+                    <div className="mr-reviewer">{review.customerName}</div>
                     <Stars count={review.rating} />
                   </div>
                   <span className="mr-product-tag">{review.productTitle}</span>
                 </div>
                 <div className="mr-date">{formatDate(review.created_at)}</div>
                 <p className="mr-comment">{review.review_text}</p>
+                {review.image_urls.length > 0 && (
+                  <div className="mr-review-photos">
+                    {review.image_urls.map((url, idx) => (
+                      <img key={idx} src={url} alt={`صورة ${idx + 1}`} className="mr-review-photo" />
+                    ))}
+                  </div>
+                )}
 
                 <div className="mr-replied-box">
                   <div className="mr-replied-label">ردك:</div>
