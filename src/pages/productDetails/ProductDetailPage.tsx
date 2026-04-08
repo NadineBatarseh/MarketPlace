@@ -35,7 +35,6 @@ const ProductDetailPage: React.FC = () => {
     'https://via.placeholder.com/600x600?text=SouqLink'
   );
   const [activeTab, setActiveTab] = useState('desc');
-  const [variationView, setVariationView] = useState('main');
 
   // Nav counters
   const [favCount, setFavCount] = useState(0);
@@ -54,11 +53,18 @@ const ProductDetailPage: React.FC = () => {
   const [reviewText, setReviewText] = useState('');
   const [reviewRating, setReviewRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
-  const [reviewPhoto, setReviewPhoto] = useState<File | null>(null);
-  const [reviewPhotoPreview, setReviewPhotoPreview] = useState<string | null>(null);
+  const [reviewPhotos, setReviewPhotos] = useState<File[]>([]);
+  const [reviewPhotoPreviews, setReviewPhotoPreviews] = useState<string[]>([]);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewSuccess, setReviewSuccess] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
+
+  // Reviews list
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [ratingDist, setRatingDist] = useState<Record<number, number>>({});
+
+  // Lightbox
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   // Login modal
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -145,43 +151,69 @@ const ProductDetailPage: React.FC = () => {
     setReviewError(null);
 
     try {
-      let photoUrl: string | null = null;
-
-      if (reviewPhoto) {
-        const ext = reviewPhoto.name.split('.').pop();
-        const path = `${currentUser.id}-${Date.now()}.${ext}`;
+      // Upload all photos into {userId}/{productId}/{index}.ext
+      const uploadedUrls: string[] = [];
+      for (let i = 0; i < reviewPhotos.length; i++) {
+        const file = reviewPhotos[i];
+        const ext = file.name.split('.').pop();
+        const path = `${currentUser.id}/${product?.id}/${i}.${ext}`;
         const { data: uploaded, error: upErr } = await supabase.storage
           .from('review-photos')
-          .upload(path, reviewPhoto);
+          .upload(path, file, { upsert: true });
         if (upErr) throw upErr;
         const { data: urlData } = supabase.storage.from('review-photos').getPublicUrl(uploaded.path);
-        photoUrl = urlData.publicUrl;
+        uploadedUrls.push(urlData.publicUrl);
       }
 
-      const row: Record<string, unknown> = {
+      const { error: insErr } = await supabase.from('Reviews').insert({
         product_id: product?.id,
         user_id: currentUser.id,
         rating: reviewRating,
         review_text: reviewText.trim(),
-      };
-      //in that line is a column in the Reviews table, not the products table. It stores the photo the customer uploads with their review (like a customer photo of the product they bought).
-      if (photoUrl) row.image_url = photoUrl;
-
-      const { error: insErr } = await supabase.from('Reviews').insert(row);
+        image_urls: uploadedUrls,
+      });
       if (insErr) throw insErr;
 
-      // Refresh rating stats
+      // Refresh reviews + stats
       const { data: revs } = await supabase
-        .from('Reviews').select('rating').eq('product_id', product?.id);
+        .from('Reviews')
+        .select(`id, created_at, rating, review_text, image_urls, user_id`)
+        .eq('product_id', product?.id)
+        .order('created_at', { ascending: false });
       const ratings = (revs ?? []).map((x: any) => Number(x.rating)).filter((n: number) => !Number.isNaN(n));
       setReviewsCount(ratings.length);
       setRatingAvg(ratings.length ? ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length : null);
+      const dist: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+      ratings.forEach(r => { if (dist[r] !== undefined) dist[r]++; });
+      setRatingDist(dist);
+      const userIds = [...new Set((revs ?? []).map((r: any) => r.user_id))];
+      let nameMap: Record<string, string> = {};
+      if (userIds.length > 0) {
+        const { data: users } = await supabase.from("Users").select("user_id, name").in("user_id", userIds);
+        (users ?? []).forEach((u: any) => { nameMap[u.user_id] = u.name; });
+      }
+      const reviewIds = (revs ?? []).map((r: any) => r.id);
+      let replyMap: Record<string, { id: string; reply_text: string }> = {};
+      if (reviewIds.length > 0) {
+        const { data: replies } = await supabase
+          .from("review_replies")
+          .select("id, review_id, reply_text")
+          .in("review_id", reviewIds);
+        (replies ?? []).forEach((rep: any) => {
+          replyMap[rep.review_id] = { id: rep.id, reply_text: rep.reply_text };
+        });
+      }
+      setReviews((revs ?? []).map((r: any) => ({
+        ...r,
+        customerName: nameMap[r.user_id] ?? `عميل #${r.user_id.slice(0, 6)}`,
+        reply: replyMap[r.id] ?? null,
+      })));
 
       setReviewSuccess(true);
       setReviewText('');
       setReviewRating(0);
-      setReviewPhoto(null);
-      setReviewPhotoPreview(null);
+      setReviewPhotos([]);
+      setReviewPhotoPreviews([]);
     } catch (e: any) {
       setReviewError(e?.message ?? 'حدث خطأ أثناء إرسال التقييم');
     } finally {
@@ -294,7 +326,7 @@ const ProductDetailPage: React.FC = () => {
         // 1) Product
         const { data: productData, error: pErr } = await supabase
           .from("products")
-          .select("id, title, description, price, stock_Quantity, shop_id, image_urls")
+          .select("id, title, description, price, discount_pct, stock_Quantity, shop_id, image_urls")
           .eq("id", productId)
           .single();
 
@@ -325,11 +357,12 @@ const ProductDetailPage: React.FC = () => {
           setActiveThumb(0);
         }
 
-        // 3) Reviews: avg + count (table is "Reviews" with capital R)
+        // 3) Reviews: full data with replies and customer names
         const { data: revs } = await supabase
           .from("Reviews")
-          .select("rating")
-          .eq("product_id", productId);
+          .select(`id, created_at, rating, review_text, image_urls, user_id`)
+          .eq("product_id", productId)
+          .order("created_at", { ascending: false });
 
         const ratings = (revs ?? [])
           .map((x: any) => Number(x.rating))
@@ -342,8 +375,43 @@ const ProductDetailPage: React.FC = () => {
             : null
         );
 
-        // 4) Discounts — table may not exist, so errors are silently ignored
-        setDiscountValue(null);
+        // Rating distribution
+        const dist: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+        ratings.forEach(r => { if (dist[r] !== undefined) dist[r]++; });
+        setRatingDist(dist);
+
+        // Fetch customer names from Users table
+        const userIds = [...new Set((revs ?? []).map((r: any) => r.user_id))];
+        let nameMap: Record<string, string> = {};
+        if (userIds.length > 0) {
+          const { data: users } = await supabase
+            .from("Users")
+            .select("user_id, name")
+            .in("user_id", userIds);
+          (users ?? []).forEach((u: any) => { nameMap[u.user_id] = u.name; });
+        }
+
+        // Fetch replies separately (avoids RLS issues with nested join)
+        const reviewIds = (revs ?? []).map((r: any) => r.id);
+        let replyMap: Record<string, { id: string; reply_text: string }> = {};
+        if (reviewIds.length > 0) {
+          const { data: replies } = await supabase
+            .from("review_replies")
+            .select("id, review_id, reply_text")
+            .in("review_id", reviewIds);
+          (replies ?? []).forEach((rep: any) => {
+            replyMap[rep.review_id] = { id: rep.id, reply_text: rep.reply_text };
+          });
+        }
+
+        setReviews((revs ?? []).map((r: any) => ({
+          ...r,
+          customerName: nameMap[r.user_id] ?? `عميل #${r.user_id.slice(0, 6)}`,
+          reply: replyMap[r.id] ?? null,
+        })));
+
+        // 4) Discount from product column
+        setDiscountValue(productData?.discount_pct ?? null);
 
       } catch (e: any) {
         setError(e?.message ?? "حدث خطأ أثناء جلب البيانات");
@@ -367,6 +435,14 @@ const ProductDetailPage: React.FC = () => {
     <>
       <Topbar />
       <StoreNav />
+
+      {/* LIGHTBOX */}
+      {lightboxUrl && (
+        <div className="lightbox-overlay" onClick={() => setLightboxUrl(null)}>
+          <button type="button" className="lightbox-close" onClick={() => setLightboxUrl(null)}>✕</button>
+          <img className="lightbox-img" src={lightboxUrl} alt="صورة مكبّرة" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
 
       {/* LOGIN MODAL */}
       {showLoginModal && (
@@ -399,31 +475,8 @@ const ProductDetailPage: React.FC = () => {
       )}
 
       <div className="page-wrapper">
-        {/* SWITCHER */}
-        <div className="variation-switcher">
-          <button
-            className={`var-btn ${variationView === 'main' ? 'active' : ''}`}
-            onClick={() => setVariationView('main')}
-          >
-            التصميم الرئيسي
-          </button>
-          <button
-            className={`var-btn ${variationView === 'var2' ? 'active' : ''}`}
-            onClick={() => setVariationView('var2')}
-          >
-            الأسلوب الثاني
-          </button>
-          <button
-            className={`var-btn ${variationView === 'var3' ? 'active' : ''}`}
-            onClick={() => setVariationView('var3')}
-          >
-            الأسلوب الثالث
-          </button>
-        </div>
-
         {/* MAIN PRODUCT SECTION */}
-        {variationView === 'main' && (
-          <>
+        <>
             <div className="product-section">
               {/* LEFT: Product Details */}
               <div className="product-details">
@@ -447,12 +500,18 @@ const ProductDetailPage: React.FC = () => {
                 <div className="divider"></div>
 
                 <div className="price-row">
-                  <span className="price-main">{product?.price ?? NOT_FOUND}</span>
-                  <span className="price-currency">ر.س</span>
-                  <span className="price-old">{NOT_FOUND}</span>
-                  <span className="price-save">
-                    {discountValue !== null ? `وفر ${discountValue}%` : NOT_FOUND}
+                  <span className="price-main">
+                    {discountValue !== null && product?.price != null
+                      ? (product.price * (1 - discountValue / 100)).toFixed(1)
+                      : product?.price ?? NOT_FOUND}
                   </span>
+                  <span className="price-currency">ر.س</span>
+                  {discountValue !== null && product?.price != null && (
+                    <>
+                      <span className="price-old">{product.price} ر.س</span>
+                      <span className="price-save">{`وفر ${discountValue}%`}</span>
+                    </>
+                  )}
                 </div>
 
                 <div className="stock-row">
@@ -518,9 +577,9 @@ const ProductDetailPage: React.FC = () => {
                 {/* Main image with arrows */}
                 <div className="main-image-wrap">
                   <img src={mainImage} alt={safeText(product?.title)} />
-                  <div className="image-badge">
-                    {discountValue !== null ? `خصم ${discountValue}%` : NOT_FOUND}
-                  </div>
+                  {discountValue !== null && (
+                    <div className="image-badge">{`خصم ${discountValue}%`}</div>
+                  )}
                   {allImages.length > 1 && (
                     <>
                       <button className="gallery-arrow gallery-arrow-prev" onClick={prevImage}>‹</button>
@@ -607,10 +666,43 @@ const ProductDetailPage: React.FC = () => {
 
               {activeTab === 'reviews' && (
                 <div className="tab-content">
+
+                  {/* ── Rating Summary ── */}
+                  {reviewsCount > 0 && (
+                    <div className="rv-summary">
+                      <div className="rv-summary-score">
+                        <span className="rv-big-score">{ratingAvg !== null ? ratingAvg.toFixed(1) : '—'}</span>
+                        <span className="rv-big-stars">
+                          {[1,2,3,4,5].map(s => (
+                            <span key={s} className={s <= Math.round(ratingAvg ?? 0) ? 'rv-star filled' : 'rv-star'}>★</span>
+                          ))}
+                        </span>
+                        <span className="rv-total-count">{reviewsCount} تقييم</span>
+                      </div>
+                      <div className="rv-dist">
+                        {[5,4,3,2,1].map(star => (
+                          <div key={star} className="rv-dist-row">
+                            <span className="rv-dist-label">{star} ★</span>
+                            <div className="rv-dist-bar-wrap">
+                              <div
+                                className="rv-dist-bar-fill"
+                                style={{ '--bar-pct': reviewsCount ? `${((ratingDist[star] ?? 0) / reviewsCount) * 100}%` : '0%' } as React.CSSProperties}
+                              />
+                            </div>
+                            <span className="rv-dist-count">{ratingDist[star] ?? 0}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Submit Form ── */}
                   {authLoading ? (
                     <p className="review-info-msg">جاري التحقق من حسابك...</p>
                   ) : !currentUser ? (
-                    <p className="review-info-msg">يجب عليك تسجيل الدخول لإضافة تقييم.</p>
+                    <div className="rv-guest-prompt">
+                      <p>يجب تسجيل الدخول لإضافة تقييم — <a href="/login">تسجيل الدخول</a></p>
+                    </div>
                   ) : userRole !== 'customer' ? (
                     <p className="review-info-msg">فقط العملاء يمكنهم إضافة تقييم.</p>
                   ) : reviewSuccess ? (
@@ -618,8 +710,6 @@ const ProductDetailPage: React.FC = () => {
                   ) : (
                     <div className="review-form">
                       <h4 className="review-form-title">أضف تقييمك</h4>
-
-                      {/* Star rating */}
                       <div className="review-stars-row">
                         <span className="review-label">تقييمك:</span>
                         <div className="review-stars">
@@ -631,14 +721,10 @@ const ProductDetailPage: React.FC = () => {
                               onClick={() => setReviewRating(star)}
                               onMouseEnter={() => setHoverRating(star)}
                               onMouseLeave={() => setHoverRating(0)}
-                            >
-                              ★
-                            </button>
+                            >★</button>
                           ))}
                         </div>
                       </div>
-
-                      {/* Text area */}
                       <textarea
                         className="review-textarea"
                         placeholder="اكتب تقييمك هنا..."
@@ -646,30 +732,42 @@ const ProductDetailPage: React.FC = () => {
                         onChange={e => setReviewText(e.target.value)}
                         rows={4}
                       />
-
-                      {/* Photo upload */}
                       <div className="review-photo-section">
                         <label className="review-photo-label" htmlFor="review-photo-input">
-                          📷 أضف صورة (اختياري)
+                          📷 أضف صور (اختياري)
                         </label>
                         <input
                           id="review-photo-input"
                           type="file"
                           accept="image/*"
+                          multiple
                           className="review-photo-input"
                           onChange={e => {
-                            const file = e.target.files?.[0] ?? null;
-                            setReviewPhoto(file);
-                            setReviewPhotoPreview(file ? URL.createObjectURL(file) : null);
+                            const files = Array.from(e.target.files ?? []);
+                            setReviewPhotos(prev => [...prev, ...files]);
+                            setReviewPhotoPreviews(prev => [...prev, ...files.map(f => URL.createObjectURL(f))]);
+                            e.target.value = '';
                           }}
                         />
-                        {reviewPhotoPreview && (
-                          <img src={reviewPhotoPreview} alt="معاينة" className="review-photo-preview" />
+                        {reviewPhotoPreviews.length > 0 && (
+                          <div className="review-photo-grid">
+                            {reviewPhotoPreviews.map((src, idx) => (
+                              <div key={idx} className="review-photo-thumb">
+                                <img src={src} alt={`معاينة ${idx + 1}`} />
+                                <button
+                                  type="button"
+                                  className="review-photo-delete"
+                                  onClick={() => {
+                                    setReviewPhotos(prev => prev.filter((_, i) => i !== idx));
+                                    setReviewPhotoPreviews(prev => prev.filter((_, i) => i !== idx));
+                                  }}
+                                >×</button>
+                              </div>
+                            ))}
+                          </div>
                         )}
                       </div>
-
                       {reviewError && <p className="review-error-msg">{reviewError}</p>}
-
                       <button
                         type="button"
                         className="review-submit-btn"
@@ -680,112 +778,59 @@ const ProductDetailPage: React.FC = () => {
                       </button>
                     </div>
                   )}
+
+                  {/* ── Review Cards ── */}
+                  {reviews.length === 0 ? (
+                    <p className="review-info-msg rv-empty-msg">لا توجد تقييمات بعد — كن أول من يقيّم هذا المنتج!</p>
+                  ) : (
+                    <div className="rv-list">
+                      {reviews.map(r => (
+                        <div key={r.id} className="rv-card">
+                          <div className="rv-card-top">
+                            <div className="rv-avatar">{(r.customerName?.[0] ?? '؟')}</div>
+                            <div className="rv-card-body">
+                              <span className="rv-card-name">{r.customerName}</span>
+                              {r.review_text && <p className="rv-card-text">{r.review_text}</p>}
+                              <div className="rv-card-stars">
+                                {[1,2,3,4,5].map(s => (
+                                  <span key={s} className={s <= r.rating ? 'rv-star filled' : 'rv-star'}>★</span>
+                                ))}
+                              </div>
+                            </div>
+                            <span className="rv-card-date rv-card-date--push">
+                              {new Intl.DateTimeFormat('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(r.created_at))}
+                            </span>
+                          </div>
+                          {/* Row 4: photos */}
+                          {Array.isArray(r.image_urls) && r.image_urls.length > 0 && (
+                            <div className="rv-card-photos">
+                              {r.image_urls.map((url: string, idx: number) => (
+                                <img
+                                  key={idx}
+                                  src={url}
+                                  alt={`صورة ${idx + 1}`}
+                                  className="rv-card-photo rv-card-photo--zoomable"
+                                  onClick={() => setLightboxUrl(url)}
+                                />
+                              ))}
+                            </div>
+                          )}
+                          {r.reply && (
+                            <div className="rv-merchant-reply">
+                              <span className="rv-reply-label">رد التاجر:</span>
+                              <p className="rv-reply-text">{r.reply.reply_text}</p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          </>
-        )}
-
-        {variationView === 'var2' && <Variation2 ratingAvg={ratingAvg} reviewsCount={reviewsCount} />}
-        {variationView === 'var3' && <Variation3 />}
+        </>
       </div>
     </>
-  );
-};
-
-// ─── Sub-components ────────────────────────────────────────────────────────────
-
-const Variation2: React.FC<{ ratingAvg: number | null; reviewsCount: number }> = ({ ratingAvg, reviewsCount }) => {
-  const [activeSize, setActiveSize] = useState('٤٢');
-
-  return (
-    <div style={{ marginBottom: '12px', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)' }}>
-      الأسلوب الثاني — مدمج، مناسب للمتاجر الصغيرة
-      <div className="var2-wrap">
-        <div className="var2-imgs">
-          <div className="var2-thumbs">
-            <div className="var2-thumb active">
-              <img src="https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=100&h=100&fit=crop" alt="Product" />
-            </div>
-          </div>
-          <div className="var2-main">
-            <img src="https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&h=530&fit=crop" alt="Main Product" />
-          </div>
-        </div>
-        <div className="var2-details">
-          <div className="var2-title">حذاء Nike Air Max 270</div>
-          <div className="rating-row" style={{ marginBottom: '12px' }}>
-            <div className="stars">★★★★☆</div>
-            <span className="rating-text">
-              <strong>{ratingAvg !== null ? ratingAvg.toFixed(1) : NOT_FOUND}</strong>
-              {" "}({reviewsCount ? reviewsCount : NOT_FOUND} تقييم)
-            </span>
-          </div>
-
-          <div style={{ marginBottom: '16px' }}>
-            <div className="section-label">المقاس</div>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {['٤٠', '٤٢', '٤٣', '٤٤', '٤٥'].map((size) => (
-                <span
-                  key={size}
-                  onClick={() => size !== '٤٤' && setActiveSize(size)}
-                  style={{
-                    padding: '6px 14px',
-                    border: `1.5px solid ${activeSize === size ? 'var(--accent)' : 'var(--border)'}`,
-                    borderRadius: '8px',
-                    fontSize: '0.8rem',
-                    cursor: size === '٤٤' ? 'not-allowed' : 'pointer',
-                    opacity: size === '٤٤' ? 0.4 : 1,
-                  }}
-                >
-                  {size}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="var2-btns">
-            <button className="var2-btn-primary">أضف إلى السلة</button>
-            <button className="var2-btn-secondary">♡ أضف للمفضلة</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const Variation3: React.FC = () => {
-  const [isFav, setIsFav] = useState(false);
-
-  return (
-    <div style={{ marginBottom: '12px', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)' }}>
-      الأسلوب الثالث — فاخر، داكن، مناسب للمنتجات الراقية
-      <div className="var3-wrap">
-        <div className="var3-details">
-          <div className="var3-badge">⚡ أعلى مبيعاً هذا الأسبوع</div>
-          <h2 className="var3-title">
-            ساعة Apple Watch Series 9<br />
-            الإصدار التيتانيوم
-          </h2>
-          <p className="var3-desc">
-            صُنعت لأولئك الذين لا يقبلون المساومة — ساعة Apple Watch Series 9 بهيكل تيتانيوم ممتاز وشاشة Retina المضيئة دائماً.
-          </p>
-          <div className="var3-btns">
-            <button className="var3-btn-main">أضف إلى السلة 🛒</button>
-            <button
-              className="var3-btn-fav"
-              onClick={() => setIsFav(!isFav)}
-              style={{
-                background: isFav ? 'rgba(232,87,42,0.2)' : '',
-                color: isFav ? '#ff8a65' : '',
-              }}
-            >
-              {isFav ? '♥' : '♡'}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
   );
 };
 

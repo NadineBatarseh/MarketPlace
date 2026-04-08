@@ -581,6 +581,21 @@
 
 .mr-date { font-size: 0.78rem; color: #9ca3af; margin-bottom: 0.75rem; }
 
+.mr-review-photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 1rem;
+}
+
+.mr-review-photo {
+  width: 90px;
+  height: 90px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
 /* Reply form */
 .mr-reply-form { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
 .mr-reply-form textarea {
