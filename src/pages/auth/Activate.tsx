@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import supabase from '../../lib/supabase';
+import zxcvbn from 'zxcvbn';
+
+import PasswordStrengthBar from './PasswordStrengthBar';
 import './Auth.css';
 
 export default function Activate() {
@@ -23,94 +25,27 @@ export default function Activate() {
       setError('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
       return;
     }
+    if (zxcvbn(password).score < 2) {
+      setError('كلمة المرور ضعيفة جداً — اختر كلمة مرور أصعب');
+      return;
+    }
 
     setLoading(true);
 
-    // 1. Check merchant_applications first
-    const { data: merchantApp } = await supabase
-      .from('merchant_applications')
-      .select('name_of_owner, platform_email')
-      .eq('platform_email', platformEmail.trim())
-      .eq('status', 'approved')
-      .maybeSingle();
-
-    // 2. If not found, check delivery_applications
-    let applicantName: string | null = null;
-    let role: 'merchant' | 'delivery' | 'hubworker' = 'merchant';
-
-    if (merchantApp) {
-      applicantName = merchantApp.name_of_owner;
-      role = 'merchant';
-    } else {
-      const { data: deliveryApp } = await supabase
-        .from('delivery_applications')
-        .select('name, platform_email')
-        .eq('platform_email', platformEmail.trim())
-        .eq('status', 'approved')
-        .maybeSingle();
-
-      if (deliveryApp) {
-        applicantName = deliveryApp.name;
-        role = 'delivery';
-      } else {
-        const { data: hubApp } = await supabase
-          .from('hubworker_applications')
-          .select('name, platform_email')
-          .eq('platform_email', platformEmail.trim())
-          .eq('status', 'approved')
-          .maybeSingle();
-
-        if (hubApp) {
-          applicantName = hubApp.name;
-          role = 'hubworker';
-        }
-      }
-    }
-
-    if (!applicantName) {
-      setLoading(false);
-      setError('هذا البريد الإلكتروني غير مرتبط بطلب معتمد. تحقق من البريد الذي أرسلناه لك.');
-      return;
-    }
-
-    // 3. Create auth account
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email: platformEmail.trim(),
-      password,
-      options: {
-        data: { full_name: applicantName },
-        emailRedirectTo: `${window.location.origin}/login`,
-      },
+    const res = await fetch('http://localhost:4000/api/activate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platformEmail: platformEmail.trim(), password }),
     });
 
-    if (signUpError || !data.user) {
-      setLoading(false);
-      if (signUpError?.message?.includes('already registered')) {
-        setError('هذا البريد الإلكتروني مسجل مسبقاً — يمكنك تسجيل الدخول مباشرة.');
-      } else {
-        setError(signUpError?.message ?? 'حدث خطأ غير متوقع');
-      }
-      return;
-    }
-
-    // 4. Create or update public.Users record
-    const { error: insertError } = await supabase.from('Users').upsert({
-      user_id: data.user.id,
-      email: platformEmail.trim(),
-      role,
-      status: 'approved',
-      name: applicantName,
-    }, { onConflict: 'user_id' });
-
-    if (insertError) {
-      setLoading(false);
-      setError('حدث خطأ في إعداد الملف الشخصي: ' + insertError.message);
-      return;
-    }
-
-    // 5. Sign out so they log in properly
-    await supabase.auth.signOut();
+    const result = await res.json();
     setLoading(false);
+
+    if (!result.ok) {
+      setError(result.error ?? 'حدث خطأ غير متوقع');
+      return;
+    }
+
     setSuccess(true);
   };
 
@@ -161,6 +96,7 @@ export default function Activate() {
               required
               autoComplete="new-password"
             />
+            <PasswordStrengthBar password={password} />
           </div>
           <div className="auth-field">
             <label>تأكيد كلمة المرور</label>

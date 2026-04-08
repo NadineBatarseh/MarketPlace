@@ -21,13 +21,13 @@ export default function Login() {
 
     if (authError || !data.user) {
       setLoading(false);
-      const AUTH_ERRORS: Record<string, string> = {
-        'Invalid login credentials': 'البريد الإلكتروني أو كلمة المرور غير صحيحة',
-        'Email not confirmed':       'يرجى تأكيد بريدك الإلكتروني أولاً',
-        'User not found':            'لا يوجد حساب بهذا البريد الإلكتروني',
-        'Too many requests':         'محاولات كثيرة جداً، حاول لاحقاً',
-      };
-      setError(AUTH_ERRORS[authError?.message ?? ''] ?? authError?.message ?? 'حدث خطأ غير متوقع');
+      setError(
+        authError?.message === 'Invalid login credentials'
+          ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة'
+          : authError?.message === 'Email not confirmed'
+          ? 'لم يتم تأكيد البريد الإلكتروني بعد — تحقق من بريدك واضغط على رابط التأكيد'
+          : 'حدث خطأ غير متوقع'
+      );
       return;
     }
 

@@ -38,21 +38,39 @@ export function CustomerAuthProvider({ children }: { children: React.ReactNode }
       : null;
 
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error || !data.user) {
+      const msg = error?.message;
+      if (msg === 'Email not confirmed')
+        return { success: false, error: 'لم يتم تأكيد البريد الإلكتروني بعد — تحقق من بريدك واضغط على رابط التأكيد' };
+      return { success: false, error: 'البريد الإلكتروني أو كلمة المرور غير صحيحة' };
+    }
+
     const { data: userRow } = await supabase
       .from('Users')
       .select('role, status, name')
-      .eq('email', email)
+      .eq('user_id', data.user.id)
       .maybeSingle();
 
-    if (!userRow) return { success: false, error: 'أنت لست عضواً — قم بالتسجيل أولاً' };
-
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error || !data.user) return { success: false, error: 'كلمة المرور غير صحيحة' };
-
-    if (userRow.role?.trim() === 'merchant') {
-      await supabase.auth.signOut();
-      return { success: false, error: 'هذا حساب تاجر — يرجى استخدام تسجيل دخول التاجر' };
+    // Row exists — validate role
+    if (userRow) {
+      if (userRow.role?.trim() === 'merchant') {
+        await supabase.auth.signOut();
+        return { success: false, error: 'هذا حساب تاجر — يرجى استخدام تسجيل دخول التاجر' };
+      }
+      return { success: true };
     }
+
+    // No row yet — this is a customer who confirmed email but trigger missed it
+    const name = data.user.user_metadata?.full_name ?? data.user.email?.split('@')[0] ?? 'عميل';
+    await supabase.from('Users').insert({
+      user_id: data.user.id,
+      email: data.user.email,
+      name,
+      role: 'customer',
+      status: 'approved',
+    });
 
     return { success: true };
   };
@@ -67,7 +85,18 @@ export function CustomerAuthProvider({ children }: { children: React.ReactNode }
       },
     });
 
-    if (error || !data.user) return { success: false, error: error?.message ?? 'حدث خطأ غير متوقع' };
+    if (error || !data.user) {
+      const msg = error?.message?.toLowerCase();
+      const friendly =
+        msg?.includes('invalid') && msg?.includes('email')
+          ? 'البريد الإلكتروني غير صالح — تحقق من الكتابة وأعد المحاولة'
+          : msg?.includes('already registered') || msg?.includes('already been registered')
+          ? 'هذا البريد الإلكتروني مسجل مسبقاً — يمكنك تسجيل الدخول مباشرة'
+          : msg?.includes('too many') || msg?.includes('rate limit') || error?.status === 429
+          ? 'تم تجاوز الحد المسموح به من المحاولات — يرجى الانتظار قليلاً ثم المحاولة مجدداً'
+          : 'حدث خطأ غير متوقع';
+      return { success: false, error: friendly };
+    }
     return { success: true };
   };
 

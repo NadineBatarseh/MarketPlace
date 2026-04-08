@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import zxcvbn from 'zxcvbn';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
+import PasswordStrengthBar from './PasswordStrengthBar';
 import './Auth.css';
 
 export default function CustomerSignup() {
@@ -26,6 +28,10 @@ export default function CustomerSignup() {
     }
     if (password.length < 6) {
       setError('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      return;
+    }
+    if (zxcvbn(password).score < 2) {
+      setError('كلمة المرور ضعيفة جداً — اختر كلمة مرور أصعب');
       return;
     }
 
@@ -113,6 +119,7 @@ export default function CustomerSignup() {
                 )}
               </button>
             </div>
+            <PasswordStrengthBar password={password} />
           </div>
           <div className="auth-field">
             <label>تأكيد كلمة المرور</label>
