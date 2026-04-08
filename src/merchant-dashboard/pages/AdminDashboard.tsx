@@ -359,7 +359,10 @@ export default function AdminDashboard() {
       .eq('id', approveModal.app.id);
 
     if (dbError) {
-      setApproveModal(prev => ({ ...prev, sending: false, error: 'تعذّر تحديث الطلب: ' + dbError.message }));
+      const msg = dbError.message.includes('unique') || dbError.message.includes('duplicate')
+        ? 'هذا البريد الإلكتروني الرسمي مخصص لتاجر آخر — يرجى اختيار بريد مختلف'
+        : 'تعذّر تحديث الطلب: ' + dbError.message;
+      setApproveModal(prev => ({ ...prev, sending: false, error: msg }));
       return;
     }
 
@@ -469,7 +472,10 @@ export default function AdminDashboard() {
       .eq('id', deliveryApproveModal.app.id);
 
     if (dbError) {
-      setDeliveryApproveModal(prev => ({ ...prev, sending: false, error: 'تعذّر تحديث الطلب: ' + dbError.message }));
+      const msg = dbError.message.includes('unique') || dbError.message.includes('duplicate')
+        ? 'هذا البريد الإلكتروني الرسمي مخصص لمندوب آخر — يرجى اختيار بريد مختلف'
+        : 'تعذّر تحديث الطلب: ' + dbError.message;
+      setDeliveryApproveModal(prev => ({ ...prev, sending: false, error: msg }));
       return;
     }
 
@@ -572,7 +578,10 @@ export default function AdminDashboard() {
       .eq('id', hubApproveModal.app.id);
 
     if (dbError) {
-      setHubApproveModal(prev => ({ ...prev, sending: false, error: 'تعذّر تحديث الطلب: ' + dbError.message }));
+      const msg = dbError.message.includes('unique') || dbError.message.includes('duplicate')
+        ? 'هذا البريد الإلكتروني الرسمي مخصص لموظف آخر — يرجى اختيار بريد مختلف'
+        : 'تعذّر تحديث الطلب: ' + dbError.message;
+      setHubApproveModal(prev => ({ ...prev, sending: false, error: msg }));
       return;
     }
 

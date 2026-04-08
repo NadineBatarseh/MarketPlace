@@ -267,6 +267,38 @@
   margin: 0 0 28px;
 }
 
+/* ── Password Strength Bar ── */
+.psb-wrap {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.psb-bars {
+  display: flex;
+  gap: 5px;
+}
+
+.psb-segment {
+  flex: 1;
+  height: 5px;
+  border-radius: 99px;
+}
+
+.psb-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+.psb-hint {
+  font-size: 0.75rem;
+  color: var(--auth-muted);
+  margin: 0;
+  line-height: 1.4;
+}
+
 /* ── Responsive ── */
 @media (max-width: 520px) {
   .auth-card {
