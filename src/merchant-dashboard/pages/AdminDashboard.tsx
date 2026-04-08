@@ -43,7 +43,39 @@ interface HubWorkerApp {
 }
 
 type FilterTab = 'pending' | 'approved' | 'rejected';
-type Section = 'merchant' | 'delivery' | 'hubworker';
+type Section = 'merchant' | 'delivery' | 'hubworker' | 'batches';
+
+interface BatchConfigForm {
+  max_driver_capacity: number;
+  max_stops_per_batch: number;
+  max_allowed_wait: number;
+  max_distance_km: number;
+}
+
+interface BatchShop {
+  shop_id: string;
+  shop_name: string;
+  lat: number;
+  lng: number;
+  ready_time: number;
+  total_volume: number;
+  order_ids: number[];
+  items: { product_title: string; qty: number }[];
+}
+
+interface DriverInfo {
+  driver_id: number;
+  name: string;
+}
+
+interface Batch {
+  shops: BatchShop[];
+  order_ids: number[];
+  total_volume: number;
+  stops: number;
+  /** Set after running assignment — driver assigned to this batch */
+  assigned_driver?: DriverInfo | null;
+}
 
 const TAB_LABELS: Record<FilterTab, string> = {
   pending: 'قيد المراجعة',
@@ -127,9 +159,147 @@ export default function AdminDashboard() {
     { app: null, message: '', sending: false, error: '' }
   );
 
+  // Batches state
+  const [batches, setBatches]             = useState<Batch[]>([]);
+  const [batchesLoading, setBatchesLoading] = useState(false);
+  const [batchesError, setBatchesError]   = useState('');
+  const [expandedBatches, setExpandedBatches] = useState<Set<number>>(new Set());
+  const [expandedShops, setExpandedShops]     = useState<Set<string>>(new Set());
+  const [batchFilter, setBatchFilter]     = useState<'all' | 'assigned' | 'unassigned'>('all');
+
+  // Assignment state
+  const [assigning, setAssigning]         = useState(false);
+  const [assignError, setAssignError]     = useState('');
+  const [assignSummary, setAssignSummary] = useState<{ assigned: number; unassigned: number } | null>(null);
+
+  // Batch config state
+  // draftConfig holds raw string values for the inputs so the user can type freely.
+  // batchConfig / savedConfig hold parsed numbers for comparison and saving.
+  const defaultConfig: BatchConfigForm = { max_driver_capacity: 20, max_stops_per_batch: 6, max_allowed_wait: 60, max_distance_km: 5 };
+  const [savedConfig, setSavedConfig]     = useState<BatchConfigForm>(defaultConfig);
+  const [draftConfig, setDraftConfig]     = useState({ max_driver_capacity: '20', max_stops_per_batch: '6', max_allowed_wait: '60', max_distance_km: '5' });
+  const [configLoading, setConfigLoading] = useState(false);
+  const [configSaving, setConfigSaving]   = useState(false);
+  const [configError, setConfigError]     = useState('');
+  const [configSuccess, setConfigSuccess] = useState(false);
+  const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
+
+  const parsedConfig: BatchConfigForm = {
+    max_driver_capacity: parseFloat(draftConfig.max_driver_capacity) || savedConfig.max_driver_capacity,
+    max_stops_per_batch: parseFloat(draftConfig.max_stops_per_batch) || savedConfig.max_stops_per_batch,
+    max_allowed_wait:    parseFloat(draftConfig.max_allowed_wait)    || savedConfig.max_allowed_wait,
+    max_distance_km:     parseFloat(draftConfig.max_distance_km)     || savedConfig.max_distance_km,
+  };
+
+  const configChanged =
+    parsedConfig.max_driver_capacity !== savedConfig.max_driver_capacity ||
+    parsedConfig.max_stops_per_batch !== savedConfig.max_stops_per_batch ||
+    parsedConfig.max_allowed_wait    !== savedConfig.max_allowed_wait    ||
+    parsedConfig.max_distance_km     !== savedConfig.max_distance_km;
+
+  const toggleBatch = (idx: number) => setExpandedBatches(prev => {
+    const next = new Set(prev); next.has(idx) ? next.delete(idx) : next.add(idx); return next;
+  });
+  const toggleShop = (key: string) => setExpandedShops(prev => {
+    const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next;
+  });
+
   useEffect(() => { loadApps(); }, []);
   useEffect(() => { loadDeliveryApps(); }, []);
   useEffect(() => { loadHubApps(); }, []);
+
+  // ── Batches loader ────────────────────────────────────────────────────────────
+
+  const loadBatches = async () => {
+    setBatchesLoading(true);
+    setBatchesError('');
+    try {
+      const res = await fetch('/api/logistics/batches');
+      const json = await res.json();
+      if (json.ok) setBatches(json.batches);
+      else setBatchesError(json.error ?? 'فشل تحميل التجميعات');
+    } catch {
+      setBatchesError('تعذّر الاتصال بالخادم');
+    }
+    setBatchesLoading(false);
+  };
+
+  // ── Assignment runner ─────────────────────────────────────────────────────────
+
+  const runAssignment = async () => {
+    setAssigning(true);
+    setAssignError('');
+    setAssignSummary(null);
+    try {
+      const res  = await fetch('/api/logistics/assign', { method: 'POST' });
+      const json = await res.json();
+      if (!json.ok) { setAssignError(json.error ?? 'فشل التعيين'); setAssigning(false); return; }
+
+      setAssignSummary({ assigned: json.assigned_count, unassigned: json.unassigned_count });
+
+      // Fetch driver names to display on each batch card
+      const driverIds: number[] = Object.values(json.assignments).map(Number);
+      let driverMap: Record<number, string> = {};
+      if (driverIds.length > 0) {
+        const { data: drvRows } = await supabase
+          .from('drivers')
+          .select('driver_id, name')
+          .in('driver_id', driverIds);
+        (drvRows ?? []).forEach((d: any) => { driverMap[d.driver_id] = d.name; });
+      }
+
+      // Stamp each batch with its assigned driver (assignments keyed by "batch-{idx}")
+      setBatches(prev => prev.map((b, idx) => {
+        const driverId = json.assignments[`batch-${idx}`];
+        if (!driverId) return { ...b, assigned_driver: null };
+        return { ...b, assigned_driver: { driver_id: Number(driverId), name: driverMap[Number(driverId)] ?? `سائق ${driverId}` } };
+      }));
+    } catch {
+      setAssignError('تعذّر الاتصال بالخادم');
+    }
+    setAssigning(false);
+  };
+
+  // ── Batch config loader / saver ──────────────────────────────────────────────
+
+  const loadConfig = async () => {
+    setConfigLoading(true);
+    setConfigError('');
+    const { data, error } = await supabase
+      .from('batch_config')
+      .select('max_driver_capacity, max_stops_per_batch, max_allowed_wait, max_distance_km')
+      .single();
+    if (error) setConfigError('تعذّر تحميل الإعدادات: ' + error.message);
+    else if (data) {
+      const d = data as BatchConfigForm;
+      setSavedConfig(d);
+      setDraftConfig({
+        max_driver_capacity: String(d.max_driver_capacity),
+        max_stops_per_batch: String(d.max_stops_per_batch),
+        max_allowed_wait:    String(d.max_allowed_wait),
+        max_distance_km:     String(d.max_distance_km),
+      });
+    }
+    setConfigLoading(false);
+  };
+
+  const saveConfig = async () => {
+    setConfigSaving(true);
+    setConfigError('');
+    setConfigSuccess(false);
+    const { error } = await supabase
+      .from('batch_config')
+      .update({
+        max_driver_capacity: parsedConfig.max_driver_capacity,
+        max_stops_per_batch: parsedConfig.max_stops_per_batch,
+        max_allowed_wait:    parsedConfig.max_allowed_wait,
+        max_distance_km:     parsedConfig.max_distance_km,
+      })
+      .eq('id', 1);
+    if (error) setConfigError('فشل الحفظ: ' + error.message);
+    else { setConfigSuccess(true); setSavedConfig({ ...parsedConfig }); loadBatches(); }
+    setConfigSaving(false);
+  };
 
   // ── Merchant loaders / actions ──────────────────────────────────────────────
 
@@ -460,66 +630,78 @@ export default function AdminDashboard() {
 
   return (
     <div className="ad-root">
-      <div className="ad-header">
-        <div className="ad-header-logo">سوق <span>لينك</span></div>
-        <div>
-          <h1 className="ad-header-title">لوحة تحكم الإدارة</h1>
-          <p className="ad-header-sub">مراجعة طلبات التسجيل</p>
+
+      {/* ── Topbar ── */}
+      <header className="ad-topbar">
+        <div className="ad-topbar-logo">سوق <span>لينك</span></div>
+        <div className="ad-topbar-center">
+          <h1 className="ad-topbar-title">لوحة تحكم الإدارة</h1>
         </div>
-      </div>
+      </header>
 
-      {/* Section toggle */}
-      <div className="ad-section-toggle">
-        <button
-          type="button"
-          className={`ad-section-btn${activeSection === 'merchant' ? ' ad-section-btn--active' : ''}`}
-          onClick={() => setActiveSection('merchant')}
-        >
-          🏪 طلبات التجار
-          <span className="ad-tab-count">{apps.filter(a => a.status === 'pending').length || ''}</span>
-        </button>
-        <button
-          type="button"
-          className={`ad-section-btn${activeSection === 'delivery' ? ' ad-section-btn--active' : ''}`}
-          onClick={() => setActiveSection('delivery')}
-        >
-          🚚 طلبات المناديب
-          <span className="ad-tab-count">{deliveryApps.filter(a => a.status === 'pending').length || ''}</span>
-        </button>
-        <button
-          type="button"
-          className={`ad-section-btn${activeSection === 'hubworker' ? ' ad-section-btn--active' : ''}`}
-          onClick={() => setActiveSection('hubworker')}
-        >
-          📦 طلبات عمال المستودع
-          <span className="ad-tab-count">{hubApps.filter(a => a.status === 'pending').length || ''}</span>
-        </button>
-      </div>
+      {/* ── Body: sidebar + content ── */}
+      <div className="ad-body">
 
-      {loadError && <div className="ad-error">{loadError}</div>}
-
-      <div className="ad-tabs">
-        {(['pending', 'approved', 'rejected'] as FilterTab[]).map(tab => {
-          const count = allCurrentApps.filter(a => a.status === tab).length;
-          return (
-            <button
-              key={tab}
-              type="button"
-              className={`ad-tab ad-tab--${tab}${activeTab === tab ? ' ad-tab--active' : ''}`}
-              onClick={() => setActiveTab(tab)}
+        {/* Sidebar */}
+        <aside className="ad-sidebar">
+          {[
+            { key: 'merchant'  as Section, icon: '🏪', label: 'طلبات التجار',        count: apps.filter(a => a.status === 'pending').length },
+            { key: 'delivery'  as Section, icon: '🚚', label: 'طلبات المناديب',       count: deliveryApps.filter(a => a.status === 'pending').length },
+            { key: 'hubworker' as Section, icon: '📦', label: 'عمال المستودع',        count: hubApps.filter(a => a.status === 'pending').length },
+          ].map(item => (
+            <div
+              key={item.key}
+              className={`ad-sidebar-item${activeSection === item.key ? ' ad-sidebar-item--active' : ''}`}
+              onClick={() => setActiveSection(item.key)}
             >
-              {TAB_LABELS[tab]}
-              <span className="ad-tab-count">{count}</span>
-            </button>
-          );
-        })}
-      </div>
+              <span className="ad-sidebar-icon">{item.icon}</span>
+              {item.label}
+              {item.count > 0 && <span className="ad-sidebar-badge">{item.count}</span>}
+            </div>
+          ))}
 
-      {loading ? (
-        <div className="ad-loading">جاري تحميل الطلبات...</div>
-      ) : currentApps.length === 0 ? (
-        <div className="ad-empty">لا توجد طلبات في هذا القسم</div>
-      ) : (
+          <div className="ad-sidebar-divider" />
+
+          <div
+            className={`ad-sidebar-item${activeSection === 'batches' ? ' ad-sidebar-item--active' : ''}`}
+            onClick={() => { setActiveSection('batches'); loadBatches(); loadConfig(); }}
+          >
+            <span className="ad-sidebar-icon">🗂</span>
+            تجميعات الاستلام
+            {batches.length > 0 && <span className="ad-sidebar-badge">{batches.length}</span>}
+          </div>
+
+        </aside>
+
+        {/* Main content */}
+        <main className="ad-content">
+          {loadError && <div className="ad-error">{loadError}</div>}
+
+          {/* Filter tabs — only for application sections */}
+          {activeSection !== 'batches' && (
+            <div className="ad-tabs">
+              {(['pending', 'approved', 'rejected'] as FilterTab[]).map(tab => {
+                const count = allCurrentApps.filter(a => a.status === tab).length;
+                return (
+                  <button
+                    key={tab}
+                    type="button"
+                    className={`ad-tab ad-tab--${tab}${activeTab === tab ? ' ad-tab--active' : ''}`}
+                    onClick={() => setActiveTab(tab)}
+                  >
+                    {TAB_LABELS[tab]}
+                    <span className="ad-tab-count">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {activeSection !== 'batches' && (loading ? (
+            <div className="ad-loading">جاري تحميل الطلبات...</div>
+          ) : currentApps.length === 0 ? (
+            <div className="ad-empty">لا توجد طلبات في هذا القسم</div>
+          ) : (
         <div className="ad-cards">
           {/* ── Merchant cards ── */}
           {activeSection === 'merchant' && (filteredMerchants as MerchantApp[]).map(app => (
@@ -712,7 +894,252 @@ export default function AdminDashboard() {
             </div>
           ))}
         </div>
-      )}
+          ))}
+
+          {/* ── Batches section ── */}
+          {activeSection === 'batches' && (
+            <div className="ad-batches-layout">
+
+              {/* Left: batch list */}
+              <div className="ad-batches-main">
+
+                {/* Header row */}
+                <div className="ad-batches-header">
+                  <h2 className="ad-batches-title">تجميعات الاستلام — الميل الأول</h2>
+                  <div className="ad-batches-header-actions">
+                    <button className="ad-batches-refresh" onClick={loadBatches} disabled={batchesLoading}>↻ تحديث</button>
+                    <button className="ad-assign-btn" onClick={runAssignment} disabled={assigning || batches.length === 0}>
+                      {assigning ? '⏳ جاري التعيين...' : '🚗 تعيين السائقين'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Assignment result summary */}
+                {assignError   && <div className="ad-error">{assignError}</div>}
+                {assignSummary && (
+                  <div className="ad-assign-summary">
+                    <span className="ad-assign-summary-item ad-assign-summary-item--ok">✔ {assignSummary.assigned} دفعة تم تعيينها</span>
+                    {assignSummary.unassigned > 0 && (
+                      <span className="ad-assign-summary-item ad-assign-summary-item--warn">⚠ {assignSummary.unassigned} في قائمة الانتظار</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Filter tabs */}
+                {batches.length > 0 && (
+                  <div className="ad-batch-filters">
+                    {(['all', 'assigned', 'unassigned'] as const).map(f => {
+                      const count = f === 'all' ? batches.length
+                        : f === 'assigned'   ? batches.filter(b => b.assigned_driver).length
+                        : batches.filter(b => b.assigned_driver === null).length;
+                      return (
+                        <button
+                          key={f}
+                          className={`ad-batch-filter-btn${batchFilter === f ? ' ad-batch-filter-btn--active' : ''}`}
+                          onClick={() => setBatchFilter(f)}
+                        >
+                          {f === 'all' ? 'الكل' : f === 'assigned' ? '✔ مُعيَّنة' : '⏳ قائمة الانتظار'}
+                          <span className="ad-batch-filter-count">{count}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {batchesLoading && <div className="ad-loading">جاري حساب التجميعات...</div>}
+                {batchesError  && <div className="ad-error">{batchesError}</div>}
+                {!batchesLoading && !batchesError && batches.length === 0 && (
+                  <div className="ad-empty">لا توجد طلبات معلقة للتجميع حالياً</div>
+                )}
+
+                {!batchesLoading && batches
+                  .filter(b =>
+                    batchFilter === 'all'        ? true :
+                    batchFilter === 'assigned'   ? !!b.assigned_driver :
+                    b.assigned_driver === null
+                  )
+                  .map((batch, idx) => {
+                    // use original index for expand key
+                    const origIdx = batches.indexOf(batch);
+                    const batchOpen = expandedBatches.has(origIdx);
+                    const isAssigned = !!batch.assigned_driver;
+                    const isQueued   = batch.assigned_driver === null;
+                    return (
+                    <div key={origIdx} className={`ad-batch-card${isAssigned ? ' ad-batch-card--assigned' : isQueued ? ' ad-batch-card--queued' : ''}`}>
+
+                      {/* Header */}
+                      <div className="ad-batch-header ad-batch-header--clickable" onClick={() => toggleBatch(origIdx)}>
+                        <div className="ad-batch-title">
+                          <span className="ad-batch-num">دفعة {origIdx + 1}</span>
+                          <span className="ad-batch-chip">{batch.stops} {batch.stops === 1 ? 'متجر' : 'متاجر'}</span>
+                          <span className="ad-batch-chip ad-batch-chip--vol">حجم {batch.total_volume} وحدة</span>
+                          {isAssigned && (
+                            <span className="ad-batch-chip ad-batch-chip--driver">🚗 {batch.assigned_driver!.name}</span>
+                          )}
+                          {isQueued && (
+                            <span className="ad-batch-chip ad-batch-chip--queued">⏳ انتظار</span>
+                          )}
+                          <span className="ad-batch-chevron">{batchOpen ? '▲' : '▼'}</span>
+                        </div>
+                        <div className="ad-batch-orders-summary">
+                          {batch.stops} محطة استلام — انقر لعرض التفاصيل
+                        </div>
+                      </div>
+
+                      {/* Shop list */}
+                      {batchOpen && (
+                        <div className="ad-batch-shops">
+                          {batch.shops.map((shop, si) => {
+                            const shopKey = `${origIdx}-${shop.shop_id}`;
+                            const shopOpen = expandedShops.has(shopKey);
+                            return (
+                              <div key={shop.shop_id} className="ad-batch-shop-block">
+                                <div className="ad-batch-shop-row ad-batch-shop-row--clickable" onClick={() => toggleShop(shopKey)}>
+                                  <span className="ad-batch-stop-num">{si + 1}</span>
+                                  <div className="ad-batch-shop-info">
+                                    <span className="ad-batch-shop-id">{shop.shop_name}</span>
+                                    <span className="ad-batch-shop-meta">
+                                      {shop.order_ids.length} {shop.order_ids.length === 1 ? 'طلب' : 'طلبات'} · حجم {shop.total_volume} وحدة · جاهز{' '}
+                                      {new Date(shop.ready_time).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  </div>
+                                  <div className="ad-batch-shop-actions">
+                                    <a href={`https://www.google.com/maps?q=${shop.lat},${shop.lng}`} target="_blank" rel="noreferrer" className="ad-batch-map-link" onClick={e => e.stopPropagation()}>
+                                      📍 خريطة
+                                    </a>
+                                    <span className="ad-batch-chevron">{shopOpen ? '▲' : '▼'}</span>
+                                  </div>
+                                </div>
+                                {shopOpen && (
+                                  <div className="ad-batch-shop-detail">
+                                    <span className="ad-batch-detail-label">المنتجات المطلوب استلامها:</span>
+                                    <div className="ad-batch-item-list">
+                                      {shop.items.map((item, i) => (
+                                        <div key={i} className="ad-batch-item-row">
+                                          <span className="ad-batch-item-qty">×{item.qty}</span>
+                                          <span className="ad-batch-item-name">{item.product_title}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <div className="ad-batch-detail-pills" style={{ marginTop: '0.5rem' }}>
+                                      {shop.order_ids.map(id => (
+                                        <span key={id} className="ad-batch-order-pill">ORD-{String(id).padStart(3, '0')}</span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    );
+                  })}
+              </div>
+
+              {/* Right: config panel */}
+              <div className="ad-config-panel">
+                <h3 className="ad-config-panel-title">⚙️ إعدادات التجميع</h3>
+
+                {configError   && <div className="ad-error" style={{ fontSize: '0.82rem' }}>{configError}</div>}
+                {configSuccess && <div className="ad-config-success">✔ تم الحفظ</div>}
+
+                {configLoading
+                  ? <div style={{ color: '#888', fontSize: '0.85rem', padding: '1rem 0' }}>جاري التحميل...</div>
+                  : (
+                    <div className="ad-config-fields" onClick={() => setActiveTooltip(null)}>
+
+                      {/* Capacity */}
+                      <div className="ad-config-field">
+                        <div className="ad-config-label-row">
+                          <span className="ad-config-label-text">الطاقة الاستيعابية</span>
+                          <button className="ad-config-info-btn" onClick={e => { e.stopPropagation(); setActiveTooltip(t => t === 'capacity' ? null : 'capacity'); }}>!</button>
+                          {activeTooltip === 'capacity' && (
+                            <div className="ad-config-tooltip">الحد الأقصى لمجموع وحدات الحجم التي يستطيع سائق واحد حملها في رحلة استلام واحدة</div>
+                          )}
+                        </div>
+                        <div className="ad-config-input-row">
+                          <input type="number" min={1} max={200} className="ad-config-input"
+                            value={draftConfig.max_driver_capacity}
+                            onChange={e => { setConfigSuccess(false); setDraftConfig(p => ({ ...p, max_driver_capacity: e.target.value })); }}
+                          />
+                          <span className="ad-config-unit">وحدة</span>
+                        </div>
+                      </div>
+
+                      {/* Stops */}
+                      <div className="ad-config-field">
+                        <div className="ad-config-label-row">
+                          <span className="ad-config-label-text">الحد الأقصى للمحطات</span>
+                          <button className="ad-config-info-btn" onClick={e => { e.stopPropagation(); setActiveTooltip(t => t === 'stops' ? null : 'stops'); }}>!</button>
+                          {activeTooltip === 'stops' && (
+                            <div className="ad-config-tooltip">أقصى عدد من المتاجر يمكن للسائق زيارتها في دفعة استلام واحدة</div>
+                          )}
+                        </div>
+                        <div className="ad-config-input-row">
+                          <input type="number" min={1} max={20} className="ad-config-input"
+                            value={draftConfig.max_stops_per_batch}
+                            onChange={e => { setConfigSuccess(false); setDraftConfig(p => ({ ...p, max_stops_per_batch: e.target.value })); }}
+                          />
+                          <span className="ad-config-unit">متجر</span>
+                        </div>
+                      </div>
+
+                      {/* Wait */}
+                      <div className="ad-config-field">
+                        <div className="ad-config-label-row">
+                          <span className="ad-config-label-text">وقت الانتظار</span>
+                          <button className="ad-config-info-btn" onClick={e => { e.stopPropagation(); setActiveTooltip(t => t === 'wait' ? null : 'wait'); }}>!</button>
+                          {activeTooltip === 'wait' && (
+                            <div className="ad-config-tooltip">الوقت الأقصى (بالدقائق) الذي يُسمح فيه للطرد بالانتظار قبل الاستلام — يُستخدم للتنبيهات فقط ولا يوقف التجميع</div>
+                          )}
+                        </div>
+                        <div className="ad-config-input-row">
+                          <input type="number" min={10} max={480} className="ad-config-input"
+                            value={draftConfig.max_allowed_wait}
+                            onChange={e => { setConfigSuccess(false); setDraftConfig(p => ({ ...p, max_allowed_wait: e.target.value })); }}
+                          />
+                          <span className="ad-config-unit">دقيقة</span>
+                        </div>
+                      </div>
+
+                      {/* Distance */}
+                      <div className="ad-config-field">
+                        <div className="ad-config-label-row">
+                          <span className="ad-config-label-text">الحد الأقصى للمسافة</span>
+                          <button className="ad-config-info-btn" onClick={e => { e.stopPropagation(); setActiveTooltip(t => t === 'dist' ? null : 'dist'); }}>!</button>
+                          {activeTooltip === 'dist' && (
+                            <div className="ad-config-tooltip">أبعد مسافة (بالكيلومتر) مسموح بها بين أي متجرين داخل نفس الدفعة — تُحسب بخط مستقيم</div>
+                          )}
+                        </div>
+                        <div className="ad-config-input-row">
+                          <input type="number" min={0.5} max={50} step={0.5} className="ad-config-input"
+                            value={draftConfig.max_distance_km}
+                            onChange={e => { setConfigSuccess(false); setDraftConfig(p => ({ ...p, max_distance_km: e.target.value })); }}
+                          />
+                          <span className="ad-config-unit">كم</span>
+                        </div>
+                      </div>
+
+                      <button
+                        className={`ad-config-save-btn${configChanged ? '' : ' ad-config-save-btn--inactive'}`}
+                        onClick={configChanged ? saveConfig : undefined}
+                        disabled={configSaving}
+                        style={{ cursor: configChanged ? 'pointer' : 'default' }}
+                      >
+                        {configSaving ? 'جاري الحفظ...' : '💾 حفظ'}
+                      </button>
+                    </div>
+                  )
+                }
+              </div>
+
+            </div>
+          )}
+
+        </main>
+      </div>{/* end ad-body */}
 
       {/* Lightbox */}
       {lightbox && (

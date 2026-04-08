@@ -19,7 +19,12 @@ import {
   type LatLng,
   type RouteStop,
 } from "./mapsService.js";
-import { createBatches, type ShopPickup } from "../../server/services/batchingService.js";
+import { createBatches, type ShopPickup } from "../../../server/services/batchingService.js";
+import {
+  assignBatchesToDrivers,
+  type AssignmentBatch,
+  type Driver,
+} from "../../../server/services/assignmentService.js";
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -569,51 +574,57 @@ export async function getBatches(_req: Request, res: Response) {
       .select("max_driver_capacity, max_stops_per_batch, max_allowed_wait, max_distance_km")
       .single();
 
-    if (cfgErr || !cfg)
-      return res.status(500).json({ ok: false, error: "فشل تحميل إعدادات التجميع" });
+    // Fall back to sensible defaults if the table doesn't exist yet
+    const config = (!cfgErr && cfg) ? cfg : {
+      max_driver_capacity: 20,
+      max_stops_per_batch: 6,
+      max_allowed_wait:    60,
+      max_distance_km:     5,
+    };
 
-    // 2. Fetch all pending order_details (each row = one line item)
+    // 2. Fetch pending order_details that have NOT been batched yet
     const { data: details, error: detErr } = await supabase
       .from("order_details")
-      .select("order_id, shop_id, product_id, qty")
-      .eq("package_status", "pending");
+      .select("order_id, shop_id, product_id, qty, ready_time")
+      .eq("package_status", "pending")
+      .is("batch_id", null);
 
     if (detErr) return res.status(500).json({ ok: false, error: detErr.message });
     if (!details?.length) return res.json({ ok: true, batches: [] });
 
-    const shopIds  = [...new Set(details.map((d) => d.shop_id))];
-    const orderIds = [...new Set(details.map((d) => d.order_id))];
+    const shopIds    = [...new Set(details.map((d) => d.shop_id))];
+    const orderIds   = [...new Set(details.map((d) => d.order_id))];
     const productIds = [...new Set(details.map((d) => d.product_id).filter(Boolean))];
 
     // 3. Fetch shop locations
     const { data: shops } = await supabase
       .from("shops")
-      .select("shop_id, shop_lat, shop_lng")
+      .select("shop_id, name, shop_lat, shop_lng")
       .in("shop_id", shopIds);
 
     const shopMap = new Map((shops ?? []).map((s) => [s.shop_id, s]));
 
-    // 4. Fetch orders to get ready_time (falls back to created_at when null)
+    // 4. Fetch orders — only for created_at fallback when ready_time is null
     const { data: orders } = await supabase
       .from("orders")
-      .select("id, ready_time, created_at")
+      .select("id, created_at")
       .in("id", orderIds);
 
-    const orderTimeMap = new Map(
-      (orders ?? []).map((o) => [
-        o.id,
-        new Date(o.ready_time ?? o.created_at).getTime(),
-      ])
+    const orderCreatedMap = new Map(
+      (orders ?? []).map((o) => [o.id, new Date(o.created_at).getTime()])
     );
 
-    // 5. Fetch product capacity_units for volume calculation
+    // 5. Fetch product title + capacity_units
     const { data: products } = await supabase
       .from("products")
-      .select("id, capacity_units")
+      .select("id, title, capacity_units")
       .in("id", productIds);
 
     const capacityMap = new Map(
       (products ?? []).map((p) => [p.id, (p.capacity_units as number) ?? 3])
+    );
+    const titleMap = new Map(
+      (products ?? []).map((p) => [p.id, (p.title as string) ?? "منتج غير معروف"])
     );
 
     // 6. Aggregate order_details into one ShopPickup per shop
@@ -623,44 +634,302 @@ export async function getBatches(_req: Request, res: Response) {
       const shop = shopMap.get(d.shop_id);
       if (!shop?.shop_lat || !shop?.shop_lng) continue; // skip shops with no location
 
+      // Resolve this row's time: use ready_time if the merchant marked it, else order created_at
+      const rowTime = d.ready_time
+        ? new Date(d.ready_time).getTime()
+        : (orderCreatedMap.get(d.order_id) ?? Date.now());
+
       if (!shopPickupMap.has(d.shop_id)) {
         shopPickupMap.set(d.shop_id, {
           shop_id:      d.shop_id,
+          shop_name:    shop.name ?? d.shop_id,
           lat:          shop.shop_lat,
           lng:          shop.shop_lng,
-          ready_time:   orderTimeMap.get(d.order_id) ?? Date.now(),
+          ready_time:   rowTime,
           total_volume: 0,
           order_ids:    [],
+          items:        [],
         });
       }
 
       const entry = shopPickupMap.get(d.shop_id)!;
 
-      // Use the earliest ready_time across all orders for this shop
-      const t = orderTimeMap.get(d.order_id) ?? Date.now();
-      if (t < entry.ready_time) entry.ready_time = t;
+      // Keep the earliest time across all rows for this shop
+      if (rowTime < entry.ready_time) entry.ready_time = rowTime;
 
       // Accumulate volume: qty × capacity_units (default 3 if unknown)
       const units = capacityMap.get(d.product_id) ?? 3;
-      entry.total_volume += (d.qty ?? 1) * units;
+      const qty   = d.qty ?? 1;
+      entry.total_volume += qty * units;
 
       // Collect unique order IDs
       if (!entry.order_ids.includes(d.order_id)) {
         entry.order_ids.push(d.order_id);
       }
+
+      // Accumulate product lines — merge duplicates by title
+      const title = titleMap.get(d.product_id) ?? "منتج غير معروف";
+      const existing = entry.items.find(i => i.product_title === title);
+      if (existing) existing.qty += qty;
+      else entry.items.push({ product_title: title, qty });
     }
 
     const shopPickups = Array.from(shopPickupMap.values());
 
     // 7. Run the batching algorithm with the config from Supabase
     const batches = createBatches(shopPickups, {
-      MAX_DRIVER_CAPACITY: cfg.max_driver_capacity,
-      MAX_STOPS_PER_BATCH: cfg.max_stops_per_batch,
-      MAX_ALLOWED_WAIT:    cfg.max_allowed_wait,
-      MAX_DISTANCE_KM:     cfg.max_distance_km,
+      MAX_DRIVER_CAPACITY: config.max_driver_capacity,
+      MAX_STOPS_PER_BATCH: config.max_stops_per_batch,
+      MAX_ALLOWED_WAIT:    config.max_allowed_wait,
+      MAX_DISTANCE_KM:     config.max_distance_km,
     });
 
-    return res.json({ ok: true, batches });
+    // Debug: log per-shop volumes so capacity issues can be spotted in server logs
+    console.log('[batches] config:', config);
+    console.log('[batches] shop volumes:', shopPickups.map(s => ({
+      name: s.shop_name, volume: s.total_volume, orders: s.order_ids.length
+    })));
+
+    return res.json({
+      ok: true,
+      batches,
+      _debug: {
+        config,
+        shop_volumes: shopPickups.map(s => ({
+          name:   s.shop_name,
+          volume: s.total_volume,
+          stops:  s.order_ids.length,
+        })),
+      },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+}
+
+// POST /api/logistics/assign
+// Runs the driver assignment algorithm against current pending batches and
+// available drivers. Persists results to batch_assignments and updates driver
+// state in the drivers table.
+export async function assignBatches(_req: Request, res: Response) {
+  try {
+    // 1. Load batch_config for batching + assignment settings
+    const { data: cfg } = await supabase
+      .from("batch_config")
+      .select("max_driver_capacity, max_stops_per_batch, max_allowed_wait, max_distance_km")
+      .single();
+
+    const batchCfg = cfg ?? {
+      max_driver_capacity: 20,
+      max_stops_per_batch: 6,
+      max_allowed_wait:    60,
+      max_distance_km:     5,
+    };
+
+    // 2. Only fetch order_details that have NOT been batched yet (batch_id IS NULL)
+    // This prevents re-assigning rows that already belong to a saved batch.
+    const { data: details, error: detErr } = await supabase
+      .from("order_details")
+      .select("order_id, shop_id, product_id, qty, ready_time")
+      .eq("package_status", "pending")
+      .is("batch_id", null);
+
+    if (detErr) return res.status(500).json({ ok: false, error: detErr.message });
+    if (!details?.length) return res.json({ ok: true, assignments: {}, unassigned: [], total_batches: 0, assigned_count: 0, unassigned_count: 0 });
+
+    const shopIds    = [...new Set(details.map((d) => d.shop_id))];
+    const orderIds   = [...new Set(details.map((d) => d.order_id))];
+    const productIds = [...new Set(details.map((d) => d.product_id).filter(Boolean))];
+
+    const [{ data: shops }, { data: orders }, { data: products }] = await Promise.all([
+      supabase.from("shops").select("shop_id, name, shop_lat, shop_lng").in("shop_id", shopIds),
+      supabase.from("orders").select("id, created_at").in("id", orderIds),
+      supabase.from("products").select("id, title, capacity_units").in("id", productIds),
+    ]);
+
+    const shopMap     = new Map((shops    ?? []).map((s) => [s.shop_id, s]));
+    const orderMap    = new Map((orders   ?? []).map((o) => [o.id, new Date(o.created_at).getTime()]));
+    const capacityMap = new Map((products ?? []).map((p) => [p.id, (p.capacity_units as number) ?? 3]));
+
+    const shopPickupMap = new Map<string, ShopPickup>();
+
+    for (const d of details) {
+      const shop = shopMap.get(d.shop_id);
+      if (!shop?.shop_lat || !shop?.shop_lng) continue;
+
+      const rowTime = d.ready_time
+        ? new Date(d.ready_time).getTime()
+        : (orderMap.get(d.order_id) ?? Date.now());
+
+      if (!shopPickupMap.has(d.shop_id)) {
+        shopPickupMap.set(d.shop_id, {
+          shop_id:      d.shop_id,
+          shop_name:    shop.name ?? d.shop_id,
+          lat:          shop.shop_lat,
+          lng:          shop.shop_lng,
+          ready_time:   rowTime,
+          total_volume: 0,
+          order_ids:    [],
+          items:        [],
+        });
+      }
+
+      const entry = shopPickupMap.get(d.shop_id)!;
+      if (rowTime < entry.ready_time) entry.ready_time = rowTime;
+      entry.total_volume += (d.qty ?? 1) * (capacityMap.get(d.product_id) ?? 3);
+      if (!entry.order_ids.includes(d.order_id)) entry.order_ids.push(d.order_id);
+    }
+
+    const rawBatches = createBatches(Array.from(shopPickupMap.values()), {
+      MAX_DRIVER_CAPACITY: batchCfg.max_driver_capacity,
+      MAX_STOPS_PER_BATCH: batchCfg.max_stops_per_batch,
+      MAX_ALLOWED_WAIT:    batchCfg.max_allowed_wait,
+      MAX_DISTANCE_KM:     batchCfg.max_distance_km,
+    });
+
+    // 3. Persist each batch to the batches table and get real DB IDs.
+    // created_at is set to the earliest ready_time in the batch so the
+    // relaxation algorithm correctly reflects how long items have been waiting.
+    const nowMs = Date.now();
+    const assignmentBatches: AssignmentBatch[] = [];
+
+    for (const b of rawBatches) {
+      const earliestReady = Math.min(...b.shops.map((s) => s.ready_time));
+
+      const { data: inserted, error: insertErr } = await supabase
+        .from("batches")
+        .insert({
+          created_at:   new Date(earliestReady).toISOString(),
+          status:       "pending",
+          total_volume: b.total_volume,
+          stops:        b.stops,
+        })
+        .select("id")
+        .single();
+
+      if (insertErr || !inserted) {
+        console.error("[assign] failed to insert batch:", insertErr?.message);
+        continue;
+      }
+
+      assignmentBatches.push({
+        id:           String(inserted.id),
+        shops:        b.shops.map((s) => ({
+          shop_id:      s.shop_id,
+          lat:          s.lat,
+          lng:          s.lng,
+          ready_time:   s.ready_time,
+          total_volume: s.total_volume,
+        })),
+        order_ids:    b.order_ids,
+        total_volume: b.total_volume,
+        stops:        b.stops,
+        created_at:   earliestReady,
+      });
+    }
+
+    // 4. Fetch available drivers with live state
+    const { data: driversData, error: drvErr } = await supabase
+      .from("drivers")
+      .select("driver_id, current_lat, current_lng, is_available, available_at, remaining_capacity, current_batches")
+      .not("current_lat", "is", null)
+      .not("current_lng", "is", null);
+
+    if (drvErr) return res.status(500).json({ ok: false, error: drvErr.message });
+    if (!driversData?.length) {
+      return res.json({ ok: true, assignments: {}, unassigned: assignmentBatches.map((b) => b.id) });
+    }
+
+    const drivers: Driver[] = driversData.map((d) => ({
+      driver_id:          String(d.driver_id),
+      lat:                d.current_lat,
+      lng:                d.current_lng,
+      available:          d.is_available ?? false,
+      available_at:       d.available_at ? new Date(d.available_at).getTime() : nowMs,
+      remaining_capacity: d.remaining_capacity ?? batchCfg.max_driver_capacity,
+      current_batches:    d.current_batches    ?? 0,
+    }));
+
+    // 5. Run assignment algorithm
+    const assignmentConfig = {
+      MAX_DRIVER_CAPACITY:        batchCfg.max_driver_capacity,
+      MAX_DRIVER_BATCHES:         3,
+      MAX_ASSIGNMENT_DISTANCE_KM: 10,
+      DISTANCE_WEIGHT:            1.0,
+      AVAILABILITY_WEIGHT:        0.5,
+      LOAD_WEIGHT:                2.0,
+      RELAXATION_STEPS: [
+        { wait_minutes:  0, max_distance_multiplier: 1.0, allow_future_driver: false },
+        { wait_minutes: 15, max_distance_multiplier: 1.5, allow_future_driver: false },
+        { wait_minutes: 30, max_distance_multiplier: 2.0, allow_future_driver: true  },
+        { wait_minutes: 60, max_distance_multiplier: 3.0, allow_future_driver: true  },
+      ],
+    };
+
+    const result = assignBatchesToDrivers(assignmentBatches, drivers, assignmentConfig);
+
+    // 6. Persist results:
+    //    a) stamp order_details with batch_id + assigned_driver_id
+    //    b) update batches.assigned_driver_id + batches.status
+    for (const batch of assignmentBatches) {
+      const dbBatchId  = parseInt(batch.id);
+      const driverIdStr = result.assignments[batch.id];
+      const driverId    = driverIdStr ? parseInt(driverIdStr) : null;
+      const shopIds     = batch.shops.map((s) => s.shop_id);
+      const batchStatus = driverId ? "assigned" : "unassigned";
+
+      // 6a. Stamp order_details rows with batch_id (and driver if assigned)
+      const updatePayload: Record<string, unknown> = { batch_id: dbBatchId };
+      if (driverId) updatePayload.assigned_driver_id = driverId;
+
+      const { error: odErr } = await supabase
+        .from("order_details")
+        .update(updatePayload)
+        .in("shop_id",  shopIds)
+        .in("order_id", batch.order_ids)
+        .eq("package_status", "pending");
+
+      if (odErr) console.error(`[assign] order_details update failed for batch ${dbBatchId}:`, odErr.message);
+
+      // 6b. Update the batches row with assignment result
+      const { error: batchErr } = await supabase
+        .from("batches")
+        .update({ assigned_driver_id: driverId, status: batchStatus })
+        .eq("id", dbBatchId);
+
+      if (batchErr) console.error(`[assign] batches update failed for ${dbBatchId}:`, batchErr.message);
+    }
+
+    // 7. Update driver state in DB (capacity + current_batches)
+    for (const updated of result.updated_drivers) {
+      const original = drivers.find((d) => d.driver_id === updated.driver_id);
+      if (!original) continue;
+
+      // Only write rows that actually changed
+      const changed =
+        updated.remaining_capacity !== original.remaining_capacity ||
+        updated.current_batches    !== original.current_batches;
+
+      if (changed) {
+        await supabase
+          .from("drivers")
+          .update({
+            remaining_capacity: updated.remaining_capacity,
+            current_batches:    updated.current_batches,
+          })
+          .eq("driver_id", parseInt(updated.driver_id));
+      }
+    }
+
+    return res.json({
+      ok:          true,
+      assignments: result.assignments,
+      unassigned:  result.unassigned_batches.map((b) => b.id),
+      total_batches:   assignmentBatches.length,
+      assigned_count:  Object.keys(result.assignments).length,
+      unassigned_count: result.unassigned_batches.length,
+    });
+
   } catch (err: any) {
     return res.status(500).json({ ok: false, error: err.message });
   }

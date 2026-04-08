@@ -251,6 +251,48 @@
 }
 .mo-empty-icon { font-size: 3rem; margin-bottom: 0.5rem; }
 
+/* ── Filter tabs ── */
+.mo-filters {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.mo-filter-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  padding: 0.4rem 1rem;
+  font-family: var(--font-main);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.mo-filter-btn:hover { background: var(--color-bg); color: var(--color-text); }
+.mo-filter-btn--active {
+  background: #fff0eb;
+  border-color: #e8572a;
+  color: #e8572a;
+}
+
+.mo-filter-count {
+  background: var(--color-bg);
+  border-radius: 10px;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.mo-filter-btn--active .mo-filter-count {
+  background: #e8572a22;
+  color: #e8572a;
+}
+
 .mo-list { display: flex; flex-direction: column; gap: 0.85rem; }
 
 /* ── Order card ── */

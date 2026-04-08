@@ -13,8 +13,14 @@
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export interface ShopItem {
+  product_title: string;
+  qty: number;
+}
+
 export interface ShopPickup {
   shop_id: string;
+  shop_name: string;
   lat: number;
   lng: number;
   /** Unix timestamp (ms) — earliest order ready_time for this shop */
@@ -23,6 +29,8 @@ export interface ShopPickup {
   total_volume: number;
   /** All order IDs linked to this shop's pending packages */
   order_ids: number[];
+  /** Individual product lines to be collected from this shop */
+  items: ShopItem[];
 }
 
 export interface BatchConfig {
@@ -122,7 +130,6 @@ export function createBatches(
   const {
     MAX_DRIVER_CAPACITY,
     MAX_STOPS_PER_BATCH,
-    MAX_ALLOWED_WAIT,
     MAX_DISTANCE_KM,
   } = config;
 
@@ -164,14 +171,11 @@ export function createBatches(
         const distKm = minDistanceToBatch(candidate, batchShops);
         if (distKm > MAX_DISTANCE_KM) continue;
 
-        // ── Wait constraint ──────────────────────────────────────────────────
-        // How long has the oldest package in the batch been waiting (minutes)?
-        const waitMinutes = (nowMs - oldestReadyTime(batchShops)) / 60_000;
-        if (waitMinutes > MAX_ALLOWED_WAIT) continue;
-
         // ── Score: lower is better ───────────────────────────────────────────
-        // Combines proximity (km) with urgency (wait × weight) so that a
-        // slightly farther shop can still win if it has been waiting much longer.
+        // Urgency (wait time) is captured in the score — no separate hard
+        // constraint needed because seed ordering already prioritises the most
+        // overdue shops first.
+        const waitMinutes = (nowMs - oldestReadyTime(batchShops)) / 60_000;
         const score = distKm + waitMinutes * WAIT_WEIGHT;
 
         if (score < bestScore) {

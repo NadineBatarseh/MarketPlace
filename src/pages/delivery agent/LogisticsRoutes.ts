@@ -11,6 +11,7 @@ import {
   getCollectorRoute,
   getDelivererRoute,
   getBatches,
+  assignBatches,
 } from "./LogisticsController.js";
 
 const router = Router();
@@ -35,5 +36,8 @@ router.post("/deliverer/route", getDelivererRoute);
 
 // Batching
 router.get("/batches", getBatches);
+
+// Assignment
+router.post("/assign", assignBatches);
 
 export default router;

@@ -24,14 +24,18 @@ interface MerchantOrder {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+type FilterKey = 'all' | 'pending' | 'processed';
+
+const PROCESSED_STATUSES = ['at_hub', 'consolidated', 'delivering', 'completed'];
+
 const fmt = (id: number) => `ORD-${String(id).padStart(3, '0')}`;
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
-  pending_collection: { label: 'بانتظار الاستلام', color: '#f59e0b' },
-  at_hub:             { label: 'في نقطة التجميع', color: '#3b82f6' },
-  consolidated:       { label: 'جاهز للتوصيل',   color: '#8b5cf6' },
-  delivering:         { label: 'قيد التوصيل',     color: '#0ea5e9' },
-  completed:          { label: 'تم التسليم',       color: '#22c55e' },
+  pending_collection: { label: 'في انتظار المعالجة', color: '#f59e0b' },
+  at_hub:             { label: 'تمت المعالجة',        color: '#3b82f6' },
+  consolidated:       { label: 'تمت المعالجة',        color: '#8b5cf6' },
+  delivering:         { label: 'تمت المعالجة',        color: '#0ea5e9' },
+  completed:          { label: 'تمت المعالجة',        color: '#22c55e' },
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -41,8 +45,9 @@ export default function MerchantOrders() {
   const [orders, setOrders]     = useState<MerchantOrder[]>([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState('');
-  const [marking, setMarking]   = useState<number | null>(null); // orderId being marked
+  const [marking, setMarking]   = useState<number | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const [filter, setFilter]     = useState<FilterKey>('all');
 
   const shopId = merchant?.shop?.shop_id;
 
@@ -55,10 +60,10 @@ export default function MerchantOrders() {
     setLoading(true);
     setError('');
     try {
-      // 1. Get all order_details rows for this shop
+      // 1. Get all order_details rows for this shop (ready_time lives here)
       const { data: details, error: detErr } = await supabase
         .from('order_details')
-        .select('id, order_id, product_id, qty, unit_price')
+        .select('id, order_id, product_id, qty, unit_price, ready_time')
         .eq('shop_id', sid);
 
       if (detErr) throw detErr;
@@ -67,10 +72,10 @@ export default function MerchantOrders() {
       const orderIds  = [...new Set(details.map(d => d.order_id as number))];
       const productIds = [...new Set(details.map(d => d.product_id as string).filter(Boolean))];
 
-      // 2. Fetch orders
+      // 2. Fetch orders (no ready_time here — it lives in order_details)
       const { data: ordersData, error: ordErr } = await supabase
         .from('orders')
-        .select('id, status, total_price, created_at, ready_time')
+        .select('id, status, total_price, created_at')
         .in('id', orderIds)
         .order('created_at', { ascending: false });
 
@@ -86,10 +91,15 @@ export default function MerchantOrders() {
         (products ?? []).map(p => [p.id, { title: p.title, image: p.image_urls?.[0] ?? null }])
       );
 
-      // 4. Build order → items map (only this shop's items)
-      const itemsByOrder = new Map<number, OrderItem[]>();
+      // 4. Build order → items map and derive ready_time per order from details rows
+      const itemsByOrder   = new Map<number, OrderItem[]>();
+      const readyTimeByOrder = new Map<number, string | null>();
+
       for (const d of details) {
-        if (!itemsByOrder.has(d.order_id)) itemsByOrder.set(d.order_id, []);
+        if (!itemsByOrder.has(d.order_id)) {
+          itemsByOrder.set(d.order_id, []);
+          readyTimeByOrder.set(d.order_id, null);
+        }
         const prod = productMap.get(d.product_id);
         itemsByOrder.get(d.order_id)!.push({
           id:            d.id,
@@ -99,6 +109,15 @@ export default function MerchantOrders() {
           qty:           d.qty ?? 1,
           unit_price:    Number(d.unit_price) || 0,
         });
+
+        // The order is ready when ALL its detail rows for this shop have ready_time set.
+        // We track the earliest non-null value; null means at least one row isn't ready yet.
+        if (d.ready_time) {
+          const current = readyTimeByOrder.get(d.order_id);
+          if (!current || d.ready_time < current) {
+            readyTimeByOrder.set(d.order_id, d.ready_time);
+          }
+        }
       }
 
       // 5. Merge into final list
@@ -107,7 +126,7 @@ export default function MerchantOrders() {
         status:      o.status,
         total_price: Number(o.total_price) || 0,
         created_at:  o.created_at,
-        ready_time:  o.ready_time ?? null,
+        ready_time:  readyTimeByOrder.get(o.id) ?? null,
         items:       itemsByOrder.get(o.id) ?? [],
       }));
 
@@ -119,13 +138,14 @@ export default function MerchantOrders() {
     setLoading(false);
   };
 
-  // Mark an order's packages as ready for pickup
+  // Mark all this shop's order_details rows for the order as ready for pickup
   const markReady = async (orderId: number) => {
     setMarking(orderId);
     const { error } = await supabase
-      .from('orders')
+      .from('order_details')
       .update({ ready_time: new Date().toISOString() })
-      .eq('id', orderId);
+      .eq('order_id', orderId)
+      .eq('shop_id', shopId);
 
     if (error) {
       setError('فشل تحديث حالة الطلب');
@@ -162,14 +182,42 @@ export default function MerchantOrders() {
 
       {error && <div className="mo-error">{error}</div>}
 
-      {orders.length === 0 ? (
-        <div className="mo-empty">
-          <div className="mo-empty-icon">📭</div>
-          <p>لا توجد طلبات حتى الآن</p>
-        </div>
-      ) : (
-        <div className="mo-list">
-          {orders.map(order => {
+      {/* Filter tabs */}
+      <div className="mo-filters">
+        {([
+          { key: 'all',       label: 'الكل' },
+          { key: 'pending',   label: 'في انتظار المعالجة' },
+          { key: 'processed', label: 'تمت المعالجة' },
+        ] as { key: FilterKey; label: string }[]).map(f => (
+          <button
+            key={f.key}
+            className={`mo-filter-btn${filter === f.key ? ' mo-filter-btn--active' : ''}`}
+            onClick={() => setFilter(f.key)}
+          >
+            {f.label}
+            <span className="mo-filter-count">
+              {f.key === 'all'       ? orders.length
+               : f.key === 'pending'  ? orders.filter(o => !PROCESSED_STATUSES.includes(o.status)).length
+               : orders.filter(o => PROCESSED_STATUSES.includes(o.status)).length}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {(() => {
+        const visible = orders.filter(o =>
+          filter === 'all'       ? true
+          : filter === 'pending'   ? !PROCESSED_STATUSES.includes(o.status)
+          : PROCESSED_STATUSES.includes(o.status)
+        );
+        return visible.length === 0 ? (
+          <div className="mo-empty">
+            <div className="mo-empty-icon">📭</div>
+            <p>لا توجد طلبات في هذه الفئة</p>
+          </div>
+        ) : (
+          <div className="mo-list">
+            {visible.map(order => {
             const statusCfg = STATUS_LABEL[order.status] ?? { label: order.status, color: '#6b7280' };
             const isOpen    = expanded.has(order.id);
             const canMark   = order.status === 'pending_collection' && !order.ready_time;
@@ -253,8 +301,9 @@ export default function MerchantOrders() {
               </div>
             );
           })}
-        </div>
-      )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
