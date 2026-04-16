@@ -157,15 +157,44 @@ app.post("/api/chat", async (req: Request, res: Response) => {
 أجب دائماً باللغة العربية بشكل واضح ومختصر.
 إذا طُلب منك عمل يتعلق بالمنتجات أو الطلبات، اشرح ما يمكنك فعله.`;
 
-    const response = await anthropic.messages.create({
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    const { images } = req.body as { message: string; role: string; images?: { base64: string; mediaType: string }[] };
+
+    const userContent: any[] = [];
+    if (images?.length) {
+      for (const img of images) {
+        userContent.push({ type: "image", source: { type: "base64", media_type: img.mediaType, data: img.base64 } });
+      }
+    }
+    if (message) {
+      userContent.push({ type: "text", text: message });
+    }
+
+    const stream = anthropic.messages.stream({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 1024,
       system: systemPrompt,
-      messages: [{ role: "user", content: message }],
+      messages: [{ role: "user", content: userContent }],
     });
 
-    const reply = response.content[0].type === "text" ? response.content[0].text : "لم أفهم الطلب.";
-    return res.json({ ok: true, reply });
+    stream.on("text", (text) => {
+      res.write(`data: ${JSON.stringify({ text })}\n\n`);
+    });
+
+    stream.on("finalMessage", () => {
+      res.write(`data: [DONE]\n\n`);
+      res.end();
+    });
+
+    stream.on("error", (err) => {
+      console.error("[/api/chat] stream error:", err.message);
+      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+      res.end();
+    });
+
   } catch (err: any) {
     console.error("[/api/chat] error:", err.message);
     return res.status(500).json({ ok: false, error: err.message });
