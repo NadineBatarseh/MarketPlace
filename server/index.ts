@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import "dotenv/config";
 import type { Request, Response } from "express";
+import Anthropic from "@anthropic-ai/sdk";
 import { fileURLToPath } from "url";
 import path from "path";
 import { supabase } from "./supabase.js";
@@ -139,6 +140,36 @@ app.get("/api/products", async (_req: Request, res: Response) => {
   }
 
   return res.json({ ok: true, products: data });
+});
+
+/* ---------- CHAT (Claude) ---------- */
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+app.post("/api/chat", async (req: Request, res: Response) => {
+  const { message, role } = req.body as { message: string; role: string };
+
+  if (!message) return res.status(400).json({ ok: false, error: "Missing message" });
+
+  try {
+    const systemPrompt = `أنت مساعد ذكي لمنصة سوق لينك.
+دورك: ${role === "merchant" ? "مساعدة التاجر في إدارة متجره ومنتجاته وطلباته" : "مساعدة المستخدم"}.
+أجب دائماً باللغة العربية بشكل واضح ومختصر.
+إذا طُلب منك عمل يتعلق بالمنتجات أو الطلبات، اشرح ما يمكنك فعله.`;
+
+    const response = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages: [{ role: "user", content: message }],
+    });
+
+    const reply = response.content[0].type === "text" ? response.content[0].text : "لم أفهم الطلب.";
+    return res.json({ ok: true, reply });
+  } catch (err: any) {
+    console.error("[/api/chat] error:", err.message);
+    return res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 /* ---------- SEARCH ---------- */

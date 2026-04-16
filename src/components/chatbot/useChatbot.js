@@ -1,8 +1,14 @@
 import { useState, useRef, useEffect } from "react";
 
-async function sendToAssistant(message, role, allowedTools) {
-  // placeholder — will connect to MCP later
-  return `وصلتني رسالتك: "${message}" (الدور: ${role})`;
+async function sendToAssistant(message, role) {
+  const res = await fetch("http://localhost:4000/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, role }),
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error);
+  return data.reply;
 }
 
 export function useChatbot(role, config) {
@@ -26,7 +32,7 @@ export function useChatbot(role, config) {
     setLoading(true);
 
     try {
-      const reply = await sendToAssistant(currentInput, role, config.allowedTools);
+      const reply = await sendToAssistant(currentInput, role);
       setMessages((prev) => [...prev, { sender: "bot", text: reply }]);
     } catch {
       setMessages((prev) => [
