@@ -1,10 +1,14 @@
 import { useState, useRef, useEffect } from "react";
+import supabase from "../../lib/supabase";
 
 async function sendToAssistant(message, role, images, onChunk) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const sb_auth_token = session?.access_token;
+
   const res = await fetch("http://localhost:4000/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, role, images }),
+    body: JSON.stringify({ message, role, images, sb_auth_token }),
   });
 
   const reader = res.body.getReader();

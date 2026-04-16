@@ -535,50 +535,80 @@ app.post("/api/chat", async (req: Request, res: Response) => {
     : `أنت مساعد ذكي لمنصة سوق لينك. ساعد العميل في البحث عن المنتجات والمتاجر.
 أجب دائماً باللغة العربية بشكل واضح ومختصر.`;
 
+  const { images } = req.body as { images?: { base64: string; mediaType: string }[] };
+
+  // Build user content (text + optional images)
+  const userContent: any[] = [];
+  if (images?.length) {
+    for (const img of images) {
+      userContent.push({ type: "image", source: { type: "base64", media_type: img.mediaType, data: img.base64 } });
+    }
+  }
+  if (message) userContent.push({ type: "text", text: message });
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
   try {
-    const messages: Anthropic.MessageParam[] = [{ role: "user", content: message }];
+    const chatMessages: Anthropic.MessageParam[] = [{ role: "user", content: userContent }];
 
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
+    // Agentic loop: call Claude → execute tools if needed → repeat until final answer
+    while (true) {
+      const response = await anthropic.messages.create({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1024,
+        system: systemPrompt,
+        tools,
+        messages: chatMessages,
+      });
 
-    const { images } = req.body as { message: string; role: string; images?: { base64: string; mediaType: string }[] };
+      chatMessages.push({ role: "assistant", content: response.content });
 
-    const userContent: any[] = [];
-    if (images?.length) {
-      for (const img of images) {
-        userContent.push({ type: "image", source: { type: "base64", media_type: img.mediaType, data: img.base64 } });
+      if (response.stop_reason === "tool_use") {
+        // Execute each tool Claude requested
+        const toolResults: Anthropic.ToolResultBlockParam[] = [];
+        for (const block of response.content) {
+          if (block.type === "tool_use") {
+            try {
+              const result = await executeTool(block.name, block.input as Record<string, any>, merchant_shop_id);
+              toolResults.push({ type: "tool_result", tool_use_id: block.id, content: result });
+            } catch (err: any) {
+              toolResults.push({ type: "tool_result", tool_use_id: block.id, content: `خطأ: ${err.message}`, is_error: true });
+            }
+          }
+        }
+        chatMessages.push({ role: "user", content: toolResults });
+        // Loop back → Claude will now form the final answer
+      } else {
+        // Final answer — stream it to the client
+        const finalText = response.content.find(b => b.type === "text")?.text ?? "لم أفهم الطلب.";
+        const stream = anthropic.messages.stream({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 1024,
+          system: systemPrompt,
+          messages: [...chatMessages.slice(0, -1), { role: "user", content: `اصغ الإجابة التالية بشكل جميل ومنظم باللغة العربية:\n${finalText}` }],
+        });
+
+        stream.on("text", (text) => {
+          res.write(`data: ${JSON.stringify({ text })}\n\n`);
+        });
+        stream.on("finalMessage", () => {
+          res.write(`data: [DONE]\n\n`);
+          res.end();
+        });
+        stream.on("error", (err) => {
+          console.error("[/api/chat] stream error:", err.message);
+          res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+          res.end();
+        });
+        break;
       }
     }
-    if (message) {
-      userContent.push({ type: "text", text: message });
-    }
-
-    const stream = anthropic.messages.stream({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userContent }],
-    });
-
-    stream.on("text", (text) => {
-      res.write(`data: ${JSON.stringify({ text })}\n\n`);
-    });
-
-    stream.on("finalMessage", () => {
-      res.write(`data: [DONE]\n\n`);
-      res.end();
-    });
-
-    stream.on("error", (err) => {
-      console.error("[/api/chat] stream error:", err.message);
-      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
-      res.end();
-    });
-
   } catch (err: any) {
     console.error("[/api/chat] error:", err.message);
-    return res.status(500).json({ ok: false, error: err.message });
+    res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+    res.end();
   }
 });
 

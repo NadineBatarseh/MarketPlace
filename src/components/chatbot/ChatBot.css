@@ -49,15 +49,36 @@
   color: white;
   font-weight: bold;
   font-size: 15px;
+  cursor: grab;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
-.chatbot-header button {
+.chatbot-header:active {
+  cursor: grabbing;
+}
+
+.chatbot-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.chatbot-header-actions button {
   border: none;
   background: transparent;
   color: white;
   font-size: 18px;
   cursor: pointer;
   line-height: 1;
+}
+
+.chatbot-panel--expanded {
+  width: 600px;
+}
+
+.chatbot-panel--expanded .chatbot-messages {
+  height: 500px;
 }
 
 .chatbot-messages {
@@ -111,6 +132,29 @@
 
 .chatbot-suggestions button:hover {
   background-color: #dbeafe;
+}
+
+.chatbot-bubble-bot table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+  margin: 6px 0;
+}
+
+.chatbot-bubble-bot th,
+.chatbot-bubble-bot td {
+  border: 1px solid #d1d5db;
+  padding: 5px 8px;
+  text-align: right;
+}
+
+.chatbot-bubble-bot th {
+  background-color: #eff6ff;
+  font-weight: bold;
+}
+
+.chatbot-bubble-bot tr:nth-child(even) {
+  background-color: #f9fafb;
 }
 
 .chatbot-bubble-bot p { margin: 0 0 6px 0; }
