@@ -8,6 +8,7 @@ import MerchantEditPage from './pages/MerchantEditPage';
 import BulkUploadPage from './pages/BulkUploadPage';
 import MerchantOrders from './pages/MerchantOrders';
 import MerchantLoginModal from './components/MerchantLoginModal';
+import ChatBot from '../components/chatbot/ChatBot';
 import './MerchantDashboard.css';
 
 type DashPage = 'home' | 'reviews' | 'billing' | 'editPage' | 'bulkUpload' | 'orders';
@@ -204,6 +205,8 @@ export default function MerchantDashboard() {
           {renderPage()}
         </main>
       </div>
+
+      <ChatBot role="merchant" />
     </div>
   );
 }

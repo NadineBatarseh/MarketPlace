@@ -1,17 +1,73 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useShop } from '../../context/ShopContext';
+import { useCustomerAuth } from '../../context/CustomerAuthContext';
+import supabase from '../../lib/supabase';
+import { insertTrackingEvent } from '../../lib/trackingEvents';
 import Topbar from '../../components/Topbar';
 import './CheckoutPage.css';
 
 type PaymentMethod = 'visa' | 'paypal' | null;
 
 export default function CheckoutPage() {
-  const { cartItems, removeFromCart, updateCartQty } = useShop();
+  const { cartItems, removeFromCart, updateCartQty, clearCart } = useShop();
+  const { customer } = useCustomerAuth();
+  const navigate     = useNavigate();
 
   const [contact, setContact] = useState({ firstName: '', lastName: '', email: '', phone: '' });
   const [shipping, setShipping] = useState({ address: '', apartment: '', city: '', postalCode: '' });
   const [payment, setPayment] = useState<PaymentMethod>(null);
   const [visa, setVisa] = useState({ cardNumber: '', cardHolder: '', expiry: '', cvv: '' });
+  const [paying, setPaying]   = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
+
+  const handlePay = async () => {
+    if (!customer) { navigate('/login'); return; }
+    if (!payment)  { setPayError('الرجاء اختيار طريقة الدفع'); return; }
+    if (cartItems.length === 0) { setPayError('السلة فارغة'); return; }
+
+    setPaying(true);
+    setPayError(null);
+    try {
+      // 1. Insert order
+      const { data: orderData, error: ordErr } = await supabase
+        .from('orders')
+        .insert({
+          user_id:     customer.id,
+          status:      'pending',
+          total_price: total,
+        })
+        .select('id')
+        .single();
+
+      if (ordErr || !orderData) throw ordErr ?? new Error('فشل إنشاء الطلب');
+
+      // 2. Insert order_details for every cart item
+      const details = cartItems.map(item => ({
+        order_id:   orderData.id,
+        product_id: item.id,
+        qty:        item.quantity,
+        unit_price: item.price,
+      }));
+
+      const { error: detErr } = await supabase.from('order_details').insert(details);
+      if (detErr) throw detErr;
+
+      // 3. Insert the first tracking event — "placed"
+      await insertTrackingEvent(orderData.id, 'placed', customer.displayName ?? 'العميل', {
+        location: `${shipping.city}، فلسطين`,
+        note:     'تم استلام الطلب وتأكيد الدفع',
+      });
+
+      // 4. Clear cart and navigate to tracking page
+      clearCart();
+      navigate(`/orders/${orderData.id}`);
+    } catch (e: unknown) {
+      setPayError(e instanceof Error ? e.message : 'حدث خطأ أثناء معالجة الدفع');
+    } finally {
+      setPaying(false);
+    }
+  };
 
   const DELIVERY_COST = 25;
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -19,7 +75,7 @@ export default function CheckoutPage() {
 
   return (
     <div className="co-page" dir="rtl">
-      <Topbar cartCount={cartItems.reduce((s, i) => s + i.quantity, 0)} />
+      <Topbar />
       <h1 className="co-page-title">إتمام الطلب</h1>
       <div className="co-wrap">
 
@@ -195,8 +251,9 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          <button type="button" className="co-pay-btn">
-            ادفع الآن
+          {payError && <div className="co-pay-error">{payError}</div>}
+          <button type="button" className="co-pay-btn" onClick={handlePay} disabled={paying}>
+            {paying ? 'جارٍ المعالجة…' : 'ادفع الآن'}
           </button>
         </div>
 

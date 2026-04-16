@@ -9,6 +9,7 @@
 import { useState, useEffect, useCallback } from "react";
 import RouteMap, { type MapStop } from "./components/RouteMap";
 import Topbar from "../../components/Topbar";
+import { insertTrackingEvent } from "../../lib/trackingEvents";
 
 interface RouteData {
   stops: MapStop[];
@@ -91,8 +92,19 @@ export default function DelivererPage() {
         body: JSON.stringify({ orderId }),
       });
       const json = await res.json();
-      if (json.ok) load();
-      else setError(json.error ?? "خطأ");
+      if (json.ok) {
+        await insertTrackingEvent(orderId, 'handed_driver', 'السائق', {
+          location: 'مستودع رام الله',
+          note:     'تم استلام الطلب من المستودع',
+        });
+        await insertTrackingEvent(orderId, 'on_the_way', 'السائق', {
+          location: 'في الطريق',
+          note:     'السائق في طريقه لإيصال الطلب',
+        });
+        load();
+      } else {
+        setError(json.error ?? "خطأ");
+      }
     } catch {
       setError("تعذر الاتصال بالخادم");
     } finally {
@@ -109,8 +121,15 @@ export default function DelivererPage() {
         body: JSON.stringify({ orderId }),
       });
       const json = await res.json();
-      if (json.ok) load();
-      else setError(json.error ?? "خطأ");
+      if (json.ok) {
+        await insertTrackingEvent(orderId, 'delivered', 'السائق', {
+          location: 'عنوان التوصيل',
+          note:     'تم تسليم الطلب بنجاح',
+        });
+        load();
+      } else {
+        setError(json.error ?? "خطأ");
+      }
     } catch {
       setError("تعذر الاتصال بالخادم");
     } finally {
