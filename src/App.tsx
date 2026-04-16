@@ -5,6 +5,7 @@ import CollectorPage from './pages/delivery agent/CollectorPage';
 import HubPage from './pages/delivery agent/HubPage';
 import DelivererPage from './pages/delivery agent/DelivererPage';
 import OrderHistoryPage from './pages/orderHistory/OrderHistoryPage';
+import OrderTrackingPage from './pages/orderTrackingPage/OrderTrackingPage';
 import MetaConnectPage from './pages/MetaConnectPage';
 
 
@@ -84,6 +85,7 @@ export default function App() {
               <Route path="/deliverer" element={<DelivererPage />} />
               <Route path="/search" element={<SearchResultsPage />} />
               <Route path="/orders" element={<OrderHistoryPage />} />
+              <Route path="/orders/:orderId" element={<OrderTrackingPage />} />
               <Route path="/meta-connect" element={<MetaConnectPage />} />
             </Routes>
           </BrowserRouter>

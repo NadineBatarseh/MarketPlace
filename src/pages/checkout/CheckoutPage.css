@@ -318,6 +318,17 @@
   color: var(--co-green-dark);
 }
 
+/* ── Pay error ── */
+.co-pay-error {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  color: #dc2626;
+  font-size: 13px;
+  padding: 9px 14px;
+  border-radius: 8px;
+  margin-top: 10px;
+}
+
 /* ── Pay Button ── */
 .co-pay-btn {
   width: 100%;
