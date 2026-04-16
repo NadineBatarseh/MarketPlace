@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from "react";
-import supabase from "../../lib/supabase";
 
 async function sendToAssistant(message, role, images, onChunk) {
   const res = await fetch("http://localhost:4000/api/chat", {

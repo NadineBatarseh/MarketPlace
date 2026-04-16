@@ -309,7 +309,7 @@ async function executeTool(
     case "list_products": {
       let query = supabase
         .from("products")
-        .select("id, title, description, price, discount, image_urls, stock_Quantity, shop_id");
+        .select("id, title, description, price, discount_pct, image_urls, stock_Quantity, shop_id");
 
       // Merchant always sees only their own products
       if (merchant_shop_id) {
@@ -334,7 +334,7 @@ async function executeTool(
     case "get_product": {
       let query = supabase
         .from("products")
-        .select("id, title, description, price, discount, image_urls, stock_Quantity, shop_id, capacity_units")
+        .select("id, title, description, price, discount_pct, image_urls, stock_Quantity, shop_id, capacity_units")
         .eq("id", input.id);
 
       // Merchant can only fetch their own products
@@ -462,11 +462,11 @@ async function executeTool(
           continue;
         }
 
-        // Store the discount percentage in the new `discount` column
+        // Store the discount percentage in discount_pct column
         // The original `price` column stays unchanged (source of truth)
         const { error: updateErr } = await supabase
           .from("products")
-          .update({ discount: discountStored })
+          .update({ discount_pct: discountStored })
           .eq("id", product.id)
           .eq("shop_id", merchant_shop_id);
 
@@ -484,7 +484,7 @@ async function executeTool(
 
       let query = supabase
         .from("products")
-        .update({ discount: null })
+        .update({ discount_pct: null })
         .eq("shop_id", merchant_shop_id);
       if (product_id) query = query.eq("id", product_id);
 
