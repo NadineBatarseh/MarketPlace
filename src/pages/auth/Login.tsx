@@ -46,7 +46,7 @@ export default function Login() {
     } else if (role === 'merchant') {
       navigate('/merchant-dashboard');
     } else if (role === 'delivery') {
-      navigate('/delivery');
+      navigate('/driver-dashboard');
     } else {
       navigate('/store');
     }

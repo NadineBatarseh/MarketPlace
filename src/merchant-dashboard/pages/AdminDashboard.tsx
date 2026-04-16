@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import emailjs from '@emailjs/browser';
 import supabase from '../../lib/supabase';
 import './AdminDashboard.css';
@@ -117,6 +117,7 @@ type RejectModalState<T> = {
 
 export default function AdminDashboard() {
   const [activeSection, setActiveSection] = useState<Section>('merchant');
+  const contentRef = useRef<HTMLElement>(null);
   const [activeTab, setActiveTab] = useState<FilterTab>('pending');
 
   // Merchant state
@@ -207,6 +208,7 @@ export default function AdminDashboard() {
   useEffect(() => { loadApps(); }, []);
   useEffect(() => { loadDeliveryApps(); }, []);
   useEffect(() => { loadHubApps(); }, []);
+  useEffect(() => { contentRef.current?.scrollTo({ top: 0 }); }, [activeSection]);
 
   // ── Batches loader ────────────────────────────────────────────────────────────
 
@@ -237,23 +239,8 @@ export default function AdminDashboard() {
 
       setAssignSummary({ assigned: json.assigned_count, unassigned: json.unassigned_count });
 
-      // Fetch driver names to display on each batch card
-      const driverIds: number[] = Object.values(json.assignments).map(Number);
-      let driverMap: Record<number, string> = {};
-      if (driverIds.length > 0) {
-        const { data: drvRows } = await supabase
-          .from('drivers')
-          .select('driver_id, name')
-          .in('driver_id', driverIds);
-        (drvRows ?? []).forEach((d: any) => { driverMap[d.driver_id] = d.name; });
-      }
-
-      // Stamp each batch with its assigned driver (assignments keyed by "batch-{idx}")
-      setBatches(prev => prev.map((b, idx) => {
-        const driverId = json.assignments[`batch-${idx}`];
-        if (!driverId) return { ...b, assigned_driver: null };
-        return { ...b, assigned_driver: { driver_id: Number(driverId), name: driverMap[Number(driverId)] ?? `سائق ${driverId}` } };
-      }));
+      // Reload all batches from the server so persisted assignments are shown correctly
+      await loadBatches();
     } catch {
       setAssignError('تعذّر الاتصال بالخادم');
     }
@@ -683,7 +670,7 @@ export default function AdminDashboard() {
         </aside>
 
         {/* Main content */}
-        <main className="ad-content">
+        <main className="ad-content" ref={contentRef}>
           {loadError && <div className="ad-error">{loadError}</div>}
 
           {/* Filter tabs — only for application sections */}
@@ -931,6 +918,11 @@ export default function AdminDashboard() {
                     {assignSummary.unassigned > 0 && (
                       <span className="ad-assign-summary-item ad-assign-summary-item--warn">⚠ {assignSummary.unassigned} في قائمة الانتظار</span>
                     )}
+                    {assignSummary.assigned === 0 && assignSummary.unassigned > 0 && (
+                      <span className="ad-assign-summary-item ad-assign-summary-item--warn">
+                        لم يتم العثور على سائقين متاحين بموقع جغرافي — تأكد من أن السائقين قد فتحوا تطبيقهم
+                      </span>
+                    )}
                   </div>
                 )}
 
@@ -940,7 +932,7 @@ export default function AdminDashboard() {
                     {(['all', 'assigned', 'unassigned'] as const).map(f => {
                       const count = f === 'all' ? batches.length
                         : f === 'assigned'   ? batches.filter(b => b.assigned_driver).length
-                        : batches.filter(b => b.assigned_driver === null).length;
+                        : batches.filter(b => !b.assigned_driver).length;
                       return (
                         <button
                           key={f}
@@ -965,14 +957,14 @@ export default function AdminDashboard() {
                   .filter(b =>
                     batchFilter === 'all'        ? true :
                     batchFilter === 'assigned'   ? !!b.assigned_driver :
-                    b.assigned_driver === null
+                    !b.assigned_driver
                   )
                   .map((batch, idx) => {
                     // use original index for expand key
                     const origIdx = batches.indexOf(batch);
                     const batchOpen = expandedBatches.has(origIdx);
                     const isAssigned = !!batch.assigned_driver;
-                    const isQueued   = batch.assigned_driver === null;
+                    const isQueued   = !batch.assigned_driver;
                     return (
                     <div key={origIdx} className={`ad-batch-card${isAssigned ? ' ad-batch-card--assigned' : isQueued ? ' ad-batch-card--queued' : ''}`}>
 

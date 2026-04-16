@@ -4,6 +4,9 @@ import DeliveryAgentPage from './pages/delivery agent/DeliveryAgentPage';
 import CollectorPage from './pages/delivery agent/CollectorPage';
 import HubPage from './pages/delivery agent/HubPage';
 import DelivererPage from './pages/delivery agent/DelivererPage';
+import DriverDashboard from './pages/delivery agent/DriverDashboard';
+import DriverRouteMap from './pages/delivery agent/DriverRouteMap';
+import DeliveryRouteGuard from './components/DeliveryRouteGuard';
 import OrderHistoryPage from './pages/orderHistory/OrderHistoryPage';
 import MetaConnectPage from './pages/MetaConnectPage';
 
@@ -78,10 +81,12 @@ export default function App() {
               <Route path="/delivery-application" element={<DeliveryApplication />} />
               <Route path="/hubworker-application" element={<HubWorkerApplication />} />
               <Route path="/activate" element={<Activate />} />
+              <Route path="/driver-dashboard" element={<DeliveryRouteGuard><DriverDashboard /></DeliveryRouteGuard>} />
+              <Route path="/driver-route" element={<DeliveryRouteGuard><DriverRouteMap /></DeliveryRouteGuard>} />
               <Route path="/delivery" element={<DeliveryAgentPage />} />
               <Route path="/collector" element={<CollectorPage />} />
               <Route path="/hub" element={<HubPage />} />
-              <Route path="/deliverer" element={<DelivererPage />} />
+              <Route path="/c" element={<DelivererPage />} />
               <Route path="/search" element={<SearchResultsPage />} />
               <Route path="/orders" element={<OrderHistoryPage />} />
               <Route path="/meta-connect" element={<MetaConnectPage />} />

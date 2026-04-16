@@ -9,6 +9,8 @@
 import { useState, useEffect, useCallback } from "react";
 import RouteMap, { type MapStop } from "./components/RouteMap";
 import Topbar from "../../components/Topbar";
+import supabase from "../../lib/supabase";
+import { useSharedAuth } from "../../context/AuthContext";
 
 interface RouteData {
   stops: MapStop[];
@@ -35,6 +37,7 @@ interface ShopGroup {
 }
 
 export default function CollectorPage() {
+  const { rawUser } = useSharedAuth();
   const [shops, setShops] = useState<ShopGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [codes, setCodes] = useState<Record<number, string>>({});
@@ -63,6 +66,16 @@ export default function CollectorPage() {
     setRouteLoading(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
+        // Persist driver location so assignment algorithm can find this driver
+        if (rawUser?.id) {
+          supabase
+            .from("drivers")
+            .update({ current_lat: pos.coords.latitude, current_lng: pos.coords.longitude })
+            .eq("user_id", rawUser.id)
+            .then(({ error: locErr }) => {
+              if (locErr) console.error("[CollectorPage] failed to update driver location:", locErr.message);
+            });
+        }
         try {
           const res = await fetch("/api/logistics/collector/route", {
             method: "POST",
@@ -80,7 +93,7 @@ export default function CollectorPage() {
       },
       () => { setError("تعذر الحصول على موقعك — تأكد من تفعيل الموقع الجغرافي"); setRouteLoading(false); }
     );
-  }, []);
+  }, [rawUser?.id]);
 
   useEffect(() => {
     load();
