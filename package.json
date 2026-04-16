@@ -6,7 +6,8 @@
     "dev": "concurrently \"vite\" \"tsx watch server/index.ts\" \"tsx watch src/server.ts\"",
     "build": "vite build",
     "start": "tsx server/index.ts",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "supabase-mcp": "tsx src/server-supabase.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

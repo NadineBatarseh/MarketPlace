@@ -10,7 +10,7 @@ import "dotenv/config";
 
 import { MetaService } from "./services/metaService.js";
 import { createAuthRoutes } from "./routes/authRoutes.js";
-import { createMcpServer, connectStdioTransport, connectWebSocketTransport } from "./mcp/server.js";
+import { createMcpServer, connectStdioTransport, connectWebSocketTransport } from "./mcp/meta-catalog/server.js";
 
 const PORT = Number(process.env.MCP_PORT) || 4001;
 const USE_WEBSOCKET = process.env.USE_WEBSOCKET === "true";

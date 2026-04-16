@@ -1,8 +1,8 @@
 // tools.ts
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { MetaService } from "../services/metaService.js";
-import { supabase } from "../../server/supabase.js";
+import { MetaService } from "../../services/metaService.js";
+import { supabase } from "../../../server/supabase.js";
 
 async function executeSearchProducts(input: {
   keywords?: string[];
@@ -57,11 +57,10 @@ export function registerTools(server: McpServer, metaService: MetaService) {
   server.tool(
     "get_catalog_products",
     "Fetch a list of all products from Meta catalog using Supabase Auth",
-    { 
-      sb_auth_token: z.string().describe("Supabase User JWT (Required for decryption)") 
+    {
+      sb_auth_token: z.string().describe("Supabase User JWT (Required for decryption)")
     },
     async ({ sb_auth_token }) => {
-      // نمرر التوكن للمنطق البرمجي لفك التشفير في السحاب
       const data = await metaService.getCatalogProducts(sb_auth_token);
       return { content: [{ type: "text", text: JSON.stringify(data) }] };
     }
@@ -71,7 +70,7 @@ export function registerTools(server: McpServer, metaService: MetaService) {
   server.tool(
     "search_products",
     "Search for a specific product by name using Supabase Auth",
-    { 
+    {
       query: z.string(),
       sb_auth_token: z.string().describe("Supabase User JWT")
     },
@@ -91,9 +90,7 @@ export function registerTools(server: McpServer, metaService: MetaService) {
       customPrice: z.number().optional()
     },
     async ({ productId, sb_auth_token, customPrice }) => {
-      // نمرر التوكن لجلب بيانات المنتج المشفرة أصلاً
       const product = await metaService.getProduct(productId, sb_auth_token);
-      // هنا تضع منطق الإضافة الخاص بك...
       return { content: [{ type: "text", text: JSON.stringify({ success: true, product }) }] };
     }
   );
