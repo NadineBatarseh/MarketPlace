@@ -538,45 +538,44 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   try {
     const messages: Anthropic.MessageParam[] = [{ role: "user", content: message }];
 
-    // Agentic loop: call Claude, execute tools, feed results back, repeat
-    while (true) {
-      const response = await anthropic.messages.create({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 1024,
-        system: systemPrompt,
-        tools,
-        messages,
-      });
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
 
-      if (response.stop_reason === "end_turn") {
-        const textBlock = response.content.find(b => b.type === "text");
-        const reply = textBlock?.type === "text" ? textBlock.text : "لم أفهم الطلب.";
-        return res.json({ ok: true, reply });
+    const { images } = req.body as { message: string; role: string; images?: { base64: string; mediaType: string }[] };
+
+    const userContent: any[] = [];
+    if (images?.length) {
+      for (const img of images) {
+        userContent.push({ type: "image", source: { type: "base64", media_type: img.mediaType, data: img.base64 } });
       }
-
-      if (response.stop_reason === "tool_use") {
-        messages.push({ role: "assistant", content: response.content });
-
-        const toolResults: Anthropic.ToolResultBlockParam[] = [];
-        for (const block of response.content) {
-          if (block.type !== "tool_use") continue;
-          let result: string;
-          try {
-            result = await executeTool(block.name, block.input as Record<string, any>, merchant_shop_id);
-          } catch (toolErr: any) {
-            result = JSON.stringify({ error: toolErr.message });
-          }
-          toolResults.push({ type: "tool_result", tool_use_id: block.id, content: result });
-        }
-
-        messages.push({ role: "user", content: toolResults });
-        continue;
-      }
-
-      const textBlock = response.content.find(b => b.type === "text");
-      const reply = textBlock?.type === "text" ? textBlock.text : "لم أفهم الطلب.";
-      return res.json({ ok: true, reply });
     }
+    if (message) {
+      userContent.push({ type: "text", text: message });
+    }
+
+    const stream = anthropic.messages.stream({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userContent }],
+    });
+
+    stream.on("text", (text) => {
+      res.write(`data: ${JSON.stringify({ text })}\n\n`);
+    });
+
+    stream.on("finalMessage", () => {
+      res.write(`data: [DONE]\n\n`);
+      res.end();
+    });
+
+    stream.on("error", (err) => {
+      console.error("[/api/chat] stream error:", err.message);
+      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+      res.end();
+    });
+
   } catch (err: any) {
     console.error("[/api/chat] error:", err.message);
     return res.status(500).json({ ok: false, error: err.message });
