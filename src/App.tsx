@@ -29,6 +29,8 @@ import { CustomerAuthProvider } from "./context/CustomerAuthContext";
 import { MerchantAuthProvider } from "./merchant-dashboard/context/MerchantAuthContext";
 import { AuthProvider } from "./context/AuthContext";
 import MerchantDashboard from "./merchant-dashboard/MerchantDashboard";
+// @ts-ignore
+import ChatBot from "./components/chatbot/ChatBot";
 import AdminDashboard from "./merchant-dashboard/pages/AdminDashboard";
 import { useMerchantAuth } from './merchant-dashboard/context/MerchantAuthContext';
 import { useCustomerAuth } from './context/CustomerAuthContext';
@@ -58,6 +60,7 @@ export default function App() {
       <CustomerAuthProvider>
         <ShopProviderWithAuth>
           <BrowserRouter>
+            <ChatBot />
             <Routes>
               {/* Landing → stores listing */}
               <Route path="/" element={<Navigate to="/store" replace />} />
