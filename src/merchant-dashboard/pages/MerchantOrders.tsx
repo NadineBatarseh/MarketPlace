@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useMerchantAuth } from '../context/MerchantAuthContext';
 import supabase from '../../lib/supabase';
+import { insertTrackingEvent } from '../../lib/trackingEvents';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -141,21 +142,47 @@ export default function MerchantOrders() {
   // Mark all this shop's order_details rows for the order as ready for pickup
   const markReady = async (orderId: number) => {
     setMarking(orderId);
+    const now = new Date().toISOString();
+
     const { error } = await supabase
       .from('order_details')
-      .update({ ready_time: new Date().toISOString() })
+      .update({ ready_time: now })
       .eq('order_id', orderId)
       .eq('shop_id', shopId);
 
     if (error) {
       setError('فشل تحديث حالة الطلب');
-    } else {
-      setOrders(prev =>
-        prev.map(o =>
-          o.id === orderId ? { ...o, ready_time: new Date().toISOString() } : o
-        )
-      );
+      setMarking(null);
+      return;
     }
+
+    // Update local UI
+    setOrders(prev =>
+      prev.map(o => o.id === orderId ? { ...o, ready_time: now } : o)
+    );
+
+    // Check if ALL shops for this order have now set ready_time
+    const { data: allDetails } = await supabase
+      .from('order_details')
+      .select('ready_time')
+      .eq('order_id', orderId);
+
+    const allReady = allDetails?.every(d => d.ready_time != null) ?? false;
+
+    if (allReady) {
+      // Insert "collecting" tracking event — visible on customer tracking page
+      await insertTrackingEvent(orderId, 'collecting', merchant?.shop?.name ?? 'المتجر', {
+        location: 'المتاجر المحلية',
+        note:     'جميع المتاجر جهّزت الطلب وهو جاهز للتجميع',
+      });
+
+      // Advance order status
+      await supabase
+        .from('orders')
+        .update({ status: 'pending_collection' })
+        .eq('id', orderId);
+    }
+
     setMarking(null);
   };
 
@@ -220,7 +247,7 @@ export default function MerchantOrders() {
             {visible.map(order => {
             const statusCfg = STATUS_LABEL[order.status] ?? { label: order.status, color: '#6b7280' };
             const isOpen    = expanded.has(order.id);
-            const canMark   = order.status === 'pending_collection' && !order.ready_time;
+            const canMark   = (order.status === 'pending' || order.status === 'pending_collection') && !order.ready_time;
             const isMarked  = !!order.ready_time;
 
             return (

@@ -386,12 +386,12 @@ function OrderCard({ order, idx }: { order: Order; idx: number }) {
           <span> · {items.length} {items.length === 1 ? 'منتج' : 'منتجات'}</span>
         </div>
         <div className="oh-actions">
-          <button className="oh-btn">التفاصيل</button>
+          <button className="oh-btn" onClick={() => navigate(`/orders/${order.id}`)}>التفاصيل</button>
           {(order.status === 'completed' || order.status === 'cancelled') && (
             <button className="oh-btn oh-btn-primary">إعادة الطلب</button>
           )}
           {(order.status === 'pending_collection' || order.status === 'at_hub' || order.status === 'delivering') && (
-            <button className="oh-btn oh-btn-primary">تتبّع الطلب</button>
+            <button className="oh-btn oh-btn-primary" onClick={() => navigate(`/orders/${order.id}`)}>تتبّع الطلب</button>
           )}
         </div>
       </div>

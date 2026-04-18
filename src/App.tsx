@@ -8,6 +8,7 @@ import DriverDashboard from './pages/delivery agent/DriverDashboard';
 import DriverRouteMap from './pages/delivery agent/DriverRouteMap';
 import DeliveryRouteGuard from './components/DeliveryRouteGuard';
 import OrderHistoryPage from './pages/orderHistory/OrderHistoryPage';
+import OrderTrackingPage from './pages/orderTrackingPage/OrderTrackingPage';
 import MetaConnectPage from './pages/MetaConnectPage';
 
 
@@ -31,6 +32,8 @@ import { CustomerAuthProvider } from "./context/CustomerAuthContext";
 import { MerchantAuthProvider } from "./merchant-dashboard/context/MerchantAuthContext";
 import { AuthProvider } from "./context/AuthContext";
 import MerchantDashboard from "./merchant-dashboard/MerchantDashboard";
+// @ts-ignore
+import ChatBot from "./components/chatbot/ChatBot";
 import AdminDashboard from "./merchant-dashboard/pages/AdminDashboard";
 import { useMerchantAuth } from './merchant-dashboard/context/MerchantAuthContext';
 import { useCustomerAuth } from './context/CustomerAuthContext';
@@ -60,6 +63,7 @@ export default function App() {
       <CustomerAuthProvider>
         <ShopProviderWithAuth>
           <BrowserRouter>
+            <ChatBot />
             <Routes>
               {/* Landing → stores listing */}
               <Route path="/" element={<Navigate to="/store" replace />} />
@@ -89,6 +93,7 @@ export default function App() {
               <Route path="/c" element={<DelivererPage />} />
               <Route path="/search" element={<SearchResultsPage />} />
               <Route path="/orders" element={<OrderHistoryPage />} />
+              <Route path="/orders/:orderId" element={<OrderTrackingPage />} />
               <Route path="/meta-connect" element={<MetaConnectPage />} />
             </Routes>
           </BrowserRouter>

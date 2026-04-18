@@ -110,6 +110,7 @@ type ApproveModalState<T> = {
 
 type RejectModalState<T> = {
   app: T | null;
+  reason: string;
   message: string;
   sending: boolean;
   error: string;
@@ -131,7 +132,7 @@ export default function AdminDashboard() {
     { app: null, platformEmail: '', message: '', sending: false, error: '' }
   );
   const [rejectModal, setRejectModal] = useState<RejectModalState<MerchantApp>>(
-    { app: null, message: '', sending: false, error: '' }
+    { app: null, reason: '', message: '', sending: false, error: '' }
   );
 
   // Delivery state
@@ -144,7 +145,7 @@ export default function AdminDashboard() {
     { app: null, platformEmail: '', message: '', sending: false, error: '' }
   );
   const [deliveryRejectModal, setDeliveryRejectModal] = useState<RejectModalState<DeliveryApp>>(
-    { app: null, message: '', sending: false, error: '' }
+    { app: null, reason: '', message: '', sending: false, error: '' }
   );
 
   // Hub worker state
@@ -157,7 +158,7 @@ export default function AdminDashboard() {
     { app: null, platformEmail: '', message: '', sending: false, error: '' }
   );
   const [hubRejectModal, setHubRejectModal] = useState<RejectModalState<HubWorkerApp>>(
-    { app: null, message: '', sending: false, error: '' }
+    { app: null, reason: '', message: '', sending: false, error: '' }
   );
 
   // Batches state
@@ -327,7 +328,7 @@ export default function AdminDashboard() {
     if (!approveModal.app || !approveModal.platformEmail.trim()) return;
     setApproveModal(prev => ({ ...prev, sending: true, error: '' }));
 
-    const finalMessage = approveModal.message + `\n\nبريدك الإلكتروني الرسمي: ${approveModal.platformEmail}`;
+    const finalMessage = (approveModal.message + `\n\nبريدك الإلكتروني الرسمي: ${approveModal.platformEmail}`);
     try {
       await emailjs.send(
         import.meta.env.VITE_EMAILJS_SERVICE_ID,
@@ -358,12 +359,7 @@ export default function AdminDashboard() {
   };
 
   const openRejectModal = (app: MerchantApp) => {
-    setRejectModal({
-      app,
-      message: `عزيزي/عزيزتي ${app.name_of_owner}،\n\nنشكركم على اهتمامكم بالانضمام إلى منصة سوق لينك.\n\nبعد مراجعة طلبكم بعناية، نأسف لإبلاغكم بأننا غير قادرين على قبول طلبكم في الوقت الحالي.\n\nنتمنى لكم التوفيق والنجاح في مساعيكم.\n\nمع تحياتنا،\nفريق سوق لينك`,
-      sending: false,
-      error: '',
-    });
+    setRejectModal({ app, reason: '', message: '', sending: false, error: '' });
   };
 
   const handleSendRejection = async () => {
@@ -383,7 +379,7 @@ export default function AdminDashboard() {
     }
 
     await updateMerchantStatus(rejectModal.app.id, 'rejected');
-    setRejectModal({ app: null, message: '', sending: false, error: '' });
+    setRejectModal({ app: null, reason: '', message: '', sending: false, error: '' });
   };
 
   const deleteMerchantApp = async (app: MerchantApp) => {
@@ -440,7 +436,7 @@ export default function AdminDashboard() {
     if (!deliveryApproveModal.app || !deliveryApproveModal.platformEmail.trim()) return;
     setDeliveryApproveModal(prev => ({ ...prev, sending: true, error: '' }));
 
-    const finalMessage = deliveryApproveModal.message + `\n\nبريدك الإلكتروني الرسمي: ${deliveryApproveModal.platformEmail}`;
+    const finalMessage = (deliveryApproveModal.message + `\n\nبريدك الإلكتروني الرسمي: ${deliveryApproveModal.platformEmail}`);
     try {
       await emailjs.send(
         import.meta.env.VITE_EMAILJS_SERVICE_ID,
@@ -471,12 +467,7 @@ export default function AdminDashboard() {
   };
 
   const openDeliveryRejectModal = (app: DeliveryApp) => {
-    setDeliveryRejectModal({
-      app,
-      message: `عزيزي/عزيزتي ${app.name}،\n\nنشكركم على اهتمامكم بالانضمام إلى منصة سوق لينك كمندوب توصيل.\n\nبعد مراجعة طلبكم بعناية، نأسف لإبلاغكم بأننا غير قادرين على قبول طلبكم في الوقت الحالي.\n\nنتمنى لكم التوفيق والنجاح في مساعيكم.\n\nمع تحياتنا،\nفريق سوق لينك`,
-      sending: false,
-      error: '',
-    });
+    setDeliveryRejectModal({ app, reason: '', message: '', sending: false, error: '' });
   };
 
   const handleSendDeliveryRejection = async () => {
@@ -496,7 +487,7 @@ export default function AdminDashboard() {
     }
 
     await updateDeliveryStatus(deliveryRejectModal.app.id, 'rejected');
-    setDeliveryRejectModal({ app: null, message: '', sending: false, error: '' });
+    setDeliveryRejectModal({ app: null, reason: '', message: '', sending: false, error: '' });
   };
 
   const deleteDeliveryApp = async (app: DeliveryApp) => {
@@ -546,7 +537,7 @@ export default function AdminDashboard() {
     if (!hubApproveModal.app || !hubApproveModal.platformEmail.trim()) return;
     setHubApproveModal(prev => ({ ...prev, sending: true, error: '' }));
 
-    const finalMessage = hubApproveModal.message + `\n\nبريدك الإلكتروني الرسمي: ${hubApproveModal.platformEmail}`;
+    const finalMessage = (hubApproveModal.message + `\n\nبريدك الإلكتروني الرسمي: ${hubApproveModal.platformEmail}`);
     try {
       await emailjs.send(
         import.meta.env.VITE_EMAILJS_SERVICE_ID,
@@ -577,12 +568,7 @@ export default function AdminDashboard() {
   };
 
   const openHubRejectModal = (app: HubWorkerApp) => {
-    setHubRejectModal({
-      app,
-      message: `عزيزي/عزيزتي ${app.name}،\n\nنشكركم على اهتمامكم بالانضمام إلى منصة سوق لينك كعامل مستودع.\n\nبعد مراجعة طلبكم بعناية، نأسف لإبلاغكم بأننا غير قادرين على قبول طلبكم في الوقت الحالي.\n\nنتمنى لكم التوفيق والنجاح في مساعيكم.\n\nمع تحياتنا،\nفريق سوق لينك`,
-      sending: false,
-      error: '',
-    });
+    setHubRejectModal({ app, reason: '', message: '', sending: false, error: '' });
   };
 
   const handleSendHubRejection = async () => {
@@ -602,7 +588,7 @@ export default function AdminDashboard() {
     }
 
     await updateHubStatus(hubRejectModal.app.id, 'rejected');
-    setHubRejectModal({ app: null, message: '', sending: false, error: '' });
+    setHubRejectModal({ app: null, reason: '', message: '', sending: false, error: '' });
   };
 
   const deleteHubApp = async (app: HubWorkerApp) => {
@@ -1062,6 +1048,8 @@ export default function AdminDashboard() {
                         </div>
                         <div className="ad-config-input-row">
                           <input type="number" min={1} max={200} className="ad-config-input"
+                            title="الطاقة الاستيعابية"
+                            placeholder="أدخل الحد الأقصى للوحدات"
                             value={draftConfig.max_driver_capacity}
                             onChange={e => { setConfigSuccess(false); setDraftConfig(p => ({ ...p, max_driver_capacity: e.target.value })); }}
                           />
@@ -1080,6 +1068,8 @@ export default function AdminDashboard() {
                         </div>
                         <div className="ad-config-input-row">
                           <input type="number" min={1} max={20} className="ad-config-input"
+                            title="الحد الأقصى للمحطات"
+                            placeholder="أدخل الحد الأقصى للمحطات"
                             value={draftConfig.max_stops_per_batch}
                             onChange={e => { setConfigSuccess(false); setDraftConfig(p => ({ ...p, max_stops_per_batch: e.target.value })); }}
                           />
@@ -1098,6 +1088,8 @@ export default function AdminDashboard() {
                         </div>
                         <div className="ad-config-input-row">
                           <input type="number" min={10} max={480} className="ad-config-input"
+                            title="الحد الأقصى لوقت الانتظار"
+                            placeholder="أدخل الحد الأقصى لوقت الانتظار"
                             value={draftConfig.max_allowed_wait}
                             onChange={e => { setConfigSuccess(false); setDraftConfig(p => ({ ...p, max_allowed_wait: e.target.value })); }}
                           />
@@ -1116,6 +1108,8 @@ export default function AdminDashboard() {
                         </div>
                         <div className="ad-config-input-row">
                           <input type="number" min={0.5} max={50} step={0.5} className="ad-config-input"
+                            title="الحد الأقصى للمسافة"
+                            placeholder="أدخل الحد الأقصى للمسافة"
                             value={draftConfig.max_distance_km}
                             onChange={e => { setConfigSuccess(false); setDraftConfig(p => ({ ...p, max_distance_km: e.target.value })); }}
                           />
@@ -1193,25 +1187,40 @@ export default function AdminDashboard() {
 
       {/* ── Merchant reject modal ── */}
       {rejectModal.app && (
-        <div className="ad-modal-overlay" onClick={() => !rejectModal.sending && setRejectModal({ app: null, message: '', sending: false, error: '' })}>
+        <div className="ad-modal-overlay" onClick={() => !rejectModal.sending && setRejectModal({ app: null, reason: '', message: '', sending: false, error: '' })}>
           <div className="ad-modal" dir="rtl" onClick={e => e.stopPropagation()}>
             <h3 className="ad-modal-title">📧 إرسال إشعار رفض</h3>
             <p className="ad-modal-to">إلى: <strong>{rejectModal.app.email}</strong></p>
-            <textarea
-              className="ad-modal-textarea"
-              value={rejectModal.message}
-              onChange={e => setRejectModal(prev => ({ ...prev, message: e.target.value }))}
-              rows={8}
-              disabled={rejectModal.sending}
-              title="نص الرسالة"
-              placeholder="اكتب رسالة الرفض هنا..."
-            />
+            <div className="ad-modal-field">
+              <label className="ad-modal-label">سبب الرفض <span className="ad-required">*</span></label>
+              <textarea
+                className="ad-modal-textarea"
+                rows={3}
+                disabled={rejectModal.sending}
+                placeholder="مثال: المستندات المرفقة غير مكتملة..."
+                onChange={e => {
+                  const reason = e.target.value;
+                  const app = rejectModal.app!;
+                  setRejectModal(prev => ({
+                    ...prev,
+                    reason,
+                    message: `عزيزي/عزيزتي ${app.name_of_owner}،\n\nنشكركم على اهتمامكم بالانضمام إلى منصة سوق لينك.\n\nبعد مراجعة طلبكم بعناية، نأسف لإبلاغكم بأننا غير قادرين على قبول طلبكم للسبب التالي:\n${reason}\n\nنتمنى لكم التوفيق والنجاح في مساعيكم.\n\nمع تحياتنا،\nفريق سوق لينك`,
+                  }));
+                }}
+              />
+            </div>
+            {rejectModal.message && (
+              <div className="ad-modal-field">
+                <label className="ad-modal-label">معاينة الرسالة</label>
+                <pre className="ad-modal-preview">{rejectModal.message}</pre>
+              </div>
+            )}
             {rejectModal.error && <p className="ad-modal-error">{rejectModal.error}</p>}
             <div className="ad-modal-actions">
-              <button type="button" className="ad-btn ad-btn--reject" onClick={handleSendRejection} disabled={rejectModal.sending}>
+              <button type="button" className="ad-btn ad-btn--reject" onClick={handleSendRejection} disabled={rejectModal.sending || !rejectModal.reason.trim()}>
                 {rejectModal.sending ? 'جارٍ الإرسال...' : 'إرسال وتسجيل الرفض'}
               </button>
-              <button type="button" className="ad-btn ad-btn--delete" onClick={() => setRejectModal({ app: null, message: '', sending: false, error: '' })} disabled={rejectModal.sending}>
+              <button type="button" className="ad-btn ad-btn--delete" onClick={() => setRejectModal({ app: null, reason: '', message: '', sending: false, error: '' })} disabled={rejectModal.sending}>
                 إلغاء
               </button>
             </div>
@@ -1263,25 +1272,40 @@ export default function AdminDashboard() {
 
       {/* ── Delivery reject modal ── */}
       {deliveryRejectModal.app && (
-        <div className="ad-modal-overlay" onClick={() => !deliveryRejectModal.sending && setDeliveryRejectModal({ app: null, message: '', sending: false, error: '' })}>
+        <div className="ad-modal-overlay" onClick={() => !deliveryRejectModal.sending && setDeliveryRejectModal({ app: null, reason: '', message: '', sending: false, error: '' })}>
           <div className="ad-modal" dir="rtl" onClick={e => e.stopPropagation()}>
             <h3 className="ad-modal-title">📧 إرسال إشعار رفض — مندوب توصيل</h3>
             <p className="ad-modal-to">إلى: <strong>{deliveryRejectModal.app.email}</strong></p>
-            <textarea
-              className="ad-modal-textarea"
-              value={deliveryRejectModal.message}
-              onChange={e => setDeliveryRejectModal(prev => ({ ...prev, message: e.target.value }))}
-              rows={8}
-              disabled={deliveryRejectModal.sending}
-              title="نص الرسالة"
-              placeholder="اكتب رسالة الرفض هنا..."
-            />
+            <div className="ad-modal-field">
+              <label className="ad-modal-label">سبب الرفض <span className="ad-required">*</span></label>
+              <textarea
+                className="ad-modal-textarea"
+                rows={3}
+                disabled={deliveryRejectModal.sending}
+                placeholder="مثال: المستندات المرفقة غير مكتملة..."
+                onChange={e => {
+                  const reason = e.target.value;
+                  const app = deliveryRejectModal.app!;
+                  setDeliveryRejectModal(prev => ({
+                    ...prev,
+                    reason,
+                    message: `عزيزي/عزيزتي ${app.name}،\n\nنشكركم على اهتمامكم بالانضمام إلى منصة سوق لينك كمندوب توصيل.\n\nبعد مراجعة طلبكم بعناية، نأسف لإبلاغكم بأننا غير قادرين على قبول طلبكم للسبب التالي:\n${reason}\n\nنتمنى لكم التوفيق والنجاح في مساعيكم.\n\nمع تحياتنا،\nفريق سوق لينك`,
+                  }));
+                }}
+              />
+            </div>
+            {deliveryRejectModal.message && (
+              <div className="ad-modal-field">
+                <label className="ad-modal-label">معاينة الرسالة</label>
+                <pre className="ad-modal-preview">{deliveryRejectModal.message}</pre>
+              </div>
+            )}
             {deliveryRejectModal.error && <p className="ad-modal-error">{deliveryRejectModal.error}</p>}
             <div className="ad-modal-actions">
-              <button type="button" className="ad-btn ad-btn--reject" onClick={handleSendDeliveryRejection} disabled={deliveryRejectModal.sending}>
+              <button type="button" className="ad-btn ad-btn--reject" onClick={handleSendDeliveryRejection} disabled={deliveryRejectModal.sending || !deliveryRejectModal.reason.trim()}>
                 {deliveryRejectModal.sending ? 'جارٍ الإرسال...' : 'إرسال وتسجيل الرفض'}
               </button>
-              <button type="button" className="ad-btn ad-btn--delete" onClick={() => setDeliveryRejectModal({ app: null, message: '', sending: false, error: '' })} disabled={deliveryRejectModal.sending}>
+              <button type="button" className="ad-btn ad-btn--delete" onClick={() => setDeliveryRejectModal({ app: null, reason: '', message: '', sending: false, error: '' })} disabled={deliveryRejectModal.sending}>
                 إلغاء
               </button>
             </div>
@@ -1332,25 +1356,40 @@ export default function AdminDashboard() {
 
       {/* ── Hub worker reject modal ── */}
       {hubRejectModal.app && (
-        <div className="ad-modal-overlay" onClick={() => !hubRejectModal.sending && setHubRejectModal({ app: null, message: '', sending: false, error: '' })}>
+        <div className="ad-modal-overlay" onClick={() => !hubRejectModal.sending && setHubRejectModal({ app: null, reason: '', message: '', sending: false, error: '' })}>
           <div className="ad-modal" dir="rtl" onClick={e => e.stopPropagation()}>
             <h3 className="ad-modal-title">📧 إرسال إشعار رفض — عامل مستودع</h3>
             <p className="ad-modal-to">إلى: <strong>{hubRejectModal.app.email}</strong></p>
-            <textarea
-              className="ad-modal-textarea"
-              value={hubRejectModal.message}
-              onChange={e => setHubRejectModal(prev => ({ ...prev, message: e.target.value }))}
-              rows={8}
-              disabled={hubRejectModal.sending}
-              title="نص الرسالة"
-              placeholder="اكتب رسالة الرفض هنا..."
-            />
+            <div className="ad-modal-field">
+              <label className="ad-modal-label">سبب الرفض <span className="ad-required">*</span></label>
+              <textarea
+                className="ad-modal-textarea"
+                rows={3}
+                disabled={hubRejectModal.sending}
+                placeholder="مثال: المستندات المرفقة غير مكتملة..."
+                onChange={e => {
+                  const reason = e.target.value;
+                  const app = hubRejectModal.app!;
+                  setHubRejectModal(prev => ({
+                    ...prev,
+                    reason,
+                    message: `عزيزي/عزيزتي ${app.name}،\n\nنشكركم على اهتمامكم بالانضمام إلى منصة سوق لينك كعامل مستودع.\n\nبعد مراجعة طلبكم بعناية، نأسف لإبلاغكم بأننا غير قادرين على قبول طلبكم للسبب التالي:\n${reason}\n\nنتمنى لكم التوفيق والنجاح في مساعيكم.\n\nمع تحياتنا،\nفريق سوق لينك`,
+                  }));
+                }}
+              />
+            </div>
+            {hubRejectModal.message && (
+              <div className="ad-modal-field">
+                <label className="ad-modal-label">معاينة الرسالة</label>
+                <pre className="ad-modal-preview">{hubRejectModal.message}</pre>
+              </div>
+            )}
             {hubRejectModal.error && <p className="ad-modal-error">{hubRejectModal.error}</p>}
             <div className="ad-modal-actions">
-              <button type="button" className="ad-btn ad-btn--reject" onClick={handleSendHubRejection} disabled={hubRejectModal.sending}>
+              <button type="button" className="ad-btn ad-btn--reject" onClick={handleSendHubRejection} disabled={hubRejectModal.sending || !hubRejectModal.reason.trim()}>
                 {hubRejectModal.sending ? 'جارٍ الإرسال...' : 'إرسال وتسجيل الرفض'}
               </button>
-              <button type="button" className="ad-btn ad-btn--delete" onClick={() => setHubRejectModal({ app: null, message: '', sending: false, error: '' })} disabled={hubRejectModal.sending}>
+              <button type="button" className="ad-btn ad-btn--delete" onClick={() => setHubRejectModal({ app: null, reason: '', message: '', sending: false, error: '' })} disabled={hubRejectModal.sending}>
                 إلغاء
               </button>
             </div>

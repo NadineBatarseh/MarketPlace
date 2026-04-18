@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import "dotenv/config";
 import type { Request, Response } from "express";
+import Anthropic from "@anthropic-ai/sdk";
 import { fileURLToPath } from "url";
 import path from "path";
 import { supabase } from "./supabase.js";
@@ -139,6 +140,65 @@ app.get("/api/products", async (_req: Request, res: Response) => {
   }
 
   return res.json({ ok: true, products: data });
+});
+
+/* ---------- CHAT (Claude) ---------- */
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+app.post("/api/chat", async (req: Request, res: Response) => {
+  const { message, role } = req.body as { message: string; role: string };
+
+  if (!message) return res.status(400).json({ ok: false, error: "Missing message" });
+
+  try {
+    const systemPrompt = `أنت مساعد ذكي لمنصة سوق لينك.
+دورك: ${role === "merchant" ? "مساعدة التاجر في إدارة متجره ومنتجاته وطلباته" : "مساعدة المستخدم"}.
+أجب دائماً باللغة العربية بشكل واضح ومختصر.
+إذا طُلب منك عمل يتعلق بالمنتجات أو الطلبات، اشرح ما يمكنك فعله.`;
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    const { images } = req.body as { message: string; role: string; images?: { base64: string; mediaType: string }[] };
+
+    const userContent: any[] = [];
+    if (images?.length) {
+      for (const img of images) {
+        userContent.push({ type: "image", source: { type: "base64", media_type: img.mediaType, data: img.base64 } });
+      }
+    }
+    if (message) {
+      userContent.push({ type: "text", text: message });
+    }
+
+    const stream = anthropic.messages.stream({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userContent }],
+    });
+
+    stream.on("text", (text) => {
+      res.write(`data: ${JSON.stringify({ text })}\n\n`);
+    });
+
+    stream.on("finalMessage", () => {
+      res.write(`data: [DONE]\n\n`);
+      res.end();
+    });
+
+    stream.on("error", (err) => {
+      console.error("[/api/chat] stream error:", err.message);
+      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+      res.end();
+    });
+
+  } catch (err: any) {
+    console.error("[/api/chat] error:", err.message);
+    return res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 /* ---------- SEARCH ---------- */

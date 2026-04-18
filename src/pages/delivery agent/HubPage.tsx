@@ -9,6 +9,7 @@
 
 import { useState, useEffect } from "react";
 import Topbar from "../../components/Topbar";
+import { insertTrackingEvent } from "../../lib/trackingEvents";
 
 interface HubPackage {
   id: string;      // PKG-001
@@ -75,8 +76,23 @@ export default function HubPage() {
         body: JSON.stringify({ rawPackageId: rawPkgId }),
       });
       const json = await res.json();
-      if (json.ok) load();
-      else setError(json.error ?? "خطأ في تسجيل الوصول");
+      if (json.ok) {
+        // Find which order this package belongs to
+        const parentOrder = orders.find(o => o.packages.some(p => p.raw_id === rawPkgId));
+        if (parentOrder) {
+          // Only insert arrived_hub event once — when the first package arrives
+          const wasEmpty = parentOrder.packages_at_hub === 0;
+          if (wasEmpty) {
+            await insertTrackingEvent(parentOrder.id, 'arrived_hub', 'موظف المستودع', {
+              location: 'مستودع رام الله',
+              note:     'وصل أول طرد إلى المستودع',
+            });
+          }
+        }
+        load();
+      } else {
+        setError(json.error ?? "خطأ في تسجيل الوصول");
+      }
     } catch {
       setError("تعذر الاتصال بالخادم");
     } finally {
@@ -95,6 +111,11 @@ export default function HubPage() {
       });
       const json = await res.json();
       if (json.ok) {
+        // All packages collected and packed — insert packing event
+        await insertTrackingEvent(orderId, 'packing', 'فريق التعبئة', {
+          location: 'مستودع رام الله',
+          note:     'تمت التعبئة والتغليف وإنشاء بطاقة التوصيل',
+        });
         setLabel(json.label);
         load();
       } else {
