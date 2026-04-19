@@ -149,7 +149,8 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 initMcp().catch((err) => console.error("[MCP] Init failed:", err));
 
-const WRITE_TOOLS = ["create_product", "update_product", "delete_product"];
+// Tools that require the merchant's JWT to be injected automatically
+const AUTH_TOOLS = ["create_product", "update_product", "delete_product", "list_my_products"];
 
 app.post("/api/chat", async (req: Request, res: Response) => {
   const { message, role, sb_auth_token, images } = req.body as {
@@ -164,7 +165,12 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   const systemPrompt = `أنت مساعد ذكي لمنصة سوق لينك.
 دورك: ${role === "merchant" ? "مساعدة التاجر في إدارة متجره ومنتجاته وطلباته" : "مساعدة المستخدم"}.
 أجب دائماً باللغة العربية بشكل واضح ومختصر.
-لديك أدوات للبحث عن المنتجات والمتاجر وإدارتها — استخدمها تلقائياً عند الحاجة.`;
+لديك أدوات للبحث عن المنتجات والمتاجر وإدارتها — استخدمها تلقائياً عند الحاجة.
+قاعدة عامة: إذا احتجت shop_id ولم يذكره المستخدم، استخدم أولاً أداة list_shops للبحث بالاسم، ثم استخدم الـ shop_id الناتج.
+${role === "merchant" ? `قواعد مهمة للتاجر:
+- عندما يطلب التاجر عرض منتجاته أو منتجات متجره، استخدم أداة list_my_products تلقائياً (لا تطلب shop_id).
+- أداة list_my_products تحدد المتجر تلقائياً من حساب التاجر المسجّل الدخول.
+- list_products تعرض جميع منتجات السوق لجميع المتاجر — لا تستخدمها عندما يسأل التاجر عن منتجاته الخاصة.` : ""}`;
 
   const userContent: Anthropic.MessageParam["content"] = [];
   if (images?.length) {
@@ -203,7 +209,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
         const toolArgs: Record<string, unknown> = { ...(block.input as Record<string, unknown>) };
 
         // Inject auth token for write operations that require it
-        if (sb_auth_token && WRITE_TOOLS.includes(block.name)) {
+        if (sb_auth_token && AUTH_TOOLS.includes(block.name)) {
           toolArgs.sb_auth_token = sb_auth_token;
         }
 

@@ -75,6 +75,27 @@ export function registerSupabaseTools(server: McpServer) {
     }
   );
 
+  // ── READ (merchant): list only the caller's own products ────────────────────
+  server.tool(
+    "list_my_products",
+    "List all products that belong to the currently authenticated merchant. Requires a valid Supabase JWT. Use this whenever a merchant asks to see their own products.",
+    {
+      sb_auth_token: z.string().describe("Supabase user JWT for authentication"),
+    },
+    async ({ sb_auth_token }) => {
+      const shop_id = await resolveShopId(sb_auth_token);
+
+      const { data, error } = await supabase
+        .from("products")
+        .select("id, title, description, price, image_urls, stock_Quantity, shop_id")
+        .eq("shop_id", shop_id)
+        .order("created_at", { ascending: false });
+
+      if (error) throw new Error(error.message);
+      return { content: [{ type: "text", text: JSON.stringify(data ?? []) }] };
+    }
+  );
+
   // ── WRITE: create product ────────────────────────────────────────────────────
   server.tool(
     "create_product",
