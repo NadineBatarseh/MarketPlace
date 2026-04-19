@@ -14,6 +14,7 @@ import productUploadRouter from "./routes/productUploadRouter.js";
 import metaCatalogRouter from "./routes/metaCatalogAPIRouter.js";
 import productCRUDRouter from "./routes/productCRUDRouter.js";
 import supabaseProductWebhookRouter from "./routes/supabaseProductWebhookRouter.js";
+import { initMcp, mcpClient, anthropicTools } from "./mcpClient.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -142,62 +143,102 @@ app.get("/api/products", async (_req: Request, res: Response) => {
   return res.json({ ok: true, products: data });
 });
 
-/* ---------- CHAT (Claude) ---------- */
+/* ---------- CHAT (Claude + MCP tools) ---------- */
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+initMcp().catch((err) => console.error("[MCP] Init failed:", err));
+
+const WRITE_TOOLS = ["create_product", "update_product", "delete_product"];
+
 app.post("/api/chat", async (req: Request, res: Response) => {
-  const { message, role } = req.body as { message: string; role: string };
+  const { message, role, sb_auth_token, images } = req.body as {
+    message: string;
+    role: string;
+    sb_auth_token?: string;
+    images?: { base64: string; mediaType: string }[];
+  };
 
   if (!message) return res.status(400).json({ ok: false, error: "Missing message" });
 
-  try {
-    const systemPrompt = `أنت مساعد ذكي لمنصة سوق لينك.
+  const systemPrompt = `أنت مساعد ذكي لمنصة سوق لينك.
 دورك: ${role === "merchant" ? "مساعدة التاجر في إدارة متجره ومنتجاته وطلباته" : "مساعدة المستخدم"}.
 أجب دائماً باللغة العربية بشكل واضح ومختصر.
-إذا طُلب منك عمل يتعلق بالمنتجات أو الطلبات، اشرح ما يمكنك فعله.`;
+لديك أدوات للبحث عن المنتجات والمتاجر وإدارتها — استخدمها تلقائياً عند الحاجة.`;
 
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-
-    const { images } = req.body as { message: string; role: string; images?: { base64: string; mediaType: string }[] };
-
-    const userContent: any[] = [];
-    if (images?.length) {
-      for (const img of images) {
-        userContent.push({ type: "image", source: { type: "base64", media_type: img.mediaType, data: img.base64 } });
-      }
+  const userContent: Anthropic.MessageParam["content"] = [];
+  if (images?.length) {
+    for (const img of images) {
+      userContent.push({ type: "image", source: { type: "base64", media_type: img.mediaType as any, data: img.base64 } });
     }
-    if (message) {
-      userContent.push({ type: "text", text: message });
-    }
+  }
+  userContent.push({ type: "text", text: message });
 
-    const stream = anthropic.messages.stream({
+  const messages: Anthropic.MessageParam[] = [{ role: "user", content: userContent }];
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  try {
+    let response = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 1024,
       system: systemPrompt,
-      messages: [{ role: "user", content: userContent }],
+      messages,
+      tools: anthropicTools,
     });
 
-    stream.on("text", (text) => {
-      res.write(`data: ${JSON.stringify({ text })}\n\n`);
-    });
+    // Agentic loop: execute tool calls until Claude returns a final answer
+    while (response.stop_reason === "tool_use") {
+      messages.push({ role: "assistant", content: response.content });
 
-    stream.on("finalMessage", () => {
-      res.write(`data: [DONE]\n\n`);
-      res.end();
-    });
+      const toolUseBlocks = response.content.filter(
+        (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
+      );
 
-    stream.on("error", (err) => {
-      console.error("[/api/chat] stream error:", err.message);
-      res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
-      res.end();
-    });
+      const toolResults: Anthropic.ToolResultBlockParam[] = [];
+
+      for (const block of toolUseBlocks) {
+        const toolArgs: Record<string, unknown> = { ...(block.input as Record<string, unknown>) };
+
+        // Inject auth token for write operations that require it
+        if (sb_auth_token && WRITE_TOOLS.includes(block.name)) {
+          toolArgs.sb_auth_token = sb_auth_token;
+        }
+
+        const result = await mcpClient.callTool({ name: block.name, arguments: toolArgs });
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: block.id,
+          content: JSON.stringify(result.content),
+        });
+      }
+
+      messages.push({ role: "user", content: toolResults });
+
+      response = await anthropic.messages.create({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages,
+        tools: anthropicTools,
+      });
+    }
+
+    // Stream the final text response back to the client
+    for (const block of response.content) {
+      if (block.type === "text") {
+        res.write(`data: ${JSON.stringify({ text: block.text })}\n\n`);
+      }
+    }
+    res.write(`data: [DONE]\n\n`);
+    res.end();
 
   } catch (err: any) {
     console.error("[/api/chat] error:", err.message);
-    return res.status(500).json({ ok: false, error: err.message });
+    res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+    res.end();
   }
 });
 
