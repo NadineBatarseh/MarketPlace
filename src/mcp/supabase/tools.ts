@@ -24,15 +24,17 @@ async function resolveShopId(sb_auth_token: string): Promise<string> {
 export function registerSupabaseTools(server: McpServer) {
 
   // ── READ: list products ──────────────────────────────────────────────────────
-  server.tool(
+  server.registerTool(
     "list_products",
-    "List products from the Souq Link marketplace. Supports optional keyword, price, and shop filters.",
     {
-      keywords:   z.array(z.string()).optional().describe("Search terms matched against title and description"),
-      max_price:  z.number().optional().describe("Maximum price filter"),
-      price_sort: z.enum(["asc", "desc"]).optional().describe("Sort by price"),
-      shop_id:    z.string().optional().describe("Filter by a specific shop ID"),
-      limit:      z.number().optional().describe("Max results to return (default 20)"),
+      description: "List products from the Souq Link marketplace. Supports optional keyword, price, and shop filters.",
+      inputSchema: {
+        keywords:   z.array(z.string()).optional().describe("Search terms matched against title and description"),
+        max_price:  z.number().optional().describe("Maximum price filter"),
+        price_sort: z.enum(["asc", "desc"]).optional().describe("Sort by price"),
+        shop_id:    z.string().optional().describe("Filter by a specific shop ID"),
+        limit:      z.number().optional().describe("Max results to return (default 20)"),
+      },
     },
     async (input) => {
       let query = supabase
@@ -59,10 +61,12 @@ export function registerSupabaseTools(server: McpServer) {
   );
 
   // ── READ: get single product ─────────────────────────────────────────────────
-  server.tool(
+  server.registerTool(
     "get_product",
-    "Fetch a single product by its ID.",
-    { id: z.string().describe("Product UUID") },
+    {
+      description: "Fetch a single product by its ID.",
+      inputSchema: { id: z.string().describe("Product UUID") },
+    },
     async ({ id }) => {
       const { data, error } = await supabase
         .from("products")
@@ -76,13 +80,16 @@ export function registerSupabaseTools(server: McpServer) {
   );
 
   // ── READ (merchant): list only the caller's own products ────────────────────
-  server.tool(
+  server.registerTool(
     "list_my_products",
-    "List all products that belong to the currently authenticated merchant. Requires a valid Supabase JWT. Use this whenever a merchant asks to see their own products.",
     {
-      sb_auth_token: z.string().describe("Supabase user JWT for authentication"),
+      description: "List all products that belong to the currently authenticated merchant. Use this whenever a merchant asks to see their own products. The sb_auth_token is automatically injected by the server — NEVER ask the user for it.",
+      inputSchema: {
+        sb_auth_token: z.string().optional().describe("Automatically injected by the server. Do NOT ask the user for this value."),
+      },
     },
     async ({ sb_auth_token }) => {
+      if (!sb_auth_token) throw new Error("Authentication required");
       const shop_id = await resolveShopId(sb_auth_token);
 
       const { data, error } = await supabase
@@ -97,18 +104,21 @@ export function registerSupabaseTools(server: McpServer) {
   );
 
   // ── WRITE: create product ────────────────────────────────────────────────────
-  server.tool(
+  server.registerTool(
     "create_product",
-    "Create a new product in the caller's shop. Requires a valid Supabase JWT.",
     {
-      sb_auth_token:  z.string().describe("Supabase user JWT for authentication"),
-      title:          z.string().describe("Product title (required)"),
-      price:          z.number().describe("Product price (required, non-negative)"),
-      description:    z.string().optional(),
-      stock_Quantity: z.number().optional(),
-      image_urls:     z.array(z.string()).optional(),
+      description: "Create a new product in the caller's shop. The sb_auth_token is automatically injected by the server — NEVER ask the user for it.",
+      inputSchema: {
+        sb_auth_token:  z.string().optional().describe("Automatically injected by the server. Do NOT ask the user for this value."),
+        title:          z.string().describe("Product title (required)"),
+        price:          z.number().describe("Product price (required, non-negative)"),
+        description:    z.string().optional(),
+        stock_Quantity: z.number().optional(),
+        image_urls:     z.array(z.string()).optional(),
+      },
     },
     async ({ sb_auth_token, title, price, description, stock_Quantity, image_urls }) => {
+      if (!sb_auth_token) throw new Error("Authentication required");
       const shop_id = await resolveShopId(sb_auth_token);
 
       const { data, error } = await supabase
@@ -131,19 +141,22 @@ export function registerSupabaseTools(server: McpServer) {
   );
 
   // ── WRITE: update product ────────────────────────────────────────────────────
-  server.tool(
+  server.registerTool(
     "update_product",
-    "Update fields of an existing product. Only the product's owner shop can update it. Requires a valid Supabase JWT.",
     {
-      sb_auth_token:  z.string().describe("Supabase user JWT for authentication"),
-      id:             z.string().describe("Product UUID to update"),
-      title:          z.string().optional(),
-      price:          z.number().optional(),
-      description:    z.string().optional(),
-      stock_Quantity: z.number().optional(),
-      image_urls:     z.array(z.string()).optional(),
+      description: "Update fields of an existing product. Only the product's owner shop can update it. The sb_auth_token is automatically injected by the server — NEVER ask the user for it.",
+      inputSchema: {
+        sb_auth_token:  z.string().optional().describe("Automatically injected by the server. Do NOT ask the user for this value."),
+        id:             z.string().describe("Product UUID to update"),
+        title:          z.string().optional(),
+        price:          z.number().optional(),
+        description:    z.string().optional(),
+        stock_Quantity: z.number().optional(),
+        image_urls:     z.array(z.string()).optional(),
+      },
     },
     async ({ sb_auth_token, id, ...fields }) => {
+      if (!sb_auth_token) throw new Error("Authentication required");
       const shop_id = await resolveShopId(sb_auth_token);
 
       const updates: Record<string, unknown> = {};
@@ -170,14 +183,17 @@ export function registerSupabaseTools(server: McpServer) {
   );
 
   // ── WRITE: delete product ────────────────────────────────────────────────────
-  server.tool(
+  server.registerTool(
     "delete_product",
-    "Delete a product from the caller's shop. Requires a valid Supabase JWT.",
     {
-      sb_auth_token: z.string().describe("Supabase user JWT for authentication"),
-      id:            z.string().describe("Product UUID to delete"),
+      description: "Delete a product from the caller's shop. The sb_auth_token is automatically injected by the server — NEVER ask the user for it.",
+      inputSchema: {
+        sb_auth_token: z.string().optional().describe("Automatically injected by the server. Do NOT ask the user for this value."),
+        id:            z.string().describe("Product UUID to delete"),
+      },
     },
     async ({ sb_auth_token, id }) => {
+      if (!sb_auth_token) throw new Error("Authentication required");
       const shop_id = await resolveShopId(sb_auth_token);
 
       const { error } = await supabase
@@ -192,12 +208,14 @@ export function registerSupabaseTools(server: McpServer) {
   );
 
   // ── READ: list shops ─────────────────────────────────────────────────────────
-  server.tool(
+  server.registerTool(
     "list_shops",
-    "List shops in Souq Link. Supports optional name and location filters.",
     {
-      name:     z.string().optional().describe("Partial shop name to search"),
-      location: z.string().optional().describe("Partial location to search"),
+      description: "List shops in Souq Link. Supports optional name and location filters.",
+      inputSchema: {
+        name:     z.string().optional().describe("Partial shop name to search"),
+        location: z.string().optional().describe("Partial location to search"),
+      },
     },
     async ({ name, location }) => {
       let query = supabase
@@ -212,10 +230,12 @@ export function registerSupabaseTools(server: McpServer) {
   );
 
   // ── READ: get single shop ────────────────────────────────────────────────────
-  server.tool(
+  server.registerTool(
     "get_shop",
-    "Fetch a single shop by its ID.",
-    { shop_id: z.string().describe("Shop UUID") },
+    {
+      description: "Fetch a single shop by its ID.",
+      inputSchema: { shop_id: z.string().describe("Shop UUID") },
+    },
     async ({ shop_id }) => {
       const { data, error } = await supabase
         .from("shops")

@@ -2,7 +2,7 @@ export const chatbotConfig = {
   merchant: {
     welcomeMessage: "مرحبًا، كيف أستطيع مساعدتك في إدارة متجرك؟",
     placeholder: "اكتب طلبك هنا...",
-    suggestions: ["عرض المنتجات", "إضافة منتج", "عرض الطلبات"],
+    suggestions: ["اعرض منتجات متجري فقط", "إضافة منتج", "عرض الطلبات"],
     allowedTools: ["product_management", "order_management"],
   },
   admin: {
