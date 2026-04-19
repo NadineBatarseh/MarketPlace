@@ -14,6 +14,7 @@ import productUploadRouter from "./routes/productUploadRouter.js";
 import metaCatalogRouter from "./routes/metaCatalogAPIRouter.js";
 import productCRUDRouter from "./routes/productCRUDRouter.js";
 import supabaseProductWebhookRouter from "./routes/supabaseProductWebhookRouter.js";
+import { initMcp, mcpClient, anthropicTools } from "./mcpClient.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -142,469 +143,98 @@ app.get("/api/products", async (_req: Request, res: Response) => {
   return res.json({ ok: true, products: data });
 });
 
-/* ---------- CHAT (Claude + Supabase MCP tools) ---------- */
+/* ---------- CHAT (Claude + MCP tools) ---------- */
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// ── Supabase tool definitions for Claude ─────────────────────────────────────
+initMcp().catch((err) => console.error("[MCP] Init failed:", err));
 
-const SUPABASE_TOOLS: Anthropic.Tool[] = [
-  {
-    name: "list_products",
-    description: "List products from the Souq Link marketplace. Supports optional keyword, price, and shop filters.",
-    input_schema: {
-      type: "object",
-      properties: {
-        keywords:   { type: "array", items: { type: "string" }, description: "Search terms matched against title and description" },
-        max_price:  { type: "number", description: "Maximum price filter" },
-        price_sort: { type: "string", enum: ["asc", "desc"], description: "Sort by price" },
-        shop_id:    { type: "string", description: "Filter by a specific shop ID" },
-        limit:      { type: "number", description: "Max results to return (default 20)" },
-      },
-    },
-  },
-  {
-    name: "get_product",
-    description: "Fetch a single product by its ID.",
-    input_schema: {
-      type: "object",
-      properties: {
-        id: { type: "string", description: "Product UUID" },
-      },
-      required: ["id"],
-    },
-  },
-  {
-    name: "create_product",
-    description: "Create a new product in the caller's shop. Requires a valid Supabase JWT.",
-    input_schema: {
-      type: "object",
-      properties: {
-        title:          { type: "string", description: "Product title (required)" },
-        price:          { type: "number", description: "Product price (required, non-negative)" },
-        description:    { type: "string" },
-        stock_Quantity: { type: "number" },
-        image_urls:     { type: "array", items: { type: "string" } },
-      },
-      required: ["title", "price"],
-    },
-  },
-  {
-    name: "update_product",
-    description: "Update fields of an existing product. Only the product's owner shop can update it.",
-    input_schema: {
-      type: "object",
-      properties: {
-        id:             { type: "string", description: "Product UUID to update" },
-        title:          { type: "string" },
-        price:          { type: "number" },
-        description:    { type: "string" },
-        stock_Quantity: { type: "number" },
-        image_urls:     { type: "array", items: { type: "string" } },
-      },
-      required: ["id"],
-    },
-  },
-  {
-    name: "delete_product",
-    description: "Delete a product from the caller's shop.",
-    input_schema: {
-      type: "object",
-      properties: {
-        id: { type: "string", description: "Product UUID to delete" },
-      },
-      required: ["id"],
-    },
-  },
-  {
-    name: "list_shops",
-    description: "List shops in Souq Link. Supports optional name and location filters.",
-    input_schema: {
-      type: "object",
-      properties: {
-        name:     { type: "string", description: "Partial shop name to search" },
-        location: { type: "string", description: "Partial location to search" },
-      },
-    },
-  },
-  {
-    name: "get_shop",
-    description: "Fetch a single shop by its ID.",
-    input_schema: {
-      type: "object",
-      properties: {
-        shop_id: { type: "string", description: "Shop UUID" },
-      },
-      required: ["shop_id"],
-    },
-  },
-  {
-    name: "apply_discount",
-    description: "Apply a discount to one product or all products in the merchant's shop. Supports percentage (e.g. 20%) or fixed amount deduction. Returns the updated products with old and new prices.",
-    input_schema: {
-      type: "object",
-      properties: {
-        product_id: {
-          type: "string",
-          description: "UUID of a specific product to discount. Omit to apply to ALL products in the shop.",
-        },
-        discount_type: {
-          type: "string",
-          enum: ["percentage", "fixed"],
-          description: "'percentage' deducts a % from the price (e.g. 20 → 20% off). 'fixed' deducts a fixed amount (e.g. 10 → subtract 10 from price).",
-        },
-        discount_value: {
-          type: "number",
-          description: "The discount amount. For percentage: 1–99. For fixed: any positive number less than the product price.",
-        },
-      },
-      required: ["discount_type", "discount_value"],
-    },
-  },
-  {
-    name: "remove_discount",
-    description: "Remove the discount from one product or all products in the merchant's shop, restoring the original price display.",
-    input_schema: {
-      type: "object",
-      properties: {
-        product_id: {
-          type: "string",
-          description: "UUID of the product to remove the discount from. Omit to remove discounts from ALL products in the shop.",
-        },
-      },
-    },
-  },
-];
-
-// Tools available per chatbot role
-const ROLE_TOOLS: Record<string, string[]> = {
-  merchant: ["list_products", "get_product", "create_product", "update_product", "delete_product", "list_shops", "get_shop", "apply_discount", "remove_discount"],
-  admin:    ["list_products", "get_product", "list_shops", "get_shop"],
-  customer: ["list_products", "get_product", "list_shops", "get_shop"],
-};
-
-// ── Tool executor ─────────────────────────────────────────────────────────────
-
-// Resolve the merchant's shop_id from their JWT (called once per request)
-async function resolveMerchantShopId(sb_auth_token: string): Promise<string> {
-  const { data: { user }, error: authErr } = await supabase.auth.getUser(sb_auth_token);
-  console.log(`[auth] getUser → user=${user?.id ?? "null"} err=${authErr?.message ?? "none"}`);
-  if (authErr || !user) throw new Error("جلسة غير صالحة، يرجى تسجيل الدخول مجدداً.");
-  const { data: shop, error: shopErr } = await supabase
-    .from("shops").select("shop_id").eq("owner_id", user.id).maybeSingle();
-  console.log(`[auth] shop lookup → shop_id=${shop?.shop_id ?? "null"} err=${shopErr?.message ?? "none"}`);
-  if (shopErr || !shop) throw new Error("لا يوجد متجر مرتبط بهذا الحساب.");
-  return shop.shop_id as string;
-}
-
-// merchant_shop_id is injected for merchant role — all tools are scoped to it automatically
-async function executeTool(
-  name: string,
-  input: Record<string, any>,
-  merchant_shop_id?: string,
-): Promise<string> {
-  console.log(`[tool:${name}] called, merchant_shop_id=${merchant_shop_id ?? "none"}`);
-
-  switch (name) {
-    case "list_products": {
-      let query = supabase
-        .from("products")
-        .select("id, title, description, price, discount_pct, image_urls, stock_Quantity, shop_id");
-
-      // Merchant always sees only their own products
-      if (merchant_shop_id) {
-        query = query.eq("shop_id", merchant_shop_id);
-      }
-
-      if (input.keywords?.length) {
-        const orParts = (input.keywords as string[]).flatMap((t: string) => [
-          `title.ilike.%${t}%`, `description.ilike.%${t}%`,
-        ]);
-        query = query.or(orParts.join(","));
-      }
-      if (input.max_price)  query = query.lte("price", input.max_price);
-      if (input.price_sort) query = query.order("price", { ascending: input.price_sort === "asc" });
-      query = query.limit(input.limit ?? 20);
-
-      const { data, error } = await query;
-      if (error) throw new Error(error.message);
-      return JSON.stringify(data ?? []);
-    }
-
-    case "get_product": {
-      let query = supabase
-        .from("products")
-        .select("id, title, description, price, discount_pct, image_urls, stock_Quantity, shop_id, capacity_units")
-        .eq("id", input.id);
-
-      // Merchant can only fetch their own products
-      if (merchant_shop_id) query = query.eq("shop_id", merchant_shop_id);
-
-      const { data, error } = await query.maybeSingle();
-      if (error) throw new Error(error.message);
-      if (!data) throw new Error(`المنتج ${input.id} غير موجود أو لا ينتمي إلى متجرك.`);
-      return JSON.stringify(data);
-    }
-
-    case "create_product": {
-      if (!merchant_shop_id) throw new Error("يجب تسجيل الدخول كتاجر لإضافة منتج.");
-      const { data, error } = await supabase.from("products").insert({
-        shop_id:        merchant_shop_id,
-        meta_product_id: crypto.randomUUID(),
-        title:          (input.title as string).trim(),
-        description:    (input.description as string | undefined)?.trim() ?? null,
-        price:          input.price,
-        stock_Quantity: input.stock_Quantity ?? null,
-        image_urls:     input.image_urls ?? null,
-      }).select().single();
-      if (error) throw new Error(error.message);
-      return JSON.stringify({ ok: true, product: data });
-    }
-
-    case "update_product": {
-      if (!merchant_shop_id) throw new Error("يجب تسجيل الدخول كتاجر لتعديل منتج.");
-      const updates: Record<string, unknown> = {};
-      if (input.title          !== undefined) updates.title          = (input.title as string).trim();
-      if (input.price          !== undefined) updates.price          = input.price;
-      if (input.description    !== undefined) updates.description    = (input.description as string).trim();
-      if (input.stock_Quantity !== undefined) updates.stock_Quantity = input.stock_Quantity;
-      if (input.image_urls     !== undefined) updates.image_urls     = input.image_urls;
-      if (Object.keys(updates).length === 0) throw new Error("لم يتم تقديم أي حقول للتحديث.");
-      const { data, error } = await supabase.from("products")
-        .update(updates)
-        .eq("id", input.id)
-        .eq("shop_id", merchant_shop_id)  // ownership enforced here
-        .select().single();
-      if (error) throw new Error(error.message);
-      if (!data) throw new Error("المنتج غير موجود أو لا ينتمي إلى متجرك.");
-      return JSON.stringify({ ok: true, product: data });
-    }
-
-    case "delete_product": {
-      if (!merchant_shop_id) throw new Error("يجب تسجيل الدخول كتاجر لحذف منتج.");
-      const { error } = await supabase.from("products")
-        .delete()
-        .eq("id", input.id)
-        .eq("shop_id", merchant_shop_id);  // ownership enforced here
-      if (error) throw new Error(error.message);
-      return JSON.stringify({ ok: true, deleted_id: input.id });
-    }
-
-    case "list_shops": {
-      let query = supabase.from("shops").select("shop_id, name, location, description, logo_url");
-      if (input.name)     query = query.ilike("name",     `%${input.name}%`);
-      if (input.location) query = query.ilike("location", `%${input.location}%`);
-      const { data, error } = await query;
-      if (error) throw new Error(error.message);
-      return JSON.stringify(data ?? []);
-    }
-
-    case "get_shop": {
-      // Merchant with no explicit shop_id → return their own shop
-      const target_shop_id = input.shop_id ?? merchant_shop_id;
-      if (!target_shop_id) throw new Error("يرجى تحديد معرّف المتجر.");
-      const { data, error } = await supabase
-        .from("shops")
-        .select("shop_id, name, location, description, logo_url, owner_id")
-        .eq("shop_id", target_shop_id)
-        .maybeSingle();
-      if (error) throw new Error(error.message);
-      if (!data) throw new Error(`المتجر غير موجود.`);
-      return JSON.stringify(data);
-    }
-
-    case "apply_discount": {
-      if (!merchant_shop_id) throw new Error("يجب تسجيل الدخول كتاجر لتطبيق خصم.");
-
-      const { discount_type, discount_value, product_id } = input as {
-        discount_type: "percentage" | "fixed";
-        discount_value: number;
-        product_id?: string;
-      };
-
-      if (discount_type === "percentage" && (discount_value <= 0 || discount_value >= 100)) {
-        throw new Error("نسبة الخصم يجب أن تكون بين 1 و 99.");
-      }
-      if (discount_type === "fixed" && discount_value <= 0) {
-        throw new Error("قيمة الخصم الثابتة يجب أن تكون أكبر من صفر.");
-      }
-
-      // Fetch target products (one or all in the shop)
-      let fetchQuery = supabase
-        .from("products")
-        .select("id, title, price")
-        .eq("shop_id", merchant_shop_id);
-      if (product_id) fetchQuery = fetchQuery.eq("id", product_id);
-
-      const { data: products, error: fetchErr } = await fetchQuery;
-      if (fetchErr) throw new Error(fetchErr.message);
-      if (!products?.length) throw new Error("لم يتم العثور على منتجات لتطبيق الخصم عليها.");
-
-      const results: { id: string; title: string; original_price: number; discounted_price: number; discount: number | string }[] = [];
-
-      for (const product of products) {
-        const originalPrice = product.price as number;
-        let discountedPrice: number;
-        let discountStored: number; // always stored as percentage in the DB
-
-        if (discount_type === "percentage") {
-          discountedPrice  = parseFloat((originalPrice * (1 - discount_value / 100)).toFixed(2));
-          discountStored   = discount_value;
-        } else {
-          // Fixed amount → convert to percentage for consistent storage
-          discountedPrice  = parseFloat((originalPrice - discount_value).toFixed(2));
-          discountStored   = parseFloat(((discount_value / originalPrice) * 100).toFixed(2));
-        }
-
-        if (discountedPrice <= 0) {
-          // Skip — discount exceeds the price
-          results.push({ id: product.id, title: product.title, original_price: originalPrice, discounted_price: originalPrice, discount: "تجاوز الخصم سعر المنتج، تم تخطيه" });
-          continue;
-        }
-
-        // Store the discount percentage in discount_pct column
-        // The original `price` column stays unchanged (source of truth)
-        const { error: updateErr } = await supabase
-          .from("products")
-          .update({ discount_pct: discountStored })
-          .eq("id", product.id)
-          .eq("shop_id", merchant_shop_id);
-
-        if (updateErr) throw new Error(`فشل تحديث المنتج "${product.title}": ${updateErr.message}`);
-        results.push({ id: product.id, title: product.title, original_price: originalPrice, discounted_price: discountedPrice, discount: discountStored });
-      }
-
-      return JSON.stringify({ ok: true, updated: results });
-    }
-
-    case "remove_discount": {
-      if (!merchant_shop_id) throw new Error("يجب تسجيل الدخول كتاجر لإزالة الخصم.");
-
-      const { product_id } = input as { product_id?: string };
-
-      let query = supabase
-        .from("products")
-        .update({ discount_pct: null })
-        .eq("shop_id", merchant_shop_id);
-      if (product_id) query = query.eq("id", product_id);
-
-      const { error } = await query;
-      if (error) throw new Error(error.message);
-
-      const scope = product_id ? `المنتج ${product_id}` : "جميع المنتجات في متجرك";
-      return JSON.stringify({ ok: true, message: `تمت إزالة الخصم من ${scope}.` });
-    }
-
-    default:
-      throw new Error(`أداة غير معروفة: ${name}`);
-  }
-}
-
-// ── /api/chat handler ─────────────────────────────────────────────────────────
+const WRITE_TOOLS = ["create_product", "update_product", "delete_product"];
 
 app.post("/api/chat", async (req: Request, res: Response) => {
-  const { message, role, sb_auth_token } = req.body as {
+  const { message, role, sb_auth_token, images } = req.body as {
     message: string;
     role: string;
     sb_auth_token?: string;
+    images?: { base64: string; mediaType: string }[];
   };
 
   if (!message) return res.status(400).json({ ok: false, error: "Missing message" });
 
-  // For merchants: resolve shop_id once upfront and inject into all tool calls
-  let merchant_shop_id: string | undefined;
-  if (role === "merchant" && sb_auth_token) {
-    try {
-      merchant_shop_id = await resolveMerchantShopId(sb_auth_token);
-    } catch (err: any) {
-      return res.status(401).json({ ok: false, error: err.message });
-    }
-  }
+  const systemPrompt = `أنت مساعد ذكي لمنصة سوق لينك.
+دورك: ${role === "merchant" ? "مساعدة التاجر في إدارة متجره ومنتجاته وطلباته" : "مساعدة المستخدم"}.
+أجب دائماً باللغة العربية بشكل واضح ومختصر.
+لديك أدوات للبحث عن المنتجات والمتاجر وإدارتها — استخدمها تلقائياً عند الحاجة.`;
 
-  const allowedToolNames = ROLE_TOOLS[role] ?? ROLE_TOOLS["customer"];
-  const tools = SUPABASE_TOOLS.filter(t => allowedToolNames.includes(t.name));
-
-  const systemPrompt = role === "merchant"
-    ? `أنت مساعد ذكي للتاجر على منصة سوق لينك.
-جميع العمليات (عرض المنتجات، إضافة، تعديل، حذف) تخص متجر هذا التاجر فقط — لا تعرض أو تعدّل منتجات متاجر أخرى.
-لديك أدوات مباشرة للتعامل مع قاعدة البيانات، استخدمها دائماً للحصول على بيانات حقيقية.
-أجب دائماً باللغة العربية بشكل واضح ومختصر.`
-    : role === "admin"
-    ? `أنت مساعد ذكي لمدير منصة سوق لينك. لديك صلاحية عرض جميع المنتجات والمتاجر.
-أجب دائماً باللغة العربية بشكل واضح ومختصر.`
-    : `أنت مساعد ذكي لمنصة سوق لينك. ساعد العميل في البحث عن المنتجات والمتاجر.
-أجب دائماً باللغة العربية بشكل واضح ومختصر.`;
-
-  const { images } = req.body as { images?: { base64: string; mediaType: string }[] };
-
-  // Build user content (text + optional images)
-  const userContent: any[] = [];
+  const userContent: Anthropic.MessageParam["content"] = [];
   if (images?.length) {
     for (const img of images) {
-      userContent.push({ type: "image", source: { type: "base64", media_type: img.mediaType, data: img.base64 } });
+      userContent.push({ type: "image", source: { type: "base64", media_type: img.mediaType as any, data: img.base64 } });
     }
   }
-  if (message) userContent.push({ type: "text", text: message });
+  userContent.push({ type: "text", text: message });
+
+  const messages: Anthropic.MessageParam[] = [{ role: "user", content: userContent }];
 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
 
   try {
-    const chatMessages: Anthropic.MessageParam[] = [{ role: "user", content: userContent }];
+    let response = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages,
+      tools: anthropicTools,
+    });
 
-    // Agentic loop: call Claude → execute tools if needed → repeat until final answer
-    while (true) {
-      const response = await anthropic.messages.create({
+    // Agentic loop: execute tool calls until Claude returns a final answer
+    while (response.stop_reason === "tool_use") {
+      messages.push({ role: "assistant", content: response.content });
+
+      const toolUseBlocks = response.content.filter(
+        (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
+      );
+
+      const toolResults: Anthropic.ToolResultBlockParam[] = [];
+
+      for (const block of toolUseBlocks) {
+        const toolArgs: Record<string, unknown> = { ...(block.input as Record<string, unknown>) };
+
+        // Inject auth token for write operations that require it
+        if (sb_auth_token && WRITE_TOOLS.includes(block.name)) {
+          toolArgs.sb_auth_token = sb_auth_token;
+        }
+
+        const result = await mcpClient.callTool({ name: block.name, arguments: toolArgs });
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: block.id,
+          content: JSON.stringify(result.content),
+        });
+      }
+
+      messages.push({ role: "user", content: toolResults });
+
+      response = await anthropic.messages.create({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 1024,
         system: systemPrompt,
-        tools,
-        messages: chatMessages,
+        messages,
+        tools: anthropicTools,
       });
+    }
 
-      chatMessages.push({ role: "assistant", content: response.content });
-
-      if (response.stop_reason === "tool_use") {
-        // Execute each tool Claude requested
-        const toolResults: Anthropic.ToolResultBlockParam[] = [];
-        for (const block of response.content) {
-          if (block.type === "tool_use") {
-            try {
-              const result = await executeTool(block.name, block.input as Record<string, any>, merchant_shop_id);
-              toolResults.push({ type: "tool_result", tool_use_id: block.id, content: result });
-            } catch (err: any) {
-              toolResults.push({ type: "tool_result", tool_use_id: block.id, content: `خطأ: ${err.message}`, is_error: true });
-            }
-          }
-        }
-        chatMessages.push({ role: "user", content: toolResults });
-        // Loop back → Claude will now form the final answer
-      } else {
-        // Final answer — stream it to the client
-        const finalText = response.content.find(b => b.type === "text")?.text ?? "لم أفهم الطلب.";
-        const stream = anthropic.messages.stream({
-          model: "claude-haiku-4-5-20251001",
-          max_tokens: 1024,
-          system: systemPrompt,
-          messages: [...chatMessages.slice(0, -1), { role: "user", content: `اصغ الإجابة التالية بشكل جميل ومنظم باللغة العربية:\n${finalText}` }],
-        });
-
-        stream.on("text", (text) => {
-          res.write(`data: ${JSON.stringify({ text })}\n\n`);
-        });
-        stream.on("finalMessage", () => {
-          res.write(`data: [DONE]\n\n`);
-          res.end();
-        });
-        stream.on("error", (err) => {
-          console.error("[/api/chat] stream error:", err.message);
-          res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
-          res.end();
-        });
-        break;
+    // Stream the final text response back to the client
+    for (const block of response.content) {
+      if (block.type === "text") {
+        res.write(`data: ${JSON.stringify({ text: block.text })}\n\n`);
       }
     }
+    res.write(`data: [DONE]\n\n`);
+    res.end();
+
   } catch (err: any) {
     console.error("[/api/chat] error:", err.message);
     res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
