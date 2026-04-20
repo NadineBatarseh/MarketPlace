@@ -3,6 +3,7 @@ import cors from "cors";
 import "dotenv/config";
 import type { Request, Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
+import { getTools, callTool } from "./mcpClient.js";
 import { fileURLToPath } from "url";
 import path from "path";
 import { supabase } from "./supabase.js";
@@ -14,7 +15,6 @@ import productUploadRouter from "./routes/productUploadRouter.js";
 import metaCatalogRouter from "./routes/metaCatalogAPIRouter.js";
 import productCRUDRouter from "./routes/productCRUDRouter.js";
 import supabaseProductWebhookRouter from "./routes/supabaseProductWebhookRouter.js";
-import { initMcp, mcpClient, anthropicTools } from "./mcpClient.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -147,11 +147,6 @@ app.get("/api/products", async (_req: Request, res: Response) => {
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-initMcp().catch((err) => console.error("[MCP] Init failed:", err));
-
-// Tools that require the merchant's JWT to be injected automatically
-const AUTH_TOOLS = ["create_product", "update_product", "delete_product", "list_my_products"];
-
 app.post("/api/chat", async (req: Request, res: Response) => {
   const { message, role, sb_auth_token, images } = req.body as {
     message: string;
@@ -162,84 +157,104 @@ app.post("/api/chat", async (req: Request, res: Response) => {
 
   if (!message) return res.status(400).json({ ok: false, error: "Missing message" });
 
-  const systemPrompt = `أنت مساعد ذكي لمنصة سوق لينك.
-دورك: ${role === "merchant" ? "مساعدة التاجر في إدارة متجره ومنتجاته وطلباته" : "مساعدة المستخدم"}.
-أجب دائماً باللغة العربية بشكل واضح ومختصر.
-لديك أدوات للبحث عن المنتجات والمتاجر وإدارتها — استخدمها تلقائياً عند الحاجة.
-قاعدة عامة: إذا احتجت shop_id ولم يذكره المستخدم، استخدم أولاً أداة list_shops للبحث بالاسم، ثم استخدم الـ shop_id الناتج.
-${role === "merchant" ? `قواعد مهمة للتاجر:
-- عندما يطلب التاجر عرض منتجاته أو منتجات متجره، استخدم أداة list_my_products تلقائياً (لا تطلب shop_id).
-- أداة list_my_products تحدد المتجر تلقائياً من حساب التاجر المسجّل الدخول.
-- list_products تعرض جميع منتجات السوق لجميع المتاجر — لا تستخدمها عندما يسأل التاجر عن منتجاته الخاصة.` : ""}`;
+  // Resolve merchant shop_id from their auth token
+  let merchant_shop_id: string | undefined;
+  if (role === "merchant" && sb_auth_token) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser(sb_auth_token);
+      if (user) {
+        const { data: shop } = await supabase
+          .from("shops").select("shop_id").eq("owner_id", user.id).maybeSingle();
+        merchant_shop_id = shop?.shop_id;
+      }
+    } catch {}
+  }
 
-  const userContent: Anthropic.MessageParam["content"] = [];
+  const systemPrompt = role === "merchant"
+    ? `أنت مساعد ذكي للتاجر على منصة سوق لينك.
+جميع العمليات تخص متجر هذا التاجر فقط. معرّف المتجر هو: ${merchant_shop_id ?? "غير متوفر"}.
+لديك أدوات مباشرة للتعامل مع قاعدة البيانات، استخدمها دائماً للحصول على بيانات حقيقية.
+عند استخدام أي أداة تحتاج shop_id، استخدم القيمة: ${merchant_shop_id ?? "غير متوفر"} تلقائياً دون أن تطلبه من المستخدم.
+- عندما يطلب التاجر عرض منتجاته أو منتجات متجره، استخدم أداة list_products مع shop_id أعلاه تلقائياً.
+أجب دائماً باللغة العربية بشكل واضح ومنظم.`
+    : `أنت مساعد ذكي لمنصة سوق لينك. ساعد المستخدم في البحث عن المنتجات والمتاجر.
+أجب دائماً باللغة العربية بشكل واضح ومختصر.`;
+
+  // Build user message content (text + optional images)
+  const userContent: any[] = [];
   if (images?.length) {
     for (const img of images) {
-      userContent.push({ type: "image", source: { type: "base64", media_type: img.mediaType as any, data: img.base64 } });
+      userContent.push({ type: "image", source: { type: "base64", media_type: img.mediaType, data: img.base64 } });
     }
   }
   userContent.push({ type: "text", text: message });
-
-  const messages: Anthropic.MessageParam[] = [{ role: "user", content: userContent }];
 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
 
   try {
-    let response = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages,
-      tools: anthropicTools,
-    });
+    // Get tools from MCP server (filtered by role)
+    const tools = await getTools(role);
 
-    // Agentic loop: execute tool calls until Claude returns a final answer
-    while (response.stop_reason === "tool_use") {
-      messages.push({ role: "assistant", content: response.content });
+    const chatMessages: Anthropic.MessageParam[] = [{ role: "user", content: userContent }];
 
-      const toolUseBlocks = response.content.filter(
-        (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
-      );
-
-      const toolResults: Anthropic.ToolResultBlockParam[] = [];
-
-      for (const block of toolUseBlocks) {
-        const toolArgs: Record<string, unknown> = { ...(block.input as Record<string, unknown>) };
-
-        // Inject auth token for write operations that require it
-        if (sb_auth_token && AUTH_TOOLS.includes(block.name)) {
-          toolArgs.sb_auth_token = sb_auth_token;
-        }
-
-        const result = await mcpClient.callTool({ name: block.name, arguments: toolArgs });
-        toolResults.push({
-          type: "tool_result",
-          tool_use_id: block.id,
-          content: JSON.stringify(result.content),
-        });
-      }
-
-      messages.push({ role: "user", content: toolResults });
-
-      response = await anthropic.messages.create({
+    // Agentic loop: Claude → tool call → MCP executes → back to Claude → final answer
+    while (true) {
+      const response = await anthropic.messages.create({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 1024,
         system: systemPrompt,
-        messages,
-        tools: anthropicTools,
+        tools: tools.length > 0 ? tools : undefined,
+        messages: chatMessages,
       });
-    }
 
-    // Stream the final text response back to the client
-    for (const block of response.content) {
-      if (block.type === "text") {
-        res.write(`data: ${JSON.stringify({ text: block.text })}\n\n`);
+      chatMessages.push({ role: "assistant", content: response.content });
+
+      if (response.stop_reason === "tool_use") {
+        // Claude wants to call a tool — forward each call to MCP server
+        const toolResults: Anthropic.ToolResultBlockParam[] = [];
+
+        for (const block of response.content) {
+          if (block.type === "tool_use") {
+            console.log(`[chat] Claude calling tool: ${block.name}`, block.input);
+            try {
+              const result = await callTool(block.name, block.input as Record<string, any>);
+              toolResults.push({ type: "tool_result", tool_use_id: block.id, content: result });
+            } catch (err: any) {
+              toolResults.push({ type: "tool_result", tool_use_id: block.id, content: `خطأ: ${err.message}`, is_error: true });
+            }
+          }
+        }
+
+        chatMessages.push({ role: "user", content: toolResults });
+
+      } else {
+        // Claude has the final answer — stream it to the chatbot
+        const finalText = response.content.find(b => b.type === "text")?.text ?? "لم أفهم الطلب.";
+
+        const stream = anthropic.messages.stream({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 1024,
+          system: systemPrompt,
+          messages: [...chatMessages.slice(0, -1), { role: "user", content: `اعرض الإجابة التالية بشكل جميل ومنظم باللغة العربية:\n${finalText}` }],
+        });
+
+        stream.on("text", (text) => {
+          res.write(`data: ${JSON.stringify({ text })}\n\n`);
+        });
+        stream.on("finalMessage", () => {
+          res.write(`data: [DONE]\n\n`);
+          res.end();
+        });
+        stream.on("error", (err) => {
+          console.error("[/api/chat] stream error:", err.message);
+          res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+          res.end();
+        });
+        break;
       }
     }
-    res.write(`data: [DONE]\n\n`);
-    res.end();
 
   } catch (err: any) {
     console.error("[/api/chat] error:", err.message);

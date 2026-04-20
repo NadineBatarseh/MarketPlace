@@ -7,7 +7,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { WebSocket } from "ws";
 import { MetaService } from "../../services/metaService.js";
-import { registerTools } from "./tools.js";
+import { registerAllTools } from "../tools/index.js";
 import { WebSocketTransport } from "../transports/WebSocketTransport.js";
 
 export function createMcpServer(metaService: MetaService): McpServer {
@@ -17,7 +17,7 @@ export function createMcpServer(metaService: MetaService): McpServer {
   });
 
   // Register all MCP tools
-  registerTools(server, metaService);
+  registerAllTools(server, metaService);
 
   return server;
 }
