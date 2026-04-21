@@ -288,6 +288,23 @@ app.get("/api/debug/shops", async (_req: Request, res: Response) => {
   return res.json({ data, error });
 });
 
+app.get("/api/debug/instagram-token", async (_req: Request, res: Response) => {
+  const token = process.env.INSTAGRAM_ACCESS_TOKEN;
+  if (!token) return res.json({ ok: false, error: "INSTAGRAM_ACCESS_TOKEN is not set in .env" });
+
+  try {
+    const r = await fetch(`https://graph.facebook.com/v23.0/me/accounts?access_token=${token}`);
+    const data: any = await r.json();
+    if (data.error) {
+      return res.json({ ok: false, apiError: data.error, tokenPrefix: token.slice(0, 20) + "..." });
+    }
+    const pages = data.data ?? [];
+    return res.json({ ok: true, pagesFound: pages.length, pages: pages.map((p: any) => ({ id: p.id, name: p.name })), tokenPrefix: token.slice(0, 20) + "..." });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 /* ---------- STORE PAGE API ---------- */
 
 // GET /api/stores/:id  — fetch a single shop by its shop_id
@@ -296,7 +313,7 @@ app.get("/api/stores/:id", async (req: Request, res: Response) => {
 
   const { data: store, error } = await supabase
     .from("shops")
-    .select("shop_id, name, description, shopLogo, created_at, whatsapp, instagram, facebook, location, shop_ratings(avg_rating, review_count)")
+    .select("shop_id, name, description, shopLogo, created_at, whatsapp, instagram, facebook, location")
     .eq("shop_id", id)
     .single();
 
@@ -315,9 +332,15 @@ app.get("/api/stores/:id", async (req: Request, res: Response) => {
     shopLogo = urlData.publicUrl;
   }
 
-  const ratings = (store as any).shop_ratings;
-  const avg_rating = ratings?.[0]?.avg_rating ?? null;
-  const review_count = ratings?.[0]?.review_count ?? 0;
+  // Fetch ratings separately to avoid relying on a FK join
+  const { data: ratingRow } = await supabase
+    .from("shop_ratings")
+    .select("avg_rating, review_count")
+    .eq("shop_id", id)
+    .maybeSingle();
+
+  const avg_rating = ratingRow?.avg_rating ?? null;
+  const review_count = ratingRow?.review_count ?? 0;
 
   return res.json({ ok: true, store: { ...store, shopLogo, avg_rating, review_count } });
 });
@@ -432,22 +455,32 @@ app.get("/api/stores/:id/products", async (req: Request, res: Response) => {
 
 // GET /api/stores — fetch all shops with avg rating + review count
 app.get("/api/stores", async (_req: Request, res: Response) => {
-  const { data: stores, error } = await supabase
+  const { data: shops, error: shopsErr } = await supabase
     .from("shops")
-    .select("shop_id, name, shopLogo, location, shop_ratings(avg_rating, review_count)")
+    .select("shop_id, name, shopLogo, location")
     .order("created_at", { ascending: false });
 
-  if (error) {
-    return res.status(500).json({ ok: false, error: error.message });
+  if (shopsErr) {
+    console.error("[/api/stores] shops query failed:", shopsErr.message);
+    return res.status(500).json({ ok: false, error: shopsErr.message });
   }
 
-  const mapped = (stores ?? []).map((s: any) => ({
+  // Fetch ratings separately to avoid relying on a FK join
+  const { data: ratings } = await supabase
+    .from("shop_ratings")
+    .select("shop_id, avg_rating, review_count");
+
+  const ratingsMap = new Map(
+    (ratings ?? []).map((r: any) => [r.shop_id, r])
+  );
+
+  const mapped = (shops ?? []).map((s: any) => ({
     shop_id: s.shop_id,
     name: s.name,
     shopLogo: s.shopLogo,
     location: s.location,
-    avg_rating: s.shop_ratings?.[0]?.avg_rating ?? null,
-    review_count: s.shop_ratings?.[0]?.review_count ?? 0,
+    avg_rating: ratingsMap.get(s.shop_id)?.avg_rating ?? null,
+    review_count: ratingsMap.get(s.shop_id)?.review_count ?? 0,
   }));
 
   return res.json({ ok: true, stores: mapped });

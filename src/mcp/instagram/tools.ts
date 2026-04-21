@@ -152,6 +152,24 @@ export const INSTAGRAM_TOOLS: Tool[] = [
       },
     },
   },
+  {
+    name: "instagram_import_products",
+    description:
+      "Scan recent Instagram posts, use AI to identify product showcases, and return them formatted as product records ready to be saved to the catalog. Each returned product matches the products table schema (title, description, price, image_urls, stock_Quantity) plus Instagram source metadata.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: {
+          type: "number",
+          description: "Number of recent posts to scan (default: 25, max: 50)",
+        },
+        account_id: {
+          type: "string",
+          description: "Instagram Business Account ID. Auto-detected if not provided.",
+        },
+      },
+    },
+  },
 ];
 
 export const FACEBOOK_TOOLS: Tool[] = [

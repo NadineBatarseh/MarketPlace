@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"vite\" \"tsx watch server/index.ts\" \"tsx watch src/server.ts\"",
+    "dev": "concurrently \"vite\" \"tsx watch server/index.ts\"",
     "build": "vite build",
     "start": "tsx server/index.ts",
     "preview": "vite preview",

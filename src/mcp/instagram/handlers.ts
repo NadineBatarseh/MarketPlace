@@ -1,5 +1,6 @@
 import { InstagramClient } from './platforms/instagram/client.js';
 import { FacebookClient } from './platforms/facebook/client.js';
+import { extractProductsFromPosts } from './utils/extractProducts.js';
 
 export async function handleInstagramTool(
   client: InstagramClient | null,
@@ -26,8 +27,8 @@ export async function handleInstagramTool(
         {
           accountId: args.account_id as string | undefined,
           metricType: args.metric_type as 'time_series' | 'total_value' | undefined,
-          breakdown: args.breakdown as string | undefined,
-          timeframe: args.timeframe as string | undefined,
+          breakdown: args.breakdown as any,
+          timeframe: args.timeframe as any,
           since: args.since as number | undefined,
           until: args.until as number | undefined,
         }
@@ -76,6 +77,17 @@ export async function handleInstagramTool(
         args.account_id as string | undefined,
         args.limit as number | undefined
       );
+
+    case 'instagram_import_products': {
+      const limit = Math.min((args.limit as number | undefined) ?? 25, 50);
+      const posts = await client.getMedia(limit, args.account_id as string | undefined);
+      const products = await extractProductsFromPosts(posts);
+      return {
+        total_scanned: posts.length,
+        products_found: products.length,
+        products,
+      };
+    }
 
     default:
       throw new Error(`Unknown Instagram tool: ${name}`);
