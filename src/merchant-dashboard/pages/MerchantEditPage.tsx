@@ -402,6 +402,7 @@ export default function MerchantEditPage() {
       .from('products')
       .select('id, shop_id, title, description, price, image_urls, stock_Quantity, capacity_units')
       .eq('shop_id', shop.shop_id)
+      .eq('isPublish', true)
       .then(({ data, error }) => {
         if (!error && data) setProducts(data as DBProduct[]);
         setLoadingProducts(false);

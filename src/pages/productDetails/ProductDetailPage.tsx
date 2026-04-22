@@ -309,6 +309,7 @@ const ProductDetailPage: React.FC = () => {
           const { data: first, error: firstErr } = await supabase
             .from("products")
             .select("id")
+            .eq("isPublish", true)
             .limit(1)
             .maybeSingle();
 
@@ -328,6 +329,7 @@ const ProductDetailPage: React.FC = () => {
           .from("products")
           .select("id, title, description, price, discount_pct, stock_Quantity, shop_id, image_urls")
           .eq("id", productId)
+          .eq("isPublish", true)
           .single();
 
         if (pErr) throw pErr;

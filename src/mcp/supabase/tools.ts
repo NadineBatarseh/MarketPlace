@@ -39,7 +39,8 @@ export function registerSupabaseTools(server: McpServer) {
     async (input) => {
       let query = supabase
         .from("products")
-        .select("id, title, description, price, image_urls, stock_Quantity, shop_id, shops!inner(name, location)");
+        .select("id, title, description, price, image_urls, stock_Quantity, shop_id, shops!inner(name, location)")
+        .eq("isPublish", true);
 
       if (input.keywords?.length) {
         const orParts = input.keywords.flatMap(t => [
@@ -72,6 +73,7 @@ export function registerSupabaseTools(server: McpServer) {
         .from("products")
         .select("id, title, description, price, image_urls, stock_Quantity, shop_id, capacity_units")
         .eq("id", id)
+        .eq("isPublish", true)
         .maybeSingle();
       if (error) throw new Error(error.message);
       if (!data)  throw new Error(`Product ${id} not found`);
@@ -96,6 +98,7 @@ export function registerSupabaseTools(server: McpServer) {
         .from("products")
         .select("id, title, description, price, image_urls, stock_Quantity, shop_id")
         .eq("shop_id", shop_id)
+        .eq("isPublish", true)
         .order("created_at", { ascending: false });
 
       if (error) throw new Error(error.message);

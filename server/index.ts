@@ -173,9 +173,21 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   const systemPrompt = role === "merchant"
     ? `أنت مساعد ذكي للتاجر على منصة سوق لينك.
 جميع العمليات تخص متجر هذا التاجر فقط. معرّف المتجر هو: ${merchant_shop_id ?? "غير متوفر"}.
-لديك أدوات مباشرة للتعامل مع قاعدة البيانات، استخدمها دائماً للحصول على بيانات حقيقية.
-عند استخدام أي أداة تحتاج shop_id، استخدم القيمة: ${merchant_shop_id ?? "غير متوفر"} تلقائياً دون أن تطلبه من المستخدم.
-- عندما يطلب التاجر عرض منتجاته أو منتجات متجره، استخدم أداة list_products مع shop_id أعلاه تلقائياً.
+
+معلومات مهمة عن المنصة يجب أن تعرفها:
+- المنصة تدعم ميزة "المسودات" بشكل كامل. المنتجات المستوردة من انستقرام تُحفظ كمسودات (isPublish = false) ويراجعها التاجر من صفحة المسودات قبل نشرها.
+- صفحة المسودات موجودة في لوحة التحكم وتعمل الآن على الرابط: /merchant-dashboard?page=drafts
+
+لديك أدوات جاهزة ومتصلة الآن — استخدمها فوراً دون تردد:
+- أدوات قاعدة البيانات: list_products، list_my_products، create_product، update_product، delete_product
+- أدوات انستقرام المتصلة والجاهزة: instagram_import_products، instagram_get_profile، instagram_get_account_insights، وغيرها
+
+قواعد صارمة يجب اتباعها:
+1. لا تقل أبداً "لا أملك أدوات" أو "لا يمكنني الوصول لانستقرام" أو "النظام لا يدعم المسودات" — كل هذه المزايا موجودة ومفعّلة.
+2. عند استخدام أي أداة تحتاج shop_id، استخدم القيمة: ${merchant_shop_id ?? "غير متوفر"} تلقائياً دون أن تطلبه من المستخدم.
+3. عندما يطلب التاجر عرض منتجاته أو منتجات متجره، استخدم list_products مع shop_id.
+4. عندما يطلب التاجر جلب منتجاته من انستقرام، أو استيرادها، أو استخراجها من منشوراته، أو أي عبارة مشابهة — استخدم حصراً instagram_import_products مع shop_id. بعد انتهاء الأداة، رد فقط بـ: "تم استيراد [العدد] منتجاً وحفظها كمسودات. راجعها وانشرها من [صفحة المسودات](/merchant-dashboard?page=drafts)." دون عرض أي قائمة منتجات.
+
 أجب دائماً باللغة العربية بشكل واضح ومنظم.`
     : `أنت مساعد ذكي لمنصة سوق لينك. ساعد المستخدم في البحث عن المنتجات والمتاجر.
 أجب دائماً باللغة العربية بشكل واضح ومختصر.`;
@@ -430,13 +442,15 @@ app.get("/api/stores/:id/products", async (req: Request, res: Response) => {
         .from("products")
         .select("id, title, description, price, image_urls, stock_Quantity")
         .eq("shop_id", shop.shop_id)
+        .eq("isPublish", true)
         .order(orderCol, { ascending })
         .range(offset, offset + limit - 1),
 
       supabase
         .from("products")
         .select("id", { count: "exact", head: true })
-        .eq("shop_id", shop.shop_id),
+        .eq("shop_id", shop.shop_id)
+        .eq("isPublish", true),
     ]);
 
   if (prodErr || countErr) {
@@ -657,7 +671,26 @@ if (process.env.NODE_ENV === "production") {
 
 /* ---------- START ---------- */
 
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () =>
-  console.log(`✅ Server running on http://localhost:${PORT}`)
-);
+const PORT = Number(process.env.PORT) || 4000;
+
+function startServer() {
+  const server = app.listen(PORT, () =>
+    console.log(`✅ Server running on http://localhost:${PORT}`)
+  );
+
+  server.on('error', async (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+      console.warn(`⚠️  Port ${PORT} is in use — killing existing process and retrying…`);
+      try {
+        const { execSync } = await import('child_process');
+        execSync(`npx kill-port ${PORT}`, { stdio: 'ignore' });
+      } catch {}
+      setTimeout(startServer, 1500);
+    } else {
+      console.error('Server error:', err);
+      process.exit(1);
+    }
+  });
+}
+
+startServer();

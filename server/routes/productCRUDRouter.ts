@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import type { Request, Response } from 'express';
 import { supabase } from '../supabase.js';
-import { uploadImage } from '../uploadImage.js';
 import { estimateCapacityUnits, clampCapacity } from '../services/capacityClassifier.js';
 
 const router = Router();
@@ -111,6 +110,65 @@ router.post('/', async (req: Request, res: Response) => {
   }
 
   return res.status(201).json({ ok: true, product });
+});
+
+/* ------------------------------------------------------------------ */
+/*  POST /api/products/:id/publish                                      */
+/*                                                                      */
+/*  Publishes a draft product:                                          */
+/*    1. Uploads each image_url (Instagram CDN) to Supabase Storage    */
+/*       at product-images/{id}/0.jpg, 1.jpg, …                        */
+/*    2. Updates title/description/price/stock_Quantity + isPublish    */
+/*                                                                      */
+/*  Auth:  Authorization: Bearer <supabase-access-token>               */
+/*  Body:  { title, description?, price, stock_Quantity }              */
+/* ------------------------------------------------------------------ */
+router.post('/:id/publish', async (req: Request, res: Response) => {
+  const shop_id = await resolveShopId(req, res);
+  if (!shop_id) return;
+
+  const productId = req.params.id;
+  const { title, description, price, stock_Quantity } = req.body as {
+    title: string;
+    description?: string;
+    price: number;
+    stock_Quantity: number;
+  };
+
+  // Verify the draft exists and belongs to this shop
+  const { data: draft, error: fetchErr } = await supabase
+    .from('products')
+    .select('id')
+    .eq('id', productId)
+    .eq('shop_id', shop_id)
+    .eq('isPublish', false)
+    .maybeSingle();
+
+  if (fetchErr) {
+    return res.status(500).json({ ok: false, error: fetchErr.message });
+  }
+  if (!draft) {
+    return res.status(404).json({ ok: false, error: 'Draft not found or does not belong to this shop.' });
+  }
+
+  // Images were already uploaded to Supabase Storage at import time — just publish
+  const { error: updateErr } = await supabase
+    .from('products')
+    .update({
+      title: title.trim(),
+      description: description?.trim() || null,
+      price: Number(price),
+      stock_Quantity: Number(stock_Quantity),
+      isPublish: true,
+    })
+    .eq('id', productId)
+    .eq('shop_id', shop_id);
+
+  if (updateErr) {
+    return res.status(500).json({ ok: false, error: `Database error: ${updateErr.message}` });
+  }
+
+  return res.status(200).json({ ok: true });
 });
 
 /* ------------------------------------------------------------------ */

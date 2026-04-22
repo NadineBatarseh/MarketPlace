@@ -34,7 +34,8 @@ export function registerMerchantTools(server: McpServer) {
       let query = supabase
         .from("products")
         .select("id, title, description, price, discount_pct, stock_Quantity, image_urls")
-        .eq("shop_id", shop_id);
+        .eq("shop_id", shop_id)
+        .eq("isPublish", true);
 
       if (keywords?.length) {
         const orParts = keywords.flatMap(t => [

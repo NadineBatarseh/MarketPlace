@@ -99,15 +99,62 @@ export async function handleInstagramTool(
       }
 
       const db = getServiceRoleClient();
-      const rows = products.map((p) => ({
-        shop_id: shopId,
-        title: p.title,
-        description: p.description ?? null,
-        price: p.price ?? null,
-        image_urls: p.image_urls.length > 0 ? p.image_urls : null,
-        stock_Quantity: p.stock_Quantity ?? null,
-        isPublish: false,
-        meta_product_id: crypto.randomUUID(),
+
+      // Upload each Instagram CDN image to Supabase Storage immediately so
+      // the draft rows hold permanent URLs regardless of when the merchant publishes.
+      async function uploadToStorage(
+        cdnUrl: string,
+        productId: string,
+        index: number
+      ): Promise<string> {
+        console.log(`[instagram_import] uploading image ${index} for product ${productId} — url: ${cdnUrl}`);
+        try {
+          const res = await fetch(cdnUrl);
+          if (!res.ok) {
+            console.error(`[instagram_import] fetch failed — status ${res.status} ${res.statusText} — url: ${cdnUrl}`);
+            return cdnUrl;
+          }
+          const contentType = res.headers.get('content-type') ?? 'image/jpeg';
+          if (!contentType.startsWith('image/')) {
+            console.error(`[instagram_import] unexpected content-type "${contentType}" — url: ${cdnUrl}`);
+            return cdnUrl;
+          }
+          const ext = contentType.split('/')[1]?.split(';')[0] ?? 'jpg';
+          const path = `${productId}/${index}.${ext}`;
+          const buffer = Buffer.from(await res.arrayBuffer());
+          console.log(`[instagram_import] uploading to storage path: ${path} (${buffer.byteLength} bytes)`);
+          const { error } = await db.storage
+            .from('product-images')
+            .upload(path, buffer, { contentType, upsert: true });
+          if (error) {
+            console.error(`[instagram_import] storage upload failed — path: ${path} — error: ${error.message}`);
+            return cdnUrl;
+          }
+          const publicUrl = db.storage.from('product-images').getPublicUrl(path).data.publicUrl;
+          console.log(`[instagram_import] image uploaded successfully — public url: ${publicUrl}`);
+          return publicUrl;
+        } catch (err: unknown) {
+          console.error(`[instagram_import] unexpected error uploading image ${index} for product ${productId}:`, err);
+          return cdnUrl;
+        }
+      }
+
+      const rows = await Promise.all(products.map(async (p) => {
+        const id = crypto.randomUUID();
+        const resolvedUrls = p.image_urls.length > 0
+          ? await Promise.all(p.image_urls.map((url, i) => uploadToStorage(url, id, i)))
+          : [];
+        return {
+          id,
+          shop_id: shopId,
+          title: p.title,
+          description: p.description ?? null,
+          price: p.price ?? null,
+          image_urls: resolvedUrls.length > 0 ? resolvedUrls : null,
+          stock_Quantity: p.stock_Quantity ?? null,
+          isPublish: false,
+          meta_product_id: crypto.randomUUID(),
+        };
       }));
 
       const { error } = await db.from('products').insert(rows);

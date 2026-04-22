@@ -19,7 +19,9 @@ interface CardState {
   quantity: string;
   saving: boolean;
   deleting: boolean;
+  titleError: boolean;
   priceError: boolean;
+  quantityError: boolean;
 }
 
 function buildCardState(p: DraftProduct): CardState {
@@ -30,7 +32,9 @@ function buildCardState(p: DraftProduct): CardState {
     quantity: p.stock_Quantity != null ? String(p.stock_Quantity) : '',
     saving: false,
     deleting: false,
+    titleError: false,
     priceError: false,
+    quantityError: false,
   };
 }
 
@@ -82,27 +86,44 @@ export default function DraftProductsPage() {
 
   const handlePublish = async (id: string) => {
     const card = cards[id];
+
+    const titleMissing = !card.title.trim();
     const priceNum = parseFloat(card.price);
-    if (!card.price || isNaN(priceNum) || priceNum <= 0) {
-      updateCard(id, { priceError: true });
+    const priceInvalid = !card.price.trim() || isNaN(priceNum) || priceNum <= 0;
+    const quantityNum = parseInt(card.quantity, 10);
+    const quantityInvalid = !card.quantity.trim() || isNaN(quantityNum) || quantityNum < 0;
+
+    if (titleMissing || priceInvalid || quantityInvalid) {
+      updateCard(id, {
+        titleError: titleMissing,
+        priceError: priceInvalid,
+        quantityError: quantityInvalid,
+      });
       return;
     }
 
-    updateCard(id, { saving: true, priceError: false });
+    updateCard(id, { saving: true, titleError: false, priceError: false, quantityError: false });
 
-    const { error } = await supabase
-      .from('products')
-      .update({
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token ?? '';
+
+    const response = await fetch(`/api/products/${id}/publish`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
         title: card.title.trim(),
         description: card.description.trim() || null,
         price: priceNum,
-        stock_Quantity: card.quantity ? parseInt(card.quantity, 10) : null,
-        isPublish: true,
-      })
-      .eq('id', id);
+        stock_Quantity: quantityNum,
+      }),
+    });
 
-    if (error) {
-      console.error(error);
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      console.error(body);
       updateCard(id, { saving: false });
       showToast('حدث خطأ أثناء النشر. حاول مرة أخرى.');
       return;
@@ -177,13 +198,15 @@ export default function DraftProductsPage() {
               {/* Editable fields */}
               <div className="dp-card-body">
                 <div className="dp-field">
-                  <label>اسم المنتج</label>
+                  <label>اسم المنتج *</label>
                   <input
                     type="text"
                     value={card.title}
-                    onChange={(e) => updateCard(product.id, { title: e.target.value })}
+                    className={card.titleError ? 'dp-input-error' : ''}
+                    onChange={(e) => updateCard(product.id, { title: e.target.value, titleError: false })}
                     disabled={isBusy}
                   />
+                  {card.titleError && <span className="dp-field-error">اسم المنتج مطلوب</span>}
                 </div>
 
                 <div className="dp-field">
@@ -211,18 +234,21 @@ export default function DraftProductsPage() {
                       }
                       disabled={isBusy}
                     />
+                    {card.priceError && <span className="dp-field-error">أدخل سعراً صحيحاً</span>}
                   </div>
                   <div className="dp-field">
-                    <label>الكمية</label>
+                    <label>الكمية *</label>
                     <input
                       type="number"
                       min="0"
                       step="1"
-                      placeholder="اختياري"
+                      placeholder="مطلوب"
                       value={card.quantity}
-                      onChange={(e) => updateCard(product.id, { quantity: e.target.value })}
+                      className={card.quantityError ? 'dp-input-error' : ''}
+                      onChange={(e) => updateCard(product.id, { quantity: e.target.value, quantityError: false })}
                       disabled={isBusy}
                     />
+                    {card.quantityError && <span className="dp-field-error">أدخل كمية صحيحة</span>}
                   </div>
                 </div>
               </div>
