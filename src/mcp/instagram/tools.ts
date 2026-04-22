@@ -153,6 +153,63 @@ export const INSTAGRAM_TOOLS: Tool[] = [
     },
   },
   {
+    name: "instagram_search_posts",
+    description:
+      "Search recent Instagram posts by keyword in their caption and extract product details using AI. Returns a list of detected products for the user to review — does NOT save anything. After reviewing, use instagram_save_drafts to save selected products.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Keyword or phrase to search for in post captions (case-insensitive).",
+        },
+        limit: {
+          type: "number",
+          description: "Max number of recent posts to scan before filtering (default: 100, max: 100).",
+        },
+        account_id: {
+          type: "string",
+          description: "Instagram Business Account ID. Auto-detected if not provided.",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "instagram_save_drafts",
+    description:
+      "Save a list of selected products as drafts in the database. Use after instagram_search_posts — pass the products the user confirmed they want to save.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        shop_id: {
+          type: "string",
+          description: "The merchant's shop ID.",
+        },
+        products: {
+          type: "array",
+          description: "Array of products to save (from instagram_search_posts results).",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              description: { type: "string" },
+              price: { type: "number" },
+              image_urls: { type: "array", items: { type: "string" } },
+              video_url: { type: "string" },
+              stock_Quantity: { type: "number" },
+              instagram_post_id: { type: "string" },
+              instagram_permalink: { type: "string" },
+              instagram_timestamp: { type: "string" },
+            },
+            required: ["title", "instagram_post_id"],
+          },
+        },
+      },
+      required: ["shop_id", "products"],
+    },
+  },
+  {
     name: "instagram_import_products",
     description:
       "Scan recent Instagram posts, use AI to identify product showcases, and automatically save them to the database as draft products. Returns a summary object { success, count, message } — does NOT return the product list. The merchant reviews drafts at /merchant-dashboard?page=drafts.",

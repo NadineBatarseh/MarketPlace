@@ -378,6 +378,7 @@ export default function MerchantEditPage() {
   const shop = merchant!.shop;
   const isCreate = shop === null;
 
+  const [activeTab, setActiveTab] = useState<'settings' | 'products'>('settings');
   const [name, setName] = useState(shop?.name ?? '');
   const [location, setLocation] = useState(shop?.location ?? '');
   const [description, setDescription] = useState(shop?.description ?? '');
@@ -424,15 +425,27 @@ export default function MerchantEditPage() {
   const deleteProduct = async (id: string) => {
     if (!activeShopId) return;
 
-    // List and delete all files inside the product's folder {productId}/
-    const { data: files } = await supabase.storage.from('product-images').list(id);
-    if (files && files.length > 0) {
-      const paths = files.map(f => `${id}/${f.name}`);
-      await supabase.storage.from('product-images').remove(paths);
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token ?? '';
+
+    const res = await fetch(`${API_BASE}/api/products/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      alert('تعذّر حذف المنتج: ' + (body.error ?? res.statusText));
+      return;
     }
 
-    const { error } = await supabase.from('products').delete().eq('id', id).eq('shop_id', activeShopId);
-    if (!error) setProducts(prev => prev.filter(p => p.id !== id));
+    // Clean up storage files after successful DB delete
+    const { data: files } = await supabase.storage.from('product-images').list(id);
+    if (files && files.length > 0) {
+      await supabase.storage.from('product-images').remove(files.map(f => `${id}/${f.name}`));
+    }
+
+    setProducts(prev => prev.filter(p => p.id !== id));
   };
 
   const handleSave = async () => {
@@ -539,72 +552,109 @@ export default function MerchantEditPage() {
       ? '🚀 إنشاء المتجر'
       : '💾 حفظ التعديلات';
 
+  const shopExists = shop !== null || createdShopId !== null;
+
   return (
     <div className="mep-root">
       <h1 className="mep-title">{pageTitle}</h1>
 
+      {/* Tab switcher */}
+      <div className="mep-tabs">
+        <button
+          type="button"
+          className={`mep-tab${activeTab === 'settings' ? ' mep-tab--active' : ''}`}
+          onClick={() => setActiveTab('settings')}
+        >
+          🏪 إعدادات المتجر
+        </button>
+        <button
+          type="button"
+          className={`mep-tab${activeTab === 'products' ? ' mep-tab--active' : ''}${!shopExists ? ' mep-tab--disabled' : ''}`}
+          onClick={() => { if (shopExists) setActiveTab('products'); }}
+          disabled={!shopExists}
+          title={!shopExists ? 'أنشئ المتجر أولاً لإضافة منتجات' : undefined}
+        >
+          📦 المنتجات {shopExists && products.length > 0 ? `(${products.length})` : ''}
+        </button>
+      </div>
 
-      {/* Logo */}
-      <div className="mep-section">
-        <h2 className="mep-section-title">🖼️ شعار المتجر</h2>
-        <div className="mep-logo-area">
-          <div className="mep-logo-preview" onClick={() => logoInputRef.current?.click()} title="انقر لتغيير الشعار">
-            {logoUrl
-              ? <img src={logoUrl} alt="شعار المتجر" />
-              : <span className="mep-logo-placeholder">🏪</span>
-            }
-          </div>
-          <div>
-            <div className="mep-logo-info">
-              اختر صورة بجودة عالية لتمثيل متجرك<br />
-              الصيغ المدعومة: JPG، PNG، WEBP
+      {/* ── SETTINGS TAB ── */}
+      {activeTab === 'settings' && (
+        <>
+          {/* Logo */}
+          <div className="mep-section">
+            <h2 className="mep-section-title">🖼️ شعار المتجر</h2>
+            <div className="mep-logo-area">
+              <div className="mep-logo-preview" onClick={() => logoInputRef.current?.click()} title="انقر لتغيير الشعار">
+                {logoUrl
+                  ? <img src={logoUrl} alt="شعار المتجر" />
+                  : <span className="mep-logo-placeholder">🏪</span>
+                }
+              </div>
+              <div>
+                <div className="mep-logo-info">
+                  اختر صورة بجودة عالية لتمثيل متجرك<br />
+                  الصيغ المدعومة: JPG، PNG، WEBP
+                </div>
+                <button type="button" className="mep-logo-btn" onClick={() => logoInputRef.current?.click()}>
+                  📁 اختر صورة
+                </button>
+              </div>
+              <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} className="mep-file-hidden" aria-label="اختر شعار المتجر" />
             </div>
-            <button type="button" className="mep-logo-btn" onClick={() => logoInputRef.current?.click()}>
-              📁 اختر صورة
-            </button>
           </div>
-          <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} className="mep-file-hidden" aria-label="اختر شعار المتجر" />
-        </div>
-      </div>
 
-      {/* Basic info */}
-      <div className="mep-section">
-        <h2 className="mep-section-title">📋 معلومات المتجر</h2>
-        <div className="mep-fields">
-          <div className="mep-field">
-            <label>اسم المتجر</label>
-            <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="أدخل اسم متجرك" />
+          {/* Basic info */}
+          <div className="mep-section">
+            <h2 className="mep-section-title">📋 معلومات المتجر</h2>
+            <div className="mep-fields">
+              <div className="mep-field">
+                <label>اسم المتجر</label>
+                <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="أدخل اسم متجرك" />
+              </div>
+              <div className="mep-field">
+                <label>الموقع / المنطقة</label>
+                <input type="text" value={location} onChange={e => setLocation(e.target.value)} placeholder="مثال: الرياض، حي النزهة" />
+              </div>
+              <div className="mep-field">
+                <label>وصف المتجر</label>
+                <input type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="وصف مختصر عن متجرك" />
+              </div>
+            </div>
           </div>
-          <div className="mep-field">
-            <label>الموقع / المنطقة</label>
-            <input type="text" value={location} onChange={e => setLocation(e.target.value)} placeholder="مثال: الرياض، حي النزهة" />
-          </div>
-          <div className="mep-field">
-            <label>وصف المتجر</label>
-            <input type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="وصف مختصر عن متجرك" />
-          </div>
-        </div>
-      </div>
 
-      {/* Categories */}
-      <div className="mep-section">
-        <h2 className="mep-section-title">🏷️ فئات المتجر</h2>
-        <div className="mep-categories">
-          {ALL_CATEGORIES.map(cat => (
-            <button
-              type="button"
-              key={cat}
-              className={`mep-cat-chip${categories.includes(cat) ? ' selected' : ''}`}
-              onClick={() => toggleCategory(cat)}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
-      </div>
+          {/* Categories */}
+          <div className="mep-section">
+            <h2 className="mep-section-title">🏷️ فئات المتجر</h2>
+            <div className="mep-categories">
+              {ALL_CATEGORIES.map(cat => (
+                <button
+                  type="button"
+                  key={cat}
+                  className={`mep-cat-chip${categories.includes(cat) ? ' selected' : ''}`}
+                  onClick={() => toggleCategory(cat)}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
 
-      {/* Products — only shown after a shop exists */}
-      {(shop !== null || createdShopId !== null) && (
+          {saveSuccess && (
+            <div className="mep-save-success">
+              {isCreate ? '🚀 تم إنشاء متجرك بنجاح!' : '✅ تم حفظ التعديلات بنجاح!'}
+            </div>
+          )}
+          {saveError && <div className="md-page-error">{saveError}</div>}
+
+          <button type="button" className="mep-save-btn" onClick={handleSave} disabled={saving}>
+            {saveBtnLabel}
+          </button>
+        </>
+      )}
+
+      {/* ── PRODUCTS TAB ── */}
+      {activeTab === 'products' && shopExists && (
         <div className="mep-section">
           <div className="mep-products-header">
             <h2 className="mep-section-title mep-section-title--flush">📦 المنتجات</h2>
@@ -621,12 +671,12 @@ export default function MerchantEditPage() {
             <div className="mep-products-grid mep-products-gap">
               {products.map(p => (
                 <div key={p.id} className="mep-product-card">
+                  <div className="mep-product-img">
+                    {p.image_urls?.[0] ? <img src={p.image_urls[0]} alt={p.title} /> : '📦'}
+                  </div>
                   <div className="mep-product-actions">
                     <button type="button" className="mep-product-edit-btn" onClick={() => setEditingProduct(p)} title="تعديل المنتج">✏️</button>
                     <button type="button" className="mep-product-del-btn" onClick={() => deleteProduct(p.id)} title="حذف المنتج">🗑</button>
-                  </div>
-                  <div className="mep-product-img">
-                    {p.image_urls?.[0] ? <img src={p.image_urls[0]} alt={p.title} /> : '📦'}
                   </div>
                   <div className="mep-product-name">{p.title}</div>
                   {p.description && <div className="mep-product-desc">{p.description}</div>}
@@ -647,17 +697,6 @@ export default function MerchantEditPage() {
           )}
         </div>
       )}
-
-      {saveSuccess && (
-        <div className="mep-save-success">
-          {isCreate ? '🚀 تم إنشاء متجرك بنجاح!' : '✅ تم حفظ التعديلات بنجاح!'}
-        </div>
-      )}
-      {saveError && <div className="md-page-error">{saveError}</div>}
-
-      <button type="button" className="mep-save-btn" onClick={handleSave} disabled={saving}>
-        {saveBtnLabel}
-      </button>
 
       {showAddModal && activeShopId && (
         <AddProductModal
