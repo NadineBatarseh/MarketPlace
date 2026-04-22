@@ -155,10 +155,14 @@ export const INSTAGRAM_TOOLS: Tool[] = [
   {
     name: "instagram_import_products",
     description:
-      "Scan recent Instagram posts, use AI to identify product showcases, and return them formatted as product records ready to be saved to the catalog. Each returned product matches the products table schema (title, description, price, image_urls, stock_Quantity) plus Instagram source metadata.",
+      "Scan recent Instagram posts, use AI to identify product showcases, and automatically save them to the database as draft products. Returns a summary object { success, count, message } — does NOT return the product list. The merchant reviews drafts at /merchant-dashboard?page=drafts.",
     inputSchema: {
       type: "object",
       properties: {
+        shop_id: {
+          type: "string",
+          description: "The merchant's shop ID. Must be passed automatically from the authenticated session.",
+        },
         limit: {
           type: "number",
           description: "Number of recent posts to scan (default: 25, max: 50)",
@@ -168,6 +172,7 @@ export const INSTAGRAM_TOOLS: Tool[] = [
           description: "Instagram Business Account ID. Auto-detected if not provided.",
         },
       },
+      required: ["shop_id"],
     },
   },
 ];

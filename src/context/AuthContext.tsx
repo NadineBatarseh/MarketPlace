@@ -84,7 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       setIsLoading(false);
     });
-  }, [rawUser?.id]);
+  }, [rawUser?.id, rawUser === null]);
 
   return (
     <AuthContext.Provider value={{ rawUser, role, name, status, isLoading }}>

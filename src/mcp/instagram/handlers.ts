@@ -1,6 +1,14 @@
+import { createClient } from '@supabase/supabase-js';
 import { InstagramClient } from './platforms/instagram/client.js';
 import { FacebookClient } from './platforms/facebook/client.js';
 import { extractProductsFromPosts } from './utils/extractProducts.js';
+
+function getServiceRoleClient() {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error('SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set');
+  return createClient(url, key);
+}
 
 export async function handleInstagramTool(
   client: InstagramClient | null,
@@ -79,13 +87,39 @@ export async function handleInstagramTool(
       );
 
     case 'instagram_import_products': {
+      const shopId = args.shop_id as string;
+      if (!shopId) throw new Error('shop_id is required for instagram_import_products');
+
       const limit = Math.min((args.limit as number | undefined) ?? 25, 50);
       const posts = await client.getMedia(limit, args.account_id as string | undefined);
       const products = await extractProductsFromPosts(posts);
+
+      if (products.length === 0) {
+        return { success: true, count: 0, message: 'لم يتم العثور على منتجات في آخر المنشورات.' };
+      }
+
+      const db = getServiceRoleClient();
+      const rows = products.map((p) => ({
+        shop_id: shopId,
+        title: p.title,
+        description: p.description ?? null,
+        price: p.price ?? null,
+        image_urls: p.image_urls.length > 0 ? p.image_urls : null,
+        stock_Quantity: p.stock_Quantity ?? null,
+        isPublish: false,
+        meta_product_id: crypto.randomUUID(),
+      }));
+
+      const { error } = await db.from('products').insert(rows);
+      if (error) throw new Error(
+        `فشل حفظ المسودات في قاعدة البيانات: ${error.message}. ` +
+        `تأكد من تشغيل migration لإضافة عمود isPublish في جدول products.`
+      );
+
       return {
-        total_scanned: posts.length,
-        products_found: products.length,
-        products,
+        success: true,
+        count: rows.length,
+        message: `تم حفظ ${rows.length} منتجاً كمسودة بنجاح.`,
       };
     }
 

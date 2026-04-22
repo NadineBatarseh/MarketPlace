@@ -96,7 +96,7 @@ export async function getTools(role: string): Promise<Anthropic.Tool[]> {
       input_schema: t.inputSchema ?? { type: "object", properties: {} },
     }));
 
-  // ── Instagram + Facebook tools (available to all roles) ────────────────────
+  // ── Instagram + Facebook tools (role-filtered) ────────────────────────────
   const instagramRawTools: any[] =
     instagramResult.status === "fulfilled" ? (instagramResult.value?.tools ?? []) : [];
 
@@ -104,14 +104,33 @@ export async function getTools(role: string): Promise<Anthropic.Tool[]> {
     console.error("[mcpClient] Instagram tools unavailable:", (instagramResult as PromiseRejectedResult).reason?.message);
   }
 
-  const instagramTools: Anthropic.Tool[] = instagramRawTools.map((t) => {
-    instagramToolNames.add(t.name);
-    return {
-      name: t.name,
-      description: t.description ?? "",
-      input_schema: t.inputSchema ?? { type: "object", properties: {} },
-    };
-  });
+  // Merchants get import + analytics tools only.
+  // instagram_list_media is intentionally excluded so Claude always uses
+  // instagram_import_products when asked to fetch products from Instagram.
+  const instagramToolsByRole: Record<string, string[]> = {
+    merchant: [
+      "instagram_import_products",
+      "instagram_get_profile",
+      "instagram_get_account_insights",
+      "instagram_get_media_insights",
+      "instagram_get_stories",
+      "instagram_get_content_publishing_limit",
+      "facebook_get_page_insights",
+      "facebook_get_page_feed",
+    ],
+  };
+  const allowedInstagramTools = instagramToolsByRole[role] ?? instagramRawTools.map((t) => t.name);
+
+  const instagramTools: Anthropic.Tool[] = instagramRawTools
+    .filter((t) => allowedInstagramTools.includes(t.name))
+    .map((t) => {
+      instagramToolNames.add(t.name);
+      return {
+        name: t.name,
+        description: t.description ?? "",
+        input_schema: t.inputSchema ?? { type: "object", properties: {} },
+      };
+    });
 
   return [...supabaseTools, ...instagramTools];
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMerchantAuth } from './context/MerchantAuthContext';
 import MerchantHome from './pages/MerchantHome';
 import MerchantReviews from './pages/MerchantReviews';
@@ -7,11 +7,12 @@ import MerchantBilling from './pages/MerchantBilling';
 import MerchantEditPage from './pages/MerchantEditPage';
 import BulkUploadPage from './pages/BulkUploadPage';
 import MerchantOrders from './pages/MerchantOrders';
+import DraftProductsPage from './pages/DraftProductsPage';
 import MerchantLoginModal from './components/MerchantLoginModal';
 import ChatBot from '../components/chatbot/ChatBot';
 import './MerchantDashboard.css';
 
-type DashPage = 'home' | 'reviews' | 'billing' | 'editPage' | 'bulkUpload' | 'orders';
+type DashPage = 'home' | 'reviews' | 'billing' | 'editPage' | 'bulkUpload' | 'orders' | 'drafts';
 
 function SidebarItem({
   icon,
@@ -34,8 +35,13 @@ function SidebarItem({
 
 export default function MerchantDashboard() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { merchant, logout, isLoading } = useMerchantAuth();
-  const [currentPage, setCurrentPage] = useState<DashPage>('home');
+  const [currentPage, setCurrentPage] = useState<DashPage>(() => {
+    const p = searchParams.get('page');
+    const valid: DashPage[] = ['home', 'reviews', 'billing', 'editPage', 'bulkUpload', 'orders', 'drafts'];
+    return valid.includes(p as DashPage) ? (p as DashPage) : 'home';
+  });
   const [showLoginModal, setShowLoginModal] = useState(false);
 
   if (isLoading) {
@@ -99,6 +105,7 @@ export default function MerchantDashboard() {
     if (currentPage === 'billing') return <MerchantBilling />;
     if (currentPage === 'bulkUpload') return <BulkUploadPage />;
     if (currentPage === 'orders') return <MerchantOrders />;
+    if (currentPage === 'drafts') return <DraftProductsPage />;
     return <MerchantHome />;
   };
 
@@ -173,6 +180,20 @@ export default function MerchantDashboard() {
           />
 
           <div className="md-sidebar-divider" />
+
+          <SidebarItem
+            icon={
+              <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="9" y1="13" x2="15" y2="13" />
+                <line x1="9" y1="17" x2="13" y2="17" />
+              </svg>
+            }
+            label="المسودات"
+            active={currentPage === 'drafts'}
+            onClick={() => setCurrentPage('drafts')}
+          />
 
           <SidebarItem
             icon={

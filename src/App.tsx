@@ -102,11 +102,11 @@ export default function App() {
               <Route path="/search" element={<RoleGuard allowedRoles={['customer']} allowGuests><SearchResultsPage /></RoleGuard>} />
 
               {/* Customer only */}
-              <Route path="/cart" element={<RoleGuard allowedRoles={['customer']}><Cart /></RoleGuard>} />
-              <Route path="/checkout" element={<RoleGuard allowedRoles={['customer']}><CheckoutPage /></RoleGuard>} />
-              <Route path="/favorites" element={<RoleGuard allowedRoles={['customer']}><Favorite /></RoleGuard>} />
-              <Route path="/orders" element={<RoleGuard allowedRoles={['customer']}><OrderHistoryPage /></RoleGuard>} />
-              <Route path="/orders/:orderId" element={<RoleGuard allowedRoles={['customer']}><OrderTrackingPage /></RoleGuard>} />
+              <Route path="/cart" element={<RoleGuard allowedRoles={['customer']} allowGuests><Cart /></RoleGuard>} />
+              <Route path="/checkout" element={<RoleGuard allowedRoles={['customer']} allowGuests><CheckoutPage /></RoleGuard>} />
+              <Route path="/favorites" element={<RoleGuard allowedRoles={['customer']} allowGuests><Favorite /></RoleGuard>} />
+              <Route path="/orders" element={<RoleGuard allowedRoles={['customer']} allowGuests><OrderHistoryPage /></RoleGuard>} />
+              <Route path="/orders/:orderId" element={<RoleGuard allowedRoles={['customer']} allowGuests><OrderTrackingPage /></RoleGuard>} />
 
               {/* Merchant only */}
               <Route path="/merchant-dashboard" element={<RoleGuard allowedRoles={['merchant']}><MerchantDashboard /></RoleGuard>} />
