@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import supabase from '../lib/supabase';
 
 export interface SharedAuthState {
@@ -32,13 +32,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [name, setName] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const wasLoggedIn = useRef(false);
 
   // Step 1: listen for auth changes — no async DB work here
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT' || !session) {
+        // Redirect to login if the session dropped for a previously authenticated user
+        // (covers both explicit logout and invalid/expired refresh token)
+        if (event === 'SIGNED_OUT' && wasLoggedIn.current) {
+          window.location.href = '/login';
+        }
         setRawUser(null);
-      } else if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+      } else if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        wasLoggedIn.current = true;
         setRawUser(session.user);
       }
     });

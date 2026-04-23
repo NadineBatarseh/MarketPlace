@@ -3,11 +3,12 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"vite\" \"tsx watch server/index.ts\" \"tsx watch src/server.ts\"",
+    "dev": "concurrently \"vite\" \"tsx watch server/index.ts\" \"tsx watch src/server-merchant.ts\"",
     "build": "vite build",
     "start": "tsx server/index.ts",
     "preview": "vite preview",
-    "supabase-mcp": "tsx src/server-supabase.ts"
+    "supabase-mcp": "tsx src/server-supabase.ts",
+    "mcp:merchant": "tsx src/server-merchant.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
