@@ -6,6 +6,7 @@ export interface InstagramProductRecord {
   description: string | null;
   price: number | null;
   image_urls: string[];
+  video_url: string | null;
   stock_Quantity: number | null;
   instagram_post_id: string;
   instagram_permalink: string;
@@ -101,17 +102,30 @@ ${JSON.stringify(postsPayload, null, 2)}`;
     const post = postsWithCaptions[result.index];
     if (!post) continue;
 
-    // For video posts use the thumbnail; for images use media_url directly
-    const imageUrl =
-      post.media_type === 'VIDEO' || post.media_type === 'REELS'
-        ? (post.thumbnail_url ?? post.media_url)
-        : post.media_url;
+    let imageUrls: string[];
+    let videoUrl: string | null = null;
+
+    if (post.media_type === 'CAROUSEL_ALBUM' && post.children?.data?.length) {
+      imageUrls = post.children.data
+        .map((child) =>
+          child.media_type === 'VIDEO'
+            ? (child.thumbnail_url ?? child.media_url)
+            : child.media_url
+        )
+        .filter((url): url is string => !!url);
+    } else if (post.media_type === 'VIDEO' || post.media_type === 'REELS') {
+      imageUrls = post.thumbnail_url ? [post.thumbnail_url] : [];
+      videoUrl = post.media_url ?? null;
+    } else {
+      imageUrls = post.media_url ? [post.media_url] : [];
+    }
 
     products.push({
       title: result.title,
       description: result.description ?? null,
       price: typeof result.price === 'number' ? result.price : null,
-      image_urls: imageUrl ? [imageUrl] : [],
+      image_urls: imageUrls,
+      video_url: videoUrl,
       stock_Quantity:
         typeof result.stock_quantity === 'number'
           ? result.stock_quantity

@@ -384,6 +384,7 @@ export default function MerchantEditPage() {
     const { data: files } = await supabase.storage.from('product-images').list(id);
     if (files && files.length > 0) {
       await supabase.storage.from('product-images').remove(files.map(f => `${id}/${f.name}`));
+      await supabase.storage.from('product-images').remove(files.map(f => `${id}/${f.name}`));
     }
     const { error } = await supabase.from('products').delete().eq('id', id).eq('shop_id', shop.shop_id);
     if (!error) setProducts(prev => prev.filter(p => p.id !== id));

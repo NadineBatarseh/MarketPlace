@@ -9,6 +9,7 @@ interface DraftProduct {
   description: string | null;
   price: number | null;
   image_urls: string[] | null;
+  video_url: string | null;
   stock_Quantity: number | null;
 }
 
@@ -60,7 +61,7 @@ export default function DraftProductsPage() {
 
     const { data, error } = await supabase
       .from('products')
-      .select('id, title, description, price, image_urls, stock_Quantity')
+      .select('id, title, description, price, image_urls, video_url, stock_Quantity')
       .eq('shop_id', shopId)
       .eq('isPublish', false)
       .order('created_at', { ascending: false });
@@ -79,6 +80,22 @@ export default function DraftProductsPage() {
   }, [shopId]);
 
   useEffect(() => { loadDrafts(); }, [loadDrafts]);
+
+  // Re-fetch when the MCP tool inserts new drafts from the backend
+  useEffect(() => {
+    if (!shopId) return;
+
+    const channel = supabase
+      .channel(`drafts:${shopId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'products', filter: `shop_id=eq.${shopId}` },
+        () => { loadDrafts(); }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [shopId, loadDrafts]);
 
   const updateCard = (id: string, patch: Partial<CardState>) => {
     setCards((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
@@ -186,9 +203,18 @@ export default function DraftProductsPage() {
 
           return (
             <div key={product.id} className="dp-card">
-              {/* Image */}
+              {/* Media: video for reels, image otherwise */}
               <div className="dp-card-img-wrap">
-                {imageUrl ? (
+                {product.video_url ? (
+                  <video
+                    src={product.video_url}
+                    className="dp-card-img"
+                    controls
+                    muted
+                    playsInline
+                    poster={imageUrl ?? undefined}
+                  />
+                ) : imageUrl ? (
                   <img src={imageUrl} alt={product.title} className="dp-card-img" />
                 ) : (
                   <div className="dp-card-no-img">📦</div>

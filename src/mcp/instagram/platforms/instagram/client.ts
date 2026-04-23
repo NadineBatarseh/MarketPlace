@@ -194,6 +194,19 @@ export class InstagramClient {
     }
   }
 
+  async getCarouselChildren(mediaId: string): Promise<Array<{ id: string; media_url?: string; thumbnail_url?: string; media_type: 'IMAGE' | 'VIDEO' }>> {
+    try {
+      const response = await this.request<{ data: Array<{ id: string; media_url?: string; thumbnail_url?: string; media_type: 'IMAGE' | 'VIDEO' }> }>({
+        url: `/${mediaId}/children`,
+        params: { fields: 'id,media_url,thumbnail_url,media_type' },
+      });
+      return response.data ?? [];
+    } catch (error) {
+      logger.warn(`Failed to fetch carousel children for ${mediaId}:`, error);
+      return [];
+    }
+  }
+
   async getMedia(limit: number = 25, accountId?: string): Promise<MediaItem[]> {
     try {
       const targetAccountId = accountId || (await this.getAccountId());
@@ -204,7 +217,19 @@ export class InstagramClient {
           limit,
         },
       });
-      return response.data;
+      const media = response.data;
+
+      // Fetch all children for carousel posts via the dedicated edge (nested fields only return 1 by default)
+      await Promise.all(
+        media
+          .filter((item) => item.media_type === 'CAROUSEL_ALBUM')
+          .map(async (item) => {
+            const children = await this.getCarouselChildren(item.id);
+            item.children = { data: children };
+          })
+      );
+
+      return media;
     } catch (error) {
       if (error instanceof InstagramApiError) throw error;
       throw this.wrapError('Failed to get media', error);
@@ -229,12 +254,17 @@ export class InstagramClient {
 
   async getMediaById(mediaId: string): Promise<MediaItem> {
     try {
-      return await this.request<MediaItem>({
+      const item = await this.request<MediaItem>({
         url: `/${mediaId}`,
         params: {
           fields: 'id,caption,media_type,media_url,permalink,timestamp,like_count,comments_count,media_product_type,thumbnail_url',
         },
       });
+      if (item.media_type === 'CAROUSEL_ALBUM') {
+        const children = await this.getCarouselChildren(item.id);
+        item.children = { data: children };
+      }
+      return item;
     } catch (error) {
       if (error instanceof InstagramApiError) throw error;
       throw this.wrapError('Failed to get media details', error);

@@ -42,6 +42,14 @@ export interface MediaItem {
   comments_count?: number;
   media_product_type?: string;
   thumbnail_url?: string;
+  children?: {
+    data: Array<{
+      id: string;
+      media_url?: string;
+      thumbnail_url?: string;
+      media_type: 'IMAGE' | 'VIDEO';
+    }>;
+  };
 }
 
 export interface StoryItem {

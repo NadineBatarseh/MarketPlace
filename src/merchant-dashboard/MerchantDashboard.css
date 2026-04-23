@@ -1327,6 +1327,7 @@
   left: 0.5rem;
   display: flex;
   gap: 0.25rem;
+  z-index: 1;
 }
 
 .mep-product-del-btn,
@@ -1350,6 +1351,31 @@
   color: #2563eb;
 }
 .mep-product-edit-btn:hover { background: #dbeafe; }
+
+/* ── Page tabs ── */
+.mep-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid #e5e7eb;
+  padding-bottom: 0;
+}
+.mep-tab {
+  padding: 0.6rem 1.4rem;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  font-family: var(--font-main);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  margin-bottom: -2px;
+}
+.mep-tab:hover { color: #1a1a2e; }
+.mep-tab--active { color: #1a1a2e; border-bottom-color: #e8572a; }
+.mep-tab--disabled { opacity: 0.45; cursor: not-allowed; }
 
 .mep-save-btn {
   padding: 0.85rem 2rem;
