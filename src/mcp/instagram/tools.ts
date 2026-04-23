@@ -1,0 +1,285 @@
+import type { Tool } from "@modelcontextprotocol/sdk/types.js";
+
+export const INSTAGRAM_TOOLS: Tool[] = [
+  {
+    name: "instagram_list_accounts",
+    description: "List all available Instagram Business accounts connected to your Facebook pages.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "instagram_get_profile",
+    description: "Get Instagram profile information including followers, bio, and media count.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        account_id: { type: "string", description: "Instagram Business Account ID. Auto-detected if not provided." },
+      },
+    },
+  },
+  {
+    name: "instagram_get_account_insights",
+    description: "Get account-level insights and analytics for Instagram. Supports demographic breakdowns and time series data.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        metrics: {
+          type: "array",
+          items: { type: "string" },
+          description: "Metrics to retrieve (e.g., reach, views, accounts_engaged, follower_demographics, likes, shares)",
+        },
+        period: {
+          type: "string",
+          enum: ["day", "week", "days_28", "lifetime"],
+          description: "Aggregation period",
+        },
+        account_id: { type: "string", description: "Instagram Business Account ID. Auto-detected if not provided." },
+        metric_type: { type: "string", enum: ["time_series", "total_value"] },
+        breakdown: { type: "string", description: "Demographic breakdown: age, city, country, or gender" },
+        timeframe: {
+          type: "string",
+          enum: ["last_14_days", "last_30_days", "last_90_days", "prev_month", "this_month", "this_week"],
+        },
+        since: { type: "number", description: "Unix timestamp for start of range" },
+        until: { type: "number", description: "Unix timestamp for end of range" },
+      },
+      required: ["metrics", "period"],
+    },
+  },
+  {
+    name: "instagram_list_media",
+    description: "List recent Instagram media posts with captions, types, and engagement data.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: { type: "number", description: "Number of posts to return (default: 25)" },
+        account_id: { type: "string", description: "Instagram Business Account ID. Auto-detected if not provided." },
+      },
+    },
+  },
+  {
+    name: "instagram_get_media_details",
+    description: "Get detailed information about a specific Instagram media post.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        media_id: { type: "string", description: "Instagram Media ID" },
+      },
+      required: ["media_id"],
+    },
+  },
+  {
+    name: "instagram_get_media_insights",
+    description: "Get performance insights for a specific Instagram media post (views, likes, reach, saves, shares, etc.).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        media_id: { type: "string", description: "Instagram Media ID" },
+        metrics: {
+          type: "array",
+          items: { type: "string" },
+          description: "Metrics to retrieve (e.g., views, likes, comments, reach, saved, shares, total_interactions)",
+        },
+        period: {
+          type: "string",
+          enum: ["day", "week", "days_28", "lifetime"],
+          description: "Aggregation period (default: lifetime)",
+        },
+      },
+      required: ["media_id", "metrics"],
+    },
+  },
+  {
+    name: "instagram_get_stories",
+    description: "Get recent Instagram Stories (available within 24 hours after publication).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        account_id: { type: "string", description: "Instagram Business Account ID. Auto-detected if not provided." },
+      },
+    },
+  },
+  {
+    name: "instagram_get_hashtag_search",
+    description: "Search for an Instagram hashtag and retrieve its ID for use in media queries.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        hashtag_name: { type: "string", description: "Hashtag name to search for (without the # symbol)" },
+        account_id: { type: "string", description: "Instagram Business Account ID. Auto-detected if not provided." },
+      },
+      required: ["hashtag_name"],
+    },
+  },
+  {
+    name: "instagram_get_hashtag_media",
+    description: "Get top or recent media for a specific hashtag (limited to 30 unique hashtag searches per 7 days).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        hashtag_id: { type: "string", description: "Hashtag ID from instagram_get_hashtag_search" },
+        media_type: {
+          type: "string",
+          enum: ["top_media", "recent_media"],
+          description: "Whether to retrieve top or recent media (default: top_media)",
+        },
+        account_id: { type: "string", description: "Instagram Business Account ID. Auto-detected if not provided." },
+        limit: { type: "number", description: "Number of media items to return" },
+      },
+      required: ["hashtag_id"],
+    },
+  },
+  {
+    name: "instagram_get_content_publishing_limit",
+    description: "Check the current content publishing rate limit and quota usage for an Instagram account.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        account_id: { type: "string", description: "Instagram Business Account ID. Auto-detected if not provided." },
+      },
+    },
+  },
+  {
+    name: "instagram_get_mentioned_media",
+    description: "Get media posts where the Instagram account is tagged or mentioned by others.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        account_id: { type: "string", description: "Instagram Business Account ID. Auto-detected if not provided." },
+        limit: { type: "number", description: "Number of results to return" },
+      },
+    },
+  },
+  {
+    name: "instagram_import_products",
+    description:
+      "Scan recent Instagram posts, use AI to identify product showcases, and automatically save them to the database as draft products. Returns a summary object { success, count, message } — does NOT return the product list. The merchant reviews drafts at /merchant-dashboard?page=drafts.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        shop_id: {
+          type: "string",
+          description: "The merchant's shop ID. Must be passed automatically from the authenticated session.",
+        },
+        limit: {
+          type: "number",
+          description: "Number of recent posts to scan (default: 25, max: 50)",
+        },
+        account_id: {
+          type: "string",
+          description: "Instagram Business Account ID. Auto-detected if not provided.",
+        },
+      },
+      required: ["shop_id"],
+    },
+  },
+];
+
+export const FACEBOOK_TOOLS: Tool[] = [
+  {
+    name: "facebook_list_pages",
+    description: "List all Facebook Pages accessible with the current access token.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        access_token: { type: "string", description: "Facebook access token. Uses configured token if not provided." },
+      },
+    },
+  },
+  {
+    name: "facebook_get_page_details",
+    description: "Get detailed information about a Facebook Page including fans, location, and contact info.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        page_id: { type: "string", description: "Facebook Page ID. Uses configured page ID if not provided." },
+      },
+    },
+  },
+  {
+    name: "facebook_get_page_insights",
+    description: "Fetch page-level insights for a Facebook Page. Common metrics: page_impressions, page_engaged_users, page_views_total, page_fans.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        metrics: { type: "array", items: { type: "string" }, description: "Metrics to retrieve" },
+        page_id: { type: "string" },
+        period: { type: "string", enum: ["day", "week", "days_28", "lifetime"] },
+        since: { type: "string", description: "Start date (YYYY-MM-DD or Unix timestamp)" },
+        until: { type: "string", description: "End date (YYYY-MM-DD or Unix timestamp)" },
+        limit: { type: "number" },
+        after: { type: "string" },
+        before: { type: "string" },
+        access_token: { type: "string" },
+      },
+      required: ["metrics"],
+    },
+  },
+  {
+    name: "facebook_get_post_insights",
+    description: "Get insights for a specific Facebook post.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        post_id: { type: "string", description: "Facebook Post ID" },
+        metrics: { type: "array", items: { type: "string" }, description: "Metrics to retrieve" },
+        period: { type: "string" },
+        access_token: { type: "string" },
+      },
+      required: ["post_id", "metrics"],
+    },
+  },
+  {
+    name: "facebook_list_posts_with_insights",
+    description: "Retrieve Facebook page posts combined with inline performance metrics in a single request.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        post_metrics: { type: "array", items: { type: "string" }, description: "Post-level metrics to include" },
+        page_id: { type: "string" },
+        limit: { type: "number" },
+        after: { type: "string" },
+        before: { type: "string" },
+        access_token: { type: "string" },
+      },
+      required: ["post_metrics"],
+    },
+  },
+  {
+    name: "facebook_get_page_feed",
+    description: "Get recent posts from a Facebook Page feed with reactions and engagement data.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        page_id: { type: "string" },
+        limit: { type: "number" },
+      },
+    },
+  },
+  {
+    name: "facebook_list_known_metrics",
+    description: "List all supported Facebook Page and Post metrics with their valid aggregation periods.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "facebook_validate_token",
+    description: "Validate a Facebook access token and return basic account information.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        access_token: { type: "string", description: "Facebook access token to validate" },
+        fields: { type: "array", items: { type: "string" } },
+      },
+      required: ["access_token"],
+    },
+  },
+];
+
+export function getAllTools(): Tool[] {
+  return [...INSTAGRAM_TOOLS, ...FACEBOOK_TOOLS];
+}

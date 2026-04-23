@@ -163,91 +163,23 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   // Layer 2 protection: verify the merchant is logged in, has merchant role,
   // and owns a shop before allowing any tool access or Claude calls.
 
-  let merchant_shop_id: string | undefined;
+  const systemPrompt = role === "merchant"
+    ? `أنت مساعد ذكي للتاجر على منصة سوق لينك.
+جميع العمليات تخص متجر هذا التاجر فقط. معرّف المتجر هو: ${merchant_shop_id ?? "غير متوفر"}.
 
-  // helper to stream an auth error back to the chatbot UI
-  const sseError = (msg: string) => {
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.write(`data: ${JSON.stringify({ text: msg })}\n\n`);
-    res.write(`data: [DONE]\n\n`);
-    res.end();
-  };
+معلومات مهمة عن المنصة يجب أن تعرفها:
+- المنصة تدعم ميزة "المسودات" بشكل كامل. المنتجات المستوردة من انستقرام تُحفظ كمسودات (isPublish = false) ويراجعها التاجر من صفحة المسودات قبل نشرها.
+- صفحة المسودات موجودة في لوحة التحكم وتعمل الآن على الرابط: /merchant-dashboard?page=drafts
 
-  if (role === "merchant") {
+لديك أدوات جاهزة ومتصلة الآن — استخدمها فوراً دون تردد:
+- أدوات قاعدة البيانات: list_products، list_my_products، create_product، update_product، delete_product
+- أدوات انستقرام المتصلة والجاهزة: instagram_import_products، instagram_get_profile، instagram_get_account_insights، وغيرها
 
-    // 1. Token must exist — no guest access for merchants
-    if (!sb_auth_token) {
-      return sseError("يرجى تسجيل الدخول أولاً للوصول إلى هذه الميزة.");
-    }
-
-    // 2. Verify token is valid and get the user
-    const { data: { user }, error: authErr } = await supabase.auth.getUser(sb_auth_token);
-    if (authErr || !user) {
-      console.error("[chat] invalid token:", authErr?.message);
-      return sseError("جلستك منتهية، يرجى تسجيل الدخول مجدداً.");
-    }
-
-    // 3. Confirm the user's role is actually "merchant" in our Users table
-    const { data: userRecord, error: userErr } = await supabase
-      .from("Users")
-      .select("role")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (userErr) {
-      console.error("[chat] user lookup error:", userErr.message);
-      return sseError("حدث خطأ في التحقق من صلاحياتك.");
-    }
-    if (!userRecord || userRecord.role !== "merchant") {
-      return sseError("هذه الميزة متاحة للتجار فقط.");
-    }
-
-    // 4. Confirm the merchant has a shop linked to their account
-    const { data: shop, error: shopErr } = await supabase
-      .from("shops")
-      .select("shop_id")
-      .eq("owner_id", user.id)
-      .maybeSingle();
-
-    if (shopErr) {
-      console.error("[chat] shop lookup error:", shopErr.message);
-      return sseError("حدث خطأ في تحميل بيانات متجرك.");
-    }
-    if (!shop) {
-      return sseError("لا يوجد متجر مرتبط بحسابك، تواصل مع الدعم.");
-    }
-
-    merchant_shop_id = shop.shop_id;
-  }
-  // ── END MERCHANT AUTH GATE ─────────────────────────────────────────────────
-
-  const hasImages = (images?.length ?? 0) > 0;
-
- const systemPrompt = role === "merchant"
-  ? `أنت مساعد ذكي للتاجر على منصة سوق لينك.
-جميع العمليات تخص متجر هذا التاجر فقط.
-لديك أدوات مباشرة للتعامل مع قاعدة البيانات، استخدمها دائماً للحصول على بيانات حقيقية.
-لا تطلب من التاجر أي معرّفات أو UUIDs — كل الأدوات تتحقق من هويته تلقائياً عبر رمز الجلسة.
-
-قواعد التحديث والحذف (مهم):
-- قبل تحديث أو حذف منتج، استدعِ find_my_product أولاً للحصول على product_id الحقيقي.
-- إذا أعادت find_my_product أكثر من منتج واحد بنفس الاسم، اسأل التاجر أي منتج يقصد تحديداً قبل المتابعة.
-- ثم استدعِ update_my_product أو delete_my_product مع هذا الـ product_id.
-- لا تطلب من التاجر الـ product_id أبداً — ابحث عنه بالاسم.
-
-قواعد الوصف في update_my_product (مهم):
-- التاجر يقول "غيّر الوصف / change description / بدّل الوصف" → استخدم description فقط (يستبدل الوصف كاملاً).
-- التاجر يقول "أضف للوصف / add to description / أضف كلمة" → استخدم append_description فقط (يُضاف للوصف الموجود تلقائياً — لا تُرسل description أبداً في هذه الحالة).
-
-${hasImages
-  ? `الصور المرفقة: أرفق التاجر ${images!.length} صورة في هذه الرسالة. هذه الصور سيتم رفعها تلقائياً — لا تطلب من التاجر روابط أبداً، فقط استدعِ الأداة مباشرة.
-قواعد الصور:
-- عند إضافة منتج جديد (add_my_product): الصور تُرفع وتُحقن تلقائياً — لا ترسل image_urls بنفسك.
-- عند تحديث منتج (update_my_product): الافتراضي دائماً إضافة للصور الموجودة — لا تُرسل append_image_urls أبداً بنفسك.
-- إذا قال التاجر "استبدل الصور" أو "replace" → أرسل replace_images: true فقط.`
-  : `إذا أرفق التاجر صوراً، سيتم رفعها تلقائياً — لا تطلب منه روابط أبداً. الافتراضي دائماً إضافة للصور الموجودة وليس استبدالها.`}
+قواعد صارمة يجب اتباعها:
+1. لا تقل أبداً "لا أملك أدوات" أو "لا يمكنني الوصول لانستقرام" أو "النظام لا يدعم المسودات" — كل هذه المزايا موجودة ومفعّلة.
+2. عند استخدام أي أداة تحتاج shop_id، استخدم القيمة: ${merchant_shop_id ?? "غير متوفر"} تلقائياً دون أن تطلبه من المستخدم.
+3. عندما يطلب التاجر عرض منتجاته أو منتجات متجره، استخدم list_products مع shop_id.
+4. عندما يطلب التاجر جلب منتجاته من انستقرام، أو استيرادها، أو استخراجها من منشوراته، أو أي عبارة مشابهة — استخدم حصراً instagram_import_products مع shop_id. بعد انتهاء الأداة، رد فقط بـ: "تم استيراد [العدد] منتجاً وحفظها كمسودات. راجعها وانشرها من [صفحة المسودات](/merchant-dashboard?page=drafts)." دون عرض أي قائمة منتجات.
 
 أجب دائماً باللغة العربية بشكل واضح ومنظم.`
   : `أنت مساعد ذكي لمنصة سوق لينك. ساعد المستخدم في البحث عن المنتجات والمتاجر.
@@ -502,6 +434,23 @@ app.get("/api/debug/shops", async (_req: Request, res: Response) => {
   return res.json({ data, error });
 });
 
+app.get("/api/debug/instagram-token", async (_req: Request, res: Response) => {
+  const token = process.env.INSTAGRAM_ACCESS_TOKEN;
+  if (!token) return res.json({ ok: false, error: "INSTAGRAM_ACCESS_TOKEN is not set in .env" });
+
+  try {
+    const r = await fetch(`https://graph.facebook.com/v23.0/me/accounts?access_token=${token}`);
+    const data: any = await r.json();
+    if (data.error) {
+      return res.json({ ok: false, apiError: data.error, tokenPrefix: token.slice(0, 20) + "..." });
+    }
+    const pages = data.data ?? [];
+    return res.json({ ok: true, pagesFound: pages.length, pages: pages.map((p: any) => ({ id: p.id, name: p.name })), tokenPrefix: token.slice(0, 20) + "..." });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 /* ---------- STORE PAGE API ---------- */
 
 // GET /api/stores/:id  — fetch a single shop by its shop_id
@@ -510,7 +459,7 @@ app.get("/api/stores/:id", async (req: Request, res: Response) => {
 
   const { data: store, error } = await supabase
     .from("shops")
-    .select("shop_id, name, description, shopLogo, created_at, whatsapp, instagram, facebook, location, shop_ratings(avg_rating, review_count)")
+    .select("shop_id, name, description, shopLogo, created_at, whatsapp, instagram, facebook, location")
     .eq("shop_id", id)
     .single();
 
@@ -529,9 +478,15 @@ app.get("/api/stores/:id", async (req: Request, res: Response) => {
     shopLogo = urlData.publicUrl;
   }
 
-  const ratings = (store as any).shop_ratings;
-  const avg_rating = ratings?.[0]?.avg_rating ?? null;
-  const review_count = ratings?.[0]?.review_count ?? 0;
+  // Fetch ratings separately to avoid relying on a FK join
+  const { data: ratingRow } = await supabase
+    .from("shop_ratings")
+    .select("avg_rating, review_count")
+    .eq("shop_id", id)
+    .maybeSingle();
+
+  const avg_rating = ratingRow?.avg_rating ?? null;
+  const review_count = ratingRow?.review_count ?? 0;
 
   return res.json({ ok: true, store: { ...store, shopLogo, avg_rating, review_count } });
 });
@@ -621,13 +576,15 @@ app.get("/api/stores/:id/products", async (req: Request, res: Response) => {
         .from("products")
         .select("id, title, description, price, image_urls, stock_Quantity")
         .eq("shop_id", shop.shop_id)
+        .eq("isPublish", true)
         .order(orderCol, { ascending })
         .range(offset, offset + limit - 1),
 
       supabase
         .from("products")
         .select("id", { count: "exact", head: true })
-        .eq("shop_id", shop.shop_id),
+        .eq("shop_id", shop.shop_id)
+        .eq("isPublish", true),
     ]);
 
   if (prodErr || countErr) {
@@ -646,22 +603,32 @@ app.get("/api/stores/:id/products", async (req: Request, res: Response) => {
 
 // GET /api/stores — fetch all shops with avg rating + review count
 app.get("/api/stores", async (_req: Request, res: Response) => {
-  const { data: stores, error } = await supabase
+  const { data: shops, error: shopsErr } = await supabase
     .from("shops")
-    .select("shop_id, name, shopLogo, location, shop_ratings(avg_rating, review_count)")
+    .select("shop_id, name, shopLogo, location")
     .order("created_at", { ascending: false });
 
-  if (error) {
-    return res.status(500).json({ ok: false, error: error.message });
+  if (shopsErr) {
+    console.error("[/api/stores] shops query failed:", shopsErr.message);
+    return res.status(500).json({ ok: false, error: shopsErr.message });
   }
 
-  const mapped = (stores ?? []).map((s: any) => ({
+  // Fetch ratings separately to avoid relying on a FK join
+  const { data: ratings } = await supabase
+    .from("shop_ratings")
+    .select("shop_id, avg_rating, review_count");
+
+  const ratingsMap = new Map(
+    (ratings ?? []).map((r: any) => [r.shop_id, r])
+  );
+
+  const mapped = (shops ?? []).map((s: any) => ({
     shop_id: s.shop_id,
     name: s.name,
     shopLogo: s.shopLogo,
     location: s.location,
-    avg_rating: s.shop_ratings?.[0]?.avg_rating ?? null,
-    review_count: s.shop_ratings?.[0]?.review_count ?? 0,
+    avg_rating: ratingsMap.get(s.shop_id)?.avg_rating ?? null,
+    review_count: ratingsMap.get(s.shop_id)?.review_count ?? 0,
   }));
 
   return res.json({ ok: true, stores: mapped });
@@ -838,7 +805,26 @@ if (process.env.NODE_ENV === "production") {
 
 /* ---------- START ---------- */
 
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () =>
-  console.log(`✅ Server running on http://localhost:${PORT}`)
-);
+const PORT = Number(process.env.PORT) || 4000;
+
+function startServer() {
+  const server = app.listen(PORT, () =>
+    console.log(`✅ Server running on http://localhost:${PORT}`)
+  );
+
+  server.on('error', async (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+      console.warn(`⚠️  Port ${PORT} is in use — killing existing process and retrying…`);
+      try {
+        const { execSync } = await import('child_process');
+        execSync(`npx kill-port ${PORT}`, { stdio: 'ignore' });
+      } catch {}
+      setTimeout(startServer, 1500);
+    } else {
+      console.error('Server error:', err);
+      process.exit(1);
+    }
+  });
+}
+
+startServer();

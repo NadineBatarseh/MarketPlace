@@ -1,97 +1,164 @@
 /**
  * MCP CLIENT
  *
- * This file is the bridge between the backend (server/index.ts)
- * and the MCP server (src/mcp/meta-catalog/server.ts running on port 4001).
+ * Both MCP servers run in-process via InMemoryTransport — no separate terminals needed.
+ *   1. Supabase MCP  — product/shop tools, role-filtered
+ *   2. Instagram MCP — instagram_* and facebook_* analytics tools
  *
- * It exposes two functions:
- *   - getTools(role)           → asks the MCP server for its tool list (filtered by role)
- *   - callTool(name, input)    → executes a tool on the MCP server
- *
- * How it works:
- *   1. Connects to ws://localhost:4001 (the MCP server)
- *   2. Sends JSON messages in MCP protocol format
- *   3. Waits for the response and returns it
+ * Public API:
+ *   getTools(role)        → merged Anthropic tool list from both servers
+ *   callTool(name, input) → routed to the correct server based on tool name
  */
 
-import { WebSocket } from "ws";
 import Anthropic from "@anthropic-ai/sdk";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { createSupabaseMcpServer } from "../src/mcp/supabase/server.js";
+import { createInstagramMcpServer } from "../src/mcp/instagram/server.js";
 
-const MCP_URL = process.env.MCP_WS_URL || "ws://localhost:4001";
+// ── In-process client singletons ─────────────────────────────────────────────
 
-let requestId = 1;
+let _supabaseClient: Client | null = null;
+let _instagramClient: Client | null = null;
 
-function mcpRequest(method: string, params: Record<string, any> = {}): Promise<any> {
-  return new Promise((resolve, reject) => {
-    const ws = new WebSocket(MCP_URL);
-    const id = requestId++;
+async function getSupabaseClient(): Promise<Client> {
+  if (_supabaseClient) return _supabaseClient;
 
-    const timeout = setTimeout(() => {
-      ws.close();
-      reject(new Error(`MCP request timeout: ${method}`));
-    }, 10000);
+  const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+  const server = createSupabaseMcpServer();
+  await server.connect(serverTransport);
 
-    ws.on("open", () => {
-      ws.send(JSON.stringify({ jsonrpc: "2.0", method, params, id }));
-    });
+  const client = new Client({ name: "souqlink-supabase-client", version: "1.0.0" });
+  await client.connect(clientTransport);
 
-    ws.on("message", (data: Buffer) => {
-      try {
-        const response = JSON.parse(data.toString());
-        if (response.id === id) {
-          clearTimeout(timeout);
-          ws.close();
-          if (response.error) {
-            reject(new Error(response.error.message ?? "MCP error"));
-          } else {
-            resolve(response.result);
-          }
-        }
-      } catch (err) {
-        clearTimeout(timeout);
-        ws.close();
-        reject(err);
-      }
-    });
-
-    ws.on("error", (err) => {
-      clearTimeout(timeout);
-      reject(new Error(`MCP connection error: ${err.message}`));
-    });
-  });
+  _supabaseClient = client;
+  console.log("✅ Supabase MCP: in-memory client connected");
+  return client;
 }
 
+async function getInstagramClient(): Promise<Client> {
+  if (_instagramClient) return _instagramClient;
+
+  const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+  const server = createInstagramMcpServer();
+  await server.connect(serverTransport);
+
+  const client = new Client({ name: "souqlink-instagram-client", version: "1.0.0" });
+  await client.connect(clientTransport);
+
+  _instagramClient = client;
+  console.log("✅ Instagram MCP: in-memory client connected");
+  return client;
+}
+
+// ── Tool routing ──────────────────────────────────────────────────────────────
+
+const instagramToolNames = new Set<string>();
+
+// ── Public API ────────────────────────────────────────────────────────────────
+
 export async function getTools(role: string): Promise<Anthropic.Tool[]> {
-  try {
-    const result = await mcpRequest("tools/list");
-    const allTools: any[] = result?.tools ?? [];
+  const [supabaseResult, instagramResult] = await Promise.allSettled([
+    (async () => {
+      const client = await getSupabaseClient();
+      return client.listTools();
+    })(),
+    (async () => {
+      const client = await getInstagramClient();
+      return client.listTools();
+    })(),
+  ]);
 
-    const roleToolMap: Record<string, string[]> = {
-      merchant: ["list_products", "get_product", "create_product", "update_product", "delete_product", "apply_discount", "remove_discount"],
-      admin:    ["list_products", "get_product", "list_shops", "get_shop"],
-      customer: ["list_products", "get_product", "list_shops", "get_shop"],
-    };
+  // ── Supabase tools (role-filtered) ─────────────────────────────────────────
+  const supabaseRawTools: any[] =
+    supabaseResult.status === "fulfilled" ? (supabaseResult.value?.tools ?? []) : [];
 
-    const allowed = roleToolMap[role] ?? roleToolMap["customer"];
-
-    return allTools
-      .filter(t => allowed.includes(t.name))
-      .map(t => ({
-        name: t.name,
-        description: t.description,
-        input_schema: t.inputSchema ?? { type: "object", properties: {} },
-      }));
-  } catch (err: any) {
-    console.error("[mcpClient] getTools error:", err.message);
-    return [];
+  if (supabaseResult.status === "rejected") {
+    console.error("[mcpClient] Supabase tools unavailable:", (supabaseResult as PromiseRejectedResult).reason?.message);
   }
+
+  const roleToolMap: Record<string, string[]> = {
+    merchant: [
+      "list_products", "get_product", "list_my_products",
+      "create_product", "update_product", "delete_product",
+      "apply_discount", "remove_discount",
+    ],
+    admin:    ["list_products", "get_product", "list_shops", "get_shop"],
+    customer: ["list_products", "get_product", "list_shops", "get_shop"],
+  };
+  const allowed = roleToolMap[role] ?? roleToolMap["customer"];
+
+  const supabaseTools: Anthropic.Tool[] = supabaseRawTools
+    .filter((t) => allowed.includes(t.name))
+    .map((t) => ({
+      name: t.name,
+      description: t.description ?? "",
+      input_schema: t.inputSchema ?? { type: "object", properties: {} },
+    }));
+
+  // ── Instagram + Facebook tools (role-filtered) ────────────────────────────
+  const instagramRawTools: any[] =
+    instagramResult.status === "fulfilled" ? (instagramResult.value?.tools ?? []) : [];
+
+  if (instagramResult.status === "rejected") {
+    console.error("[mcpClient] Instagram tools unavailable:", (instagramResult as PromiseRejectedResult).reason?.message);
+  }
+
+  // Merchants get import + analytics tools only.
+  // instagram_list_media is intentionally excluded so Claude always uses
+  // instagram_import_products when asked to fetch products from Instagram.
+  const instagramToolsByRole: Record<string, string[]> = {
+    merchant: [
+      "instagram_import_products",
+      "instagram_get_profile",
+      "instagram_get_account_insights",
+      "instagram_get_media_insights",
+      "instagram_get_stories",
+      "instagram_get_content_publishing_limit",
+      "facebook_get_page_insights",
+      "facebook_get_page_feed",
+    ],
+  };
+  const allowedInstagramTools = instagramToolsByRole[role] ?? instagramRawTools.map((t) => t.name);
+
+  const instagramTools: Anthropic.Tool[] = instagramRawTools
+    .filter((t) => allowedInstagramTools.includes(t.name))
+    .map((t) => {
+      instagramToolNames.add(t.name);
+      return {
+        name: t.name,
+        description: t.description ?? "",
+        input_schema: t.inputSchema ?? { type: "object", properties: {} },
+      };
+    });
+
+  return [...supabaseTools, ...instagramTools];
 }
 
 export async function callTool(name: string, input: Record<string, any>): Promise<string> {
-  const result = await mcpRequest("tools/call", { name, arguments: input });
+  // Populate routing set if getTools() was not called first
+  if (instagramToolNames.size === 0) {
+    try {
+      const client = await getInstagramClient();
+      const { tools } = await client.listTools();
+      for (const t of tools) instagramToolNames.add(t.name);
+    } catch { /* fall through to Supabase */ }
+  }
 
-  const content = result?.content ?? [];
-  const text = content.find((c: any) => c.type === "text")?.text;
+  if (instagramToolNames.has(name)) {
+    const client = await getInstagramClient();
+    const result = await client.callTool({ name, arguments: input });
+    const content = (result.content ?? []) as Array<{ type: string; text?: string }>;
+    const text = content.find((c) => c.type === "text")?.text;
+    if (!text) throw new Error(`Tool ${name} returned no content`);
+    return text;
+  }
+
+  // Default: Supabase
+  const client = await getSupabaseClient();
+  const result = await client.callTool({ name, arguments: input });
+  const content = (result.content ?? []) as Array<{ type: string; text?: string }>;
+  const text = content.find((c) => c.type === "text")?.text;
   if (!text) throw new Error(`Tool ${name} returned no content`);
   return text;
 }

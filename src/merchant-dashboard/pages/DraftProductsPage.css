@@ -1,0 +1,265 @@
+/* ══════════════════════════════════════════════
+   DraftProductsPage.css — Draft review page
+   RTL, matches SouqLink dashboard palette
+   ══════════════════════════════════════════════ */
+
+.dp-root {
+  padding: 2rem;
+  direction: rtl;
+  font-family: var(--font-main, 'Segoe UI', sans-serif);
+}
+
+/* ── Header ── */
+.dp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.75rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.dp-title {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #1a1a2e;
+  margin: 0;
+}
+
+.dp-badge {
+  background: #e8572a;
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  margin-right: 0.5rem;
+}
+
+.dp-subtitle {
+  font-size: 0.88rem;
+  color: #666;
+  margin: 0;
+}
+
+/* ── States ── */
+.dp-loading,
+.dp-empty {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: #888;
+  font-size: 1rem;
+}
+
+.dp-empty-icon {
+  font-size: 3rem;
+  margin-bottom: 0.75rem;
+}
+
+.dp-error {
+  background: #fff0ee;
+  border: 1px solid #f8b4a0;
+  color: #c0392b;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+/* ── Grid ── */
+.dp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+
+/* ── Card ── */
+.dp-card {
+  background: #fff;
+  border: 1px solid #e9ecef;
+  border-radius: 14px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  transition: box-shadow 0.2s;
+}
+
+.dp-card:hover {
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.1);
+}
+
+/* ── Card image ── */
+.dp-card-img-wrap {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: #f5f5f5;
+  overflow: hidden;
+  position: relative;
+}
+
+.dp-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dp-card-no-img {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.5rem;
+  color: #ccc;
+}
+
+.dp-instagram-link {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  text-decoration: none;
+  backdrop-filter: blur(4px);
+}
+
+.dp-instagram-link:hover {
+  background: rgba(0,0,0,0.75);
+}
+
+/* ── Card body ── */
+.dp-card-body {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  flex: 1;
+}
+
+.dp-field label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 0.3rem;
+}
+
+.dp-field input,
+.dp-field textarea {
+  width: 100%;
+  padding: 0.45rem 0.65rem;
+  border: 1.5px solid #dde1e7;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-family: inherit;
+  color: #1a1a2e;
+  background: #fafafa;
+  transition: border-color 0.18s;
+  direction: rtl;
+  resize: none;
+}
+
+.dp-field input:focus,
+.dp-field textarea:focus {
+  outline: none;
+  border-color: #e8572a;
+  background: #fff;
+}
+
+/* Red border when a required field is missing/invalid */
+.dp-field input.dp-input-error,
+.dp-field textarea.dp-input-error {
+  border-color: #e74c3c;
+  background: #fff8f8;
+}
+
+.dp-field-error {
+  display: block;
+  font-size: 0.72rem;
+  color: #e74c3c;
+  margin-top: 0.25rem;
+  font-weight: 600;
+}
+
+.dp-price-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
+/* ── Card actions ── */
+.dp-card-actions {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid #f0f0f0;
+}
+
+.dp-btn-publish {
+  flex: 1;
+  background: #1a1a2e;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.18s;
+}
+
+.dp-btn-publish:hover:not(:disabled) {
+  background: #e8572a;
+}
+
+.dp-btn-publish:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.dp-btn-delete {
+  background: #fff0ee;
+  color: #c0392b;
+  border: 1.5px solid #f8b4a0;
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s;
+}
+
+.dp-btn-delete:hover:not(:disabled) {
+  background: #fde2dc;
+}
+
+.dp-btn-delete:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── Publish success toast ── */
+.dp-toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1a1a2e;
+  color: #fff;
+  padding: 0.75rem 1.5rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  z-index: 9999;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  animation: dp-fade-in 0.2s ease;
+}
+
+@keyframes dp-fade-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}

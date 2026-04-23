@@ -142,7 +142,8 @@ router.get('/', async (req: Request, res: Response) => {
   let dbQuery = supabase
     .from('products')
     .select('id, shop_id, title, description, price, image_urls, stock_Quantity', { count: 'exact' })
-    .textSearch('search_vector', ftsQuery, { config: 'simple' });
+    .textSearch('search_vector', ftsQuery, { config: 'simple' })
+    .eq('isPublish', true);
 
   if (shopId)           dbQuery = dbQuery.eq('shop_id', shopId);
   if (!isNaN(minPrice)) dbQuery = dbQuery.gte('price', minPrice);

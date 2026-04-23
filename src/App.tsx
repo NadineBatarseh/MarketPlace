@@ -6,14 +6,14 @@ import HubPage from './pages/delivery agent/HubPage';
 import DelivererPage from './pages/delivery agent/DelivererPage';
 import DriverDashboard from './pages/delivery agent/DriverDashboard';
 import DriverRouteMap from './pages/delivery agent/DriverRouteMap';
-import DeliveryRouteGuard from './components/DeliveryRouteGuard';
+import RoleGuard from './components/RoleGuard';
 import OrderHistoryPage from './pages/orderHistory/OrderHistoryPage';
 import OrderTrackingPage from './pages/orderTrackingPage/OrderTrackingPage';
 import MetaConnectPage from './pages/MetaConnectPage';
 
 
-const myShopId = 'cc76a171-a549-43c8-ad7c-7bcadbd0e9a3';
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
+import { useSharedAuth } from "./context/AuthContext";
 import "./App.css";
 import StorePage from "./pages/singleStore/storePage";
 import ProductsPage from "./ProductsPage";
@@ -37,6 +37,21 @@ import ChatBot from "./components/chatbot/ChatBot";
 import AdminDashboard from "./merchant-dashboard/pages/AdminDashboard";
 import { useMerchantAuth } from './merchant-dashboard/context/MerchantAuthContext';
 import { useCustomerAuth } from './context/CustomerAuthContext';
+
+const ROLE_HOME: Record<string, string> = {
+  customer: '/store',
+  merchant: '/merchant-dashboard',
+  delivery: '/driver-dashboard',
+  hubworker: '/hub',
+  admin: '/admin-dashboard',
+};
+
+function RoleHomeRedirect() {
+  const { rawUser, role, isLoading } = useSharedAuth();
+  if (isLoading) return null;
+  if (!rawUser) return <Navigate to="/store" replace />;
+  return <Navigate to={ROLE_HOME[role ?? ''] ?? '/store'} replace />;
+}
 
 function StoreWrapper() {
   const { shopId } = useParams<{ shopId: string }>();
@@ -65,36 +80,49 @@ export default function App() {
           <BrowserRouter>
             <ChatBot />
             <Routes>
-              {/* Landing → stores listing */}
-              <Route path="/" element={<Navigate to="/store" replace />} />
-              <Route path="/store/:shopId" element={<StoreWrapper />} />
-              <Route path="/cart" element={<Cart />} />
-              <Route path="/checkout" element={<CheckoutPage />} />
-              <Route path="/favorites" element={<Favorite />} />
-              <Route path="/merchant-dashboard" element={<MerchantDashboard />} />
-              <Route path="/admin-dashboard" element={<AdminDashboard />} />
-              <Route path="/" element={<StorePage shopId={myShopId} />} />
-              <Route path="/store" element={<StoreListPage />} />
-              <Route path="/stores/:shopId" element={<StorePageWrapper />} />
-              <Route path="/sync" element={<ProductsPage />} />
-              <Route path="/product/:id" element={<ProductDetailPage />} />
-              <Route path="/product" element={<ProductDetailPage />} />
+              {/* Landing → role-aware redirect */}
+              <Route path="/" element={<RoleHomeRedirect />} />
+
+              {/* Auth pages — always public */}
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<CustomerSignup />} />
               <Route path="/merchant-application" element={<MerchantApplication />} />
               <Route path="/delivery-application" element={<DeliveryApplication />} />
               <Route path="/hubworker-application" element={<HubWorkerApplication />} />
               <Route path="/activate" element={<Activate />} />
-              <Route path="/driver-dashboard" element={<DeliveryRouteGuard><DriverDashboard /></DeliveryRouteGuard>} />
-              <Route path="/driver-route" element={<DeliveryRouteGuard><DriverRouteMap /></DeliveryRouteGuard>} />
-              <Route path="/delivery" element={<DeliveryAgentPage />} />
-              <Route path="/collector" element={<CollectorPage />} />
-              <Route path="/hub" element={<HubPage />} />
-              <Route path="/c" element={<DelivererPage />} />
-              <Route path="/search" element={<SearchResultsPage />} />
-              <Route path="/orders" element={<OrderHistoryPage />} />
-              <Route path="/orders/:orderId" element={<OrderTrackingPage />} />
+              <Route path="/sync" element={<ProductsPage />} />
               <Route path="/meta-connect" element={<MetaConnectPage />} />
+
+              {/* Customer or guest browsing — other roles redirected to their home */}
+              <Route path="/store" element={<RoleGuard allowedRoles={['customer']} allowGuests><StoreListPage /></RoleGuard>} />
+              <Route path="/store/:shopId" element={<RoleGuard allowedRoles={['customer']} allowGuests><StoreWrapper /></RoleGuard>} />
+              <Route path="/stores/:shopId" element={<RoleGuard allowedRoles={['customer']} allowGuests><StorePageWrapper /></RoleGuard>} />
+              <Route path="/product/:id" element={<RoleGuard allowedRoles={['customer']} allowGuests><ProductDetailPage /></RoleGuard>} />
+              <Route path="/product" element={<RoleGuard allowedRoles={['customer']} allowGuests><ProductDetailPage /></RoleGuard>} />
+              <Route path="/search" element={<RoleGuard allowedRoles={['customer']} allowGuests><SearchResultsPage /></RoleGuard>} />
+
+              {/* Customer only */}
+              <Route path="/cart" element={<RoleGuard allowedRoles={['customer']} allowGuests><Cart /></RoleGuard>} />
+              <Route path="/checkout" element={<RoleGuard allowedRoles={['customer']} allowGuests><CheckoutPage /></RoleGuard>} />
+              <Route path="/favorites" element={<RoleGuard allowedRoles={['customer']} allowGuests><Favorite /></RoleGuard>} />
+              <Route path="/orders" element={<RoleGuard allowedRoles={['customer']} allowGuests><OrderHistoryPage /></RoleGuard>} />
+              <Route path="/orders/:orderId" element={<RoleGuard allowedRoles={['customer']} allowGuests><OrderTrackingPage /></RoleGuard>} />
+
+              {/* Merchant only */}
+              <Route path="/merchant-dashboard" element={<RoleGuard allowedRoles={['merchant']}><MerchantDashboard /></RoleGuard>} />
+
+              {/* Admin only */}
+              <Route path="/admin-dashboard" element={<RoleGuard allowedRoles={['admin']}><AdminDashboard /></RoleGuard>} />
+
+              {/* Delivery only */}
+              <Route path="/driver-dashboard" element={<RoleGuard allowedRoles={['delivery']}><DriverDashboard /></RoleGuard>} />
+              <Route path="/driver-route" element={<RoleGuard allowedRoles={['delivery']}><DriverRouteMap /></RoleGuard>} />
+              <Route path="/delivery" element={<RoleGuard allowedRoles={['delivery']}><DeliveryAgentPage /></RoleGuard>} />
+              <Route path="/c" element={<RoleGuard allowedRoles={['delivery']}><DelivererPage /></RoleGuard>} />
+
+              {/* Delivery or Hub worker */}
+              <Route path="/hub" element={<RoleGuard allowedRoles={['delivery', 'hubworker']}><HubPage /></RoleGuard>} />
+              <Route path="/collector" element={<RoleGuard allowedRoles={['delivery', 'hubworker']}><CollectorPage /></RoleGuard>} />
             </Routes>
           </BrowserRouter>
         </ShopProviderWithAuth>
