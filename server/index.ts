@@ -15,6 +15,7 @@ import productUploadRouter from "./routes/productUploadRouter.js";
 import metaCatalogRouter from "./routes/metaCatalogAPIRouter.js";
 import productCRUDRouter from "./routes/productCRUDRouter.js";
 import supabaseProductWebhookRouter from "./routes/supabaseProductWebhookRouter.js";
+import instagramAuthRouter from "./routes/instagramAuthRouter.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -157,15 +158,29 @@ app.post("/api/chat", async (req: Request, res: Response) => {
 
   if (!message) return res.status(400).json({ ok: false, error: "Missing message" });
 
-  // Resolve merchant shop_id from their auth token
+  // Resolve merchant shop_id + Instagram token from their auth token
   let merchant_shop_id: string | undefined;
+  let merchant_instagram_token: string | undefined;
+  let merchant_instagram_account_id: string | undefined;
+
   if (role === "merchant" && sb_auth_token) {
     try {
       const { data: { user } } = await supabase.auth.getUser(sb_auth_token);
       if (user) {
-        const { data: shop } = await supabase
-          .from("shops").select("shop_id").eq("owner_id", user.id).maybeSingle();
-        merchant_shop_id = shop?.shop_id;
+        const [shopResult, igResult] = await Promise.allSettled([
+          supabase.from("shops").select("shop_id").eq("owner_id", user.id).maybeSingle(),
+          supabase.from("user_social_tokens")
+            .select("access_token, instagram_account_id")
+            .eq("user_id", user.id)
+            .eq("provider", "instagram")
+            .maybeSingle(),
+        ]);
+
+        if (shopResult.status === "fulfilled") merchant_shop_id = shopResult.value.data?.shop_id;
+        if (igResult.status === "fulfilled" && igResult.value.data) {
+          merchant_instagram_token = igResult.value.data.access_token;
+          merchant_instagram_account_id = igResult.value.data.instagram_account_id ?? undefined;
+        }
       }
     } catch {}
   }
@@ -231,7 +246,17 @@ app.post("/api/chat", async (req: Request, res: Response) => {
           if (block.type === "tool_use") {
             console.log(`[chat] Claude calling tool: ${block.name}`, block.input);
             try {
-              const result = await callTool(block.name, block.input as Record<string, any>);
+              // Inject merchant's Instagram token for instagram/facebook tools
+              const isIgTool = block.name.startsWith("instagram_") || block.name.startsWith("facebook_");
+              const toolInput = (isIgTool && merchant_instagram_token)
+                ? {
+                    ...block.input as Record<string, any>,
+                    _instagram_access_token: merchant_instagram_token,
+                    _instagram_account_id: merchant_instagram_account_id,
+                  }
+                : block.input as Record<string, any>;
+
+              const result = await callTool(block.name, toolInput);
               toolResults.push({ type: "tool_result", tool_use_id: block.id, content: result });
             } catch (err: any) {
               toolResults.push({ type: "tool_result", tool_use_id: block.id, content: `خطأ: ${err.message}`, is_error: true });
@@ -515,7 +540,7 @@ app.post("/api/activate", async (req: Request, res: Response) => {
 
   const { data: merchantApp } = await supabase
     .from("merchant_applications")
-    .select("name_of_owner")
+    .select("name_of_owner, name_of_store, email, phone_number, \"Type_of_store\", description")
     .eq("platform_email", platformEmail.trim())
     .eq("status", "approved")
     .maybeSingle();
@@ -592,8 +617,46 @@ app.post("/api/activate", async (req: Request, res: Response) => {
     return res.status(500).json({ ok: false, error: insertError.message });
   }
 
+  // 4. For merchants: create the merchant row (owner personal info)
+  let merchantRowId: string | null = null;
+  if (role === "merchant" && merchantApp) {
+    const { data: merchantRow, error: merchantError } = await supabase
+      .from("merchants")
+      .insert({
+        user_id:      userId,
+        owner_name:   merchantApp.name_of_owner,
+        phone_number: merchantApp.phone_number != null ? String(merchantApp.phone_number) : null,
+        owner_email:  merchantApp.email,
+      })
+      .select("id")
+      .single();
+    if (merchantError) {
+      console.error("[/api/activate] merchant row creation failed:", merchantError.message);
+      return res.status(500).json({ ok: false, error: "merchant insert failed: " + merchantError.message });
+    }
+    merchantRowId = merchantRow.id;
+  }
+
+  // 5. For merchants: create the shop row (store details)
+  if (role === "merchant" && merchantApp) {
+    const { error: shopError } = await supabase.from("shops").insert({
+      owner_id:      userId,
+      merchant_id:   merchantRowId,
+      name:          merchantApp.name_of_store ?? applicantName,
+      Type_of_store: merchantApp.Type_of_store ?? null,
+      description:   merchantApp.description ?? null,
+    });
+    if (shopError) {
+      console.error("[/api/activate] shop creation failed:", shopError.message);
+    }
+  }
+
   return res.json({ ok: true });
 });
+
+/* ---------- INSTAGRAM AUTH ---------- */
+app.use("/auth/instagram", instagramAuthRouter);
+app.use("/api/instagram", instagramAuthRouter);
 
 /* ---------- META AUTH CALLBACK ---------- */
 

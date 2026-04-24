@@ -35,11 +35,11 @@ Deno.serve(async (req) => {
     const { token, provider } = await req.json()
 
     // 🛡️ ملاحظة حول التشفير:
-    // بما أنكِ ذكرتِ pgsodium في السجلات، تأكدي أن جدول 'user_catalog_keys' 
+    // بما أنكِ ذكرتِ pgsodium في السجلات، تأكدي أن جدول 'user_social_tokens' 
     // مفعل عليه التشفير في قاعدة البيانات (Supabase Vault / TDE).
     
     const { error } = await supabaseClient
-      .from('user_catalog_keys')
+      .from('user_social_tokens')
       .upsert({ 
         user_id: user.id, 
         access_token: token, // سيتم تشفيره في قاعدة البيانات إذا كان pgsodium مفعلاً
