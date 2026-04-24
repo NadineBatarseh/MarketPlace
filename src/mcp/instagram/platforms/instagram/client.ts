@@ -202,7 +202,7 @@ export class InstagramClient {
       });
       return response.data ?? [];
     } catch (error) {
-      logger.warn(`Failed to fetch carousel children for ${mediaId}:`, error);
+      logger.warn(`Failed to fetch carousel children for ${mediaId}:`, error as Record<string, unknown>);
       return [];
     }
   }

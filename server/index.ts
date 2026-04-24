@@ -150,11 +150,12 @@ app.get("/api/products", async (_req: Request, res: Response) => {
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 app.post("/api/chat", async (req: Request, res: Response) => {
-  const { message, role, sb_auth_token, images } = req.body as {
+  const { message, role, sb_auth_token, images, history } = req.body as {
     message: string;
     role: string;
     sb_auth_token?: string;
     images?: { base64: string; mediaType: string }[];
+    history?: { role: string; text: string }[];
   };
 
   if (!message) return res.status(400).json({ ok: false, error: "Missing message" });
@@ -232,6 +233,9 @@ app.post("/api/chat", async (req: Request, res: Response) => {
     // Build conversation history (last 10 turns to avoid token bloat)
     const historyMessages: Anthropic.MessageParam[] = (history ?? [])
       .slice(-10)
+      .filter((m): m is { role: "user" | "assistant"; text: string } =>
+        m.role === "user" || m.role === "assistant"
+      )
       .map((m) => ({ role: m.role, content: m.text }));
 
     const chatMessages: Anthropic.MessageParam[] = [

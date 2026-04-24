@@ -37,6 +37,7 @@
     "@tailwindcss/vite": "^4.2.1",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.0",
+    "@types/google.maps": "^3.64.0",
     "@types/multer": "^2.1.0",
     "@types/node": "^22.0.0",
     "@types/rbush": "^4.0.0",
