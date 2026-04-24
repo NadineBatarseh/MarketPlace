@@ -50,8 +50,7 @@ export default function CreateStorePage({ onCreated }: Props) {
   setSaving(true);
 
   // 1) get merchant row from merchants table
-  const { data: merchantRow, error: merchantErr } = await supabase
-    .from('merchants')
+  const { data: merchantRow, error: merchantErr } = await supabase    .from('merchants')
     .select('id, user_id')
     .eq('user_id', merchant.id)
     .single();

@@ -4,7 +4,6 @@ import "dotenv/config";
 import type { Request, Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { getTools, callTool } from "./mcpClient.js";
-import { getMerchantTools, callMerchantTool } from "../src/mcp/merchant/client.js";
 import { fileURLToPath } from "url";
 import path from "path";
 import { supabase } from "./supabase.js";
@@ -178,9 +177,13 @@ app.post("/api/chat", async (req: Request, res: Response) => {
 
 قواعد صارمة يجب اتباعها:
 1. لا تقل أبداً "لا أملك أدوات" أو "لا يمكنني الوصول لانستقرام" أو "النظام لا يدعم المسودات" — كل هذه المزايا موجودة ومفعّلة.
-2. عند استخدام أي أداة تحتاج shop_id، استخدم القيمة: ${merchant_shop_id ?? "غير متوفر"} تلقائياً دون أن تطلبه من المستخدم.
-3. عندما يطلب التاجر عرض منتجاته أو منتجات متجره، استخدم list_products مع shop_id.
-4. عندما يطلب التاجر جلب منتجاته من انستقرام، أو استيرادها، أو استخراجها من منشوراته، أو أي عبارة مشابهة — استخدم حصراً instagram_import_products مع shop_id. بعد انتهاء الأداة، رد فقط بـ: "تم استيراد [العدد] منتجاً وحفظها كمسودات. راجعها وانشرها من [صفحة المسودات](/merchant-dashboard?page=drafts)." دون عرض أي قائمة منتجات.
+2. لا تطلب من التاجر أي معرّف (ID) أو رابط صورة أو shop_id — استخدم الأدوات للحصول عليها تلقائياً.
+3. عند استخدام أي أداة تحتاج shop_id، استخدم القيمة: ${merchant_shop_id ?? "غير متوفر"} تلقائياً.
+4. عندما يطلب التاجر عرض منتجاته أو منتجات متجره، استخدم list_my_products مباشرة — لا تطلب shop_id.
+5. عندما يذكر التاجر اسم منتج (مثل "حرام شتوي")، استخدم list_my_products أولاً للحصول على قائمة منتجاته، ثم حدّد المنتج المطلوب من القائمة باستخدام اسمه، ثم نفّذ العملية المطلوبة.
+6. عندما يرفق التاجر صورة مع طلبه: الصورة تُرفع تلقائياً من قِبل السيرفر وتُحقن في أداة update_product أو create_product — لا تطلب رابط الصورة أبداً ولا تسأل عنه.
+7. لتحديث صورة منتج موجود: استدعِ list_my_products للحصول على id المنتج، ثم استدعِ update_product بهذا الـ id فقط — الصورة ستُضاف تلقائياً.
+8. عندما يطلب التاجر جلب منتجاته من انستقرام، أو استيرادها — استخدم حصراً instagram_import_products مع shop_id. بعد انتهاء الأداة، رد فقط بـ: "تم استيراد [العدد] منتجاً وحفظها كمسودات. راجعها وانشرها من [صفحة المسودات](/merchant-dashboard?page=drafts)." دون عرض أي قائمة منتجات.
 
 أجب دائماً باللغة العربية بشكل واضح ومنظم.`
   : `أنت مساعد ذكي لمنصة سوق لينك. ساعد المستخدم في البحث عن المنتجات والمتاجر.
@@ -201,9 +204,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
 
   try {
     // Get tools from the correct MCP server based on role
-    const tools = role === "merchant"
-      ? await getMerchantTools()
-      : await getTools(role);
+    const tools = await getTools(role);
 
     const chatMessages: Anthropic.MessageParam[] = [{ role: "user", content: userContent }];
 
@@ -362,7 +363,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
                   }
                 }
 
-                result = await callMerchantTool(block.name, input);
+                result = await callTool(block.name, input);
               } else {
                 result = await callTool(block.name, block.input as Record<string, any>);
               }

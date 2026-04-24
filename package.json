@@ -9,9 +9,7 @@
     "dev:client": "npx --yes wait-on -t 60000 tcp:4000 && vite",
     "build": "vite build",
     "start": "tsx server/index.ts",
-    "preview": "vite preview",
-    "supabase-mcp": "tsx src/server-supabase.ts",
-    "mcp:merchant": "tsx src/server-merchant.ts"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
