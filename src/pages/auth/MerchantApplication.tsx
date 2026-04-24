@@ -148,13 +148,20 @@ export default function MerchantApplication() {
             <label>نوع المتجر</label>
             <select value={form.type_of_store} onChange={set('type_of_store')} required title="نوع المتجر">
               <option value="">اختر النوع</option>
-              <option value="retail">بيع بالتجزئة</option>
-              <option value="wholesale">بيع بالجملة</option>
-              <option value="food">أغذية ومشروبات</option>
-              <option value="fashion">ملابس وأزياء</option>
-              <option value="electronics">إلكترونيات</option>
-              <option value="handmade">منتجات يدوية</option>
-              <option value="other">أخرى</option>
+              <option value="ملابس رجالية">ملابس رجالية</option>
+              <option value="ملابس نسائية">ملابس نسائية</option>
+              <option value="ملابس أطفال">ملابس أطفال</option>
+              <option value="ملابس رياضية">ملابس رياضية</option>
+              <option value="عبايات وأزياء محتشمة">عبايات وأزياء محتشمة</option>
+              <option value="ملابس سهرة وزفاف">ملابس سهرة وزفاف</option>
+              <option value="ملابس داخلية">ملابس داخلية</option>
+              <option value="أحذية">أحذية</option>
+              <option value="حقائب وشنط">حقائب وشنط</option>
+              <option value="إكسسوارات">إكسسوارات</option>
+              <option value="مجوهرات وأساور">مجوهرات وأساور</option>
+              <option value="ساعات">ساعات</option>
+              <option value="نظارات">نظارات</option>
+              <option value="متجر أزياء متكامل">متجر أزياء متكامل</option>
             </select>
           </div>
 

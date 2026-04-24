@@ -33,15 +33,27 @@ export function createInstagramMcpServer(): Server {
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const { name, arguments: args = {} } = request.params;
+    const { name, arguments: rawArgs = {} } = request.params;
+
+    // Extract merchant-specific token injected by /api/chat (not passed by Claude)
+    const args = { ...rawArgs } as Record<string, unknown>;
+    const merchantToken = args._instagram_access_token as string | undefined;
+    const merchantAccountId = args._instagram_account_id as string | undefined;
+    delete args._instagram_access_token;
+    delete args._instagram_account_id;
+
+    // Use merchant's own client if their token was injected; fall back to global
+    const activeInstagramClient = merchantToken
+      ? new InstagramClient({ accessToken: merchantToken, accountId: merchantAccountId })
+      : instagramClient;
 
     try {
       let result: unknown;
 
       if (name.startsWith("instagram_")) {
-        result = await handleInstagramTool(instagramClient, name, args as Record<string, unknown>);
+        result = await handleInstagramTool(activeInstagramClient, name, args);
       } else if (name.startsWith("facebook_")) {
-        result = await handleFacebookTool(facebookClient, name, args as Record<string, unknown>);
+        result = await handleFacebookTool(facebookClient, name, args);
       } else {
         throw new Error(`Unknown tool: ${name}`);
       }

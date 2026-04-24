@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import type { Request, Response } from 'express';
 import { supabase } from '../supabase.js';
 import { estimateCapacityUnits, clampCapacity } from '../services/capacityClassifier.js';
+import { uploadImage } from '../uploadImage.js';
 
 const router = Router();
 
@@ -80,7 +81,7 @@ router.post('/', async (req: Request, res: Response) => {
           }
           return url;
         })
-      )).filter((url): url is string => url !== null)
+      )).filter((url: string | null): url is string => url !== null)
     : null;
 
   // Estimate capacity before insert so it's stored atomically with the product
@@ -199,6 +200,10 @@ router.delete('/:id', async (req: Request, res: Response) => {
   if (!product) {
     return res.status(404).json({ ok: false, error: 'Product not found or does not belong to this shop.' });
   }
+
+  // Remove product from carts and favorites before deleting (FK constraints)
+  await supabase.from('cart_items').delete().eq('product_id', productId);
+  await supabase.from('favorite_items').delete().eq('product_id', productId);
 
   const { error: deleteErr } = await supabase
     .from('products')

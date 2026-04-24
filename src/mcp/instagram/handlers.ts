@@ -86,9 +86,133 @@ export async function handleInstagramTool(
         args.limit as number | undefined
       );
 
+    case 'instagram_search_posts': {
+      const query = (args.query as string | undefined)?.trim().toLowerCase();
+      if (!query) throw new Error('query is required');
+
+      const fetchLimit = Math.min((args.limit as number | undefined) ?? 100, 100);
+      const posts = await client.getMedia(fetchLimit, args.account_id as string | undefined);
+
+      const matched = posts.filter((p) => p.caption?.toLowerCase().includes(query));
+
+      if (matched.length === 0) {
+        return { matched_posts: 0, products: [], message: `No posts found containing "${args.query}".` };
+      }
+
+      const products = await extractProductsFromPosts(matched);
+
+      if (products.length === 0) {
+        return { matched_posts: matched.length, products: [], message: `Found ${matched.length} matching post(s) but no products were detected.` };
+      }
+
+      return {
+        matched_posts: matched.length,
+        products,
+        message: `Found ${products.length} product(s) in ${matched.length} matching post(s). Review and use instagram_save_drafts to save selected ones.`,
+      };
+    }
+
+    case 'instagram_save_drafts': {
+      const shopId = args.shop_id as string;
+      if (!shopId) throw new Error('shop_id is required');
+
+      const selectedProducts = args.products as Array<{
+        title: string;
+        description?: string | null;
+        price?: number | null;
+        image_urls?: string[];
+        video_url?: string | null;
+        stock_Quantity?: number | null;
+        instagram_post_id: string;
+        instagram_permalink?: string;
+        instagram_timestamp?: string;
+      }>;
+
+      if (!selectedProducts?.length) {
+        return { success: true, count: 0, message: 'No products provided.' };
+      }
+
+      const db = getServiceRoleClient();
+
+      async function uploadMediaToStorage(cdnUrl: string, productId: string, filename: string): Promise<string> {
+        try {
+          const res = await fetch(cdnUrl);
+          if (!res.ok) return cdnUrl;
+          const contentType = res.headers.get('content-type') ?? 'application/octet-stream';
+          const ext = contentType.split('/')[1]?.split(';')[0] ?? 'bin';
+          const path = `${productId}/${filename}.${ext}`;
+          const buffer = Buffer.from(await res.arrayBuffer());
+          const { error } = await db.storage.from('product-images').upload(path, buffer, { contentType, upsert: true });
+          if (error) return cdnUrl;
+          return db.storage.from('product-images').getPublicUrl(path).data.publicUrl;
+        } catch {
+          return cdnUrl;
+        }
+      }
+
+      const rows = await Promise.all(selectedProducts.map(async (p) => {
+        const id = crypto.randomUUID();
+        const resolvedUrls = p.image_urls?.length
+          ? await Promise.all(p.image_urls.map((url, i) => uploadMediaToStorage(url, id, String(i))))
+          : [];
+        const resolvedVideoUrl = p.video_url
+          ? await uploadMediaToStorage(p.video_url, id, 'reel')
+          : null;
+        return {
+          id,
+          shop_id: shopId,
+          title: p.title,
+          description: p.description ?? null,
+          price: p.price ?? null,
+          image_urls: resolvedUrls.length > 0 ? resolvedUrls : null,
+          video_url: resolvedVideoUrl,
+          stock_Quantity: p.stock_Quantity ?? null,
+          isPublish: false,
+          meta_product_id: crypto.randomUUID(),
+        };
+      }));
+
+      const { error } = await db.from('products').insert(rows);
+      if (error) throw new Error(`فشل حفظ المسودات: ${error.message}`);
+
+      return {
+        success: true,
+        count: rows.length,
+        message: `تم حفظ ${rows.length} منتج كمسودة بنجاح.`,
+      };
+    }
+
     case 'instagram_import_products': {
       const shopId = args.shop_id as string;
-      if (!shopId) throw new Error('shop_id is required for instagram_import_products');
+      if (!shopId) throw new Error('shop_id is required');
+
+      const db = getServiceRoleClient();
+
+      async function uploadMediaToStorage(cdnUrl: string, productId: string, filename: string): Promise<string> {
+        console.log(`[instagram_import] uploading ${filename} for product ${productId} — url: ${cdnUrl}`);
+        try {
+          const res = await fetch(cdnUrl);
+          if (!res.ok) {
+            console.error(`[instagram_import] fetch failed — status ${res.status} ${res.statusText} — url: ${cdnUrl}`);
+            return cdnUrl;
+          }
+          const contentType = res.headers.get('content-type') ?? 'application/octet-stream';
+          const ext = contentType.split('/')[1]?.split(';')[0] ?? 'bin';
+          const path = `${productId}/${filename}.${ext}`;
+          const buffer = Buffer.from(await res.arrayBuffer());
+          const { error } = await db.storage.from('product-images').upload(path, buffer, { contentType, upsert: true });
+          if (error) {
+            console.error(`[instagram_import] storage upload failed — path: ${path} — error: ${error.message}`);
+            return cdnUrl;
+          }
+          const publicUrl = db.storage.from('product-images').getPublicUrl(path).data.publicUrl;
+          console.log(`[instagram_import] uploaded successfully — public url: ${publicUrl}`);
+          return publicUrl;
+        } catch (err: unknown) {
+          console.error(`[instagram_import] unexpected error uploading ${filename} for product ${productId}:`, err);
+          return cdnUrl;
+        }
+      }
 
       const limit = Math.min((args.limit as number | undefined) ?? 25, 50);
       const posts = await client.getMedia(limit, args.account_id as string | undefined);
@@ -98,52 +222,14 @@ export async function handleInstagramTool(
         return { success: true, count: 0, message: 'لم يتم العثور على منتجات في آخر المنشورات.' };
       }
 
-      const db = getServiceRoleClient();
-
-      // Upload each Instagram CDN image to Supabase Storage immediately so
-      // the draft rows hold permanent URLs regardless of when the merchant publishes.
-      async function uploadToStorage(
-        cdnUrl: string,
-        productId: string,
-        index: number
-      ): Promise<string> {
-        console.log(`[instagram_import] uploading image ${index} for product ${productId} — url: ${cdnUrl}`);
-        try {
-          const res = await fetch(cdnUrl);
-          if (!res.ok) {
-            console.error(`[instagram_import] fetch failed — status ${res.status} ${res.statusText} — url: ${cdnUrl}`);
-            return cdnUrl;
-          }
-          const contentType = res.headers.get('content-type') ?? 'image/jpeg';
-          if (!contentType.startsWith('image/')) {
-            console.error(`[instagram_import] unexpected content-type "${contentType}" — url: ${cdnUrl}`);
-            return cdnUrl;
-          }
-          const ext = contentType.split('/')[1]?.split(';')[0] ?? 'jpg';
-          const path = `${productId}/${index}.${ext}`;
-          const buffer = Buffer.from(await res.arrayBuffer());
-          console.log(`[instagram_import] uploading to storage path: ${path} (${buffer.byteLength} bytes)`);
-          const { error } = await db.storage
-            .from('product-images')
-            .upload(path, buffer, { contentType, upsert: true });
-          if (error) {
-            console.error(`[instagram_import] storage upload failed — path: ${path} — error: ${error.message}`);
-            return cdnUrl;
-          }
-          const publicUrl = db.storage.from('product-images').getPublicUrl(path).data.publicUrl;
-          console.log(`[instagram_import] image uploaded successfully — public url: ${publicUrl}`);
-          return publicUrl;
-        } catch (err: unknown) {
-          console.error(`[instagram_import] unexpected error uploading image ${index} for product ${productId}:`, err);
-          return cdnUrl;
-        }
-      }
-
       const rows = await Promise.all(products.map(async (p) => {
         const id = crypto.randomUUID();
         const resolvedUrls = p.image_urls.length > 0
-          ? await Promise.all(p.image_urls.map((url, i) => uploadToStorage(url, id, i)))
+          ? await Promise.all(p.image_urls.map((url, i) => uploadMediaToStorage(url, id, String(i))))
           : [];
+        const resolvedVideoUrl = p.video_url
+          ? await uploadMediaToStorage(p.video_url, id, 'reel')
+          : null;
         return {
           id,
           shop_id: shopId,
@@ -151,6 +237,7 @@ export async function handleInstagramTool(
           description: p.description ?? null,
           price: p.price ?? null,
           image_urls: resolvedUrls.length > 0 ? resolvedUrls : null,
+          video_url: resolvedVideoUrl,
           stock_Quantity: p.stock_Quantity ?? null,
           isPublish: false,
           meta_product_id: crypto.randomUUID(),

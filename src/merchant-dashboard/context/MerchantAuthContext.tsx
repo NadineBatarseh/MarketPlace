@@ -12,7 +12,7 @@ export interface MerchantShop {
   facebook: string | null;
   instagram: string | null;
   merchant_id: string;
-  categories: string[];
+  Type_of_store: string | null;
 }
 
 export interface Merchant {
@@ -52,7 +52,7 @@ async function fetchMerchantShop(userId: string): Promise<MerchantShop | null> {
     facebook: data.facebook ?? null,
     instagram: data.instagram ?? null,
     merchant_id: data.merchant_id,
-    categories: data.categories ?? [],
+    Type_of_store: data.Type_of_store ?? null,
   };
 }
 
