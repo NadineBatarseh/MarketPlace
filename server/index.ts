@@ -16,6 +16,7 @@ import productUploadRouter from "./routes/productUploadRouter.js";
 import metaCatalogRouter from "./routes/metaCatalogAPIRouter.js";
 import productCRUDRouter from "./routes/productCRUDRouter.js";
 import supabaseProductWebhookRouter from "./routes/supabaseProductWebhookRouter.js";
+import instagramAuthRouter from "./routes/instagramAuthRouter.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -149,19 +150,41 @@ app.get("/api/products", async (_req: Request, res: Response) => {
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 app.post("/api/chat", async (req: Request, res: Response) => {
-  const { message, role, sb_auth_token, images, merchant_shop_id } = req.body as {
+  const { message, role, sb_auth_token, images } = req.body as {
     message: string;
     role: string;
     sb_auth_token?: string;
     images?: { base64: string; mediaType: string }[];
-    merchant_shop_id?: string;
   };
 
   if (!message) return res.status(400).json({ ok: false, error: "Missing message" });
 
-  // ── MERCHANT AUTH GATE ─────────────────────────────────────────────────────
-  // Layer 2 protection: verify the merchant is logged in, has merchant role,
-  // and owns a shop before allowing any tool access or Claude calls.
+  // Resolve merchant shop_id + Instagram token from their auth token
+  let merchant_shop_id: string | undefined;
+  let merchant_instagram_token: string | undefined;
+  let merchant_instagram_account_id: string | undefined;
+
+  if (role === "merchant" && sb_auth_token) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser(sb_auth_token);
+      if (user) {
+        const [shopResult, igResult] = await Promise.allSettled([
+          supabase.from("shops").select("shop_id").eq("owner_id", user.id).maybeSingle(),
+          supabase.from("user_social_tokens")
+            .select("access_token, instagram_account_id")
+            .eq("user_id", user.id)
+            .eq("provider", "instagram")
+            .maybeSingle(),
+        ]);
+
+        if (shopResult.status === "fulfilled") merchant_shop_id = shopResult.value.data?.shop_id;
+        if (igResult.status === "fulfilled" && igResult.value.data) {
+          merchant_instagram_token = igResult.value.data.access_token;
+          merchant_instagram_account_id = igResult.value.data.instagram_account_id ?? undefined;
+        }
+      }
+    } catch { }
+  }
 
   const systemPrompt = role === "merchant"
     ? `أنت مساعد ذكي للتاجر على منصة سوق لينك.
@@ -186,7 +209,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
 8. عندما يطلب التاجر جلب منتجاته من انستقرام، أو استيرادها — استخدم حصراً instagram_import_products مع shop_id. بعد انتهاء الأداة، رد فقط بـ: "تم استيراد [العدد] منتجاً وحفظها كمسودات. راجعها وانشرها من [صفحة المسودات](/merchant-dashboard?page=drafts)." دون عرض أي قائمة منتجات.
 
 أجب دائماً باللغة العربية بشكل واضح ومنظم.`
-  : `أنت مساعد ذكي لمنصة سوق لينك. ساعد المستخدم في البحث عن المنتجات والمتاجر.
+    : `أنت مساعد ذكي لمنصة سوق لينك. ساعد المستخدم في البحث عن المنتجات والمتاجر.
 أجب دائماً باللغة العربية بشكل واضح ومختصر.`;
 
   // Build user message content (text + optional images)
@@ -261,7 +284,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
                 // The server pre-uploads images, generates the product UUID (used as
                 // the storage folder), and injects both into the tool call so that
                 // the DB row id matches the storage folder path.
-                const isAddTool    = block.name === "add_my_product" || block.name === "add_product" || block.name === "create_product";
+                const isAddTool = block.name === "add_my_product" || block.name === "add_product" || block.name === "create_product";
                 const isUpdateTool = block.name === "update_my_product" || block.name === "update_product";
 
                 if (images?.length && isAddTool) {
@@ -363,9 +386,29 @@ app.post("/api/chat", async (req: Request, res: Response) => {
                   }
                 }
 
-                result = await callTool(block.name, input);
+                // Inject merchant's Instagram token for instagram/facebook tools
+                const isIgTool = block.name.startsWith("instagram_") || block.name.startsWith("facebook_");
+                const toolInput = (isIgTool && merchant_instagram_token)
+                  ? {
+                    ...input,
+                    _instagram_access_token: merchant_instagram_token,
+                    _instagram_account_id: merchant_instagram_account_id,
+                  }
+                  : input;
+
+                result = await callTool(block.name, toolInput);
               } else {
-                result = await callTool(block.name, block.input as Record<string, any>);
+                // Inject merchant's Instagram token for instagram/facebook tools
+                const isIgTool = block.name.startsWith("instagram_") || block.name.startsWith("facebook_");
+                const toolInput = (isIgTool && merchant_instagram_token)
+                  ? {
+                    ...(block.input as Record<string, any>),
+                    _instagram_access_token: merchant_instagram_token,
+                    _instagram_account_id: merchant_instagram_account_id,
+                  }
+                  : block.input as Record<string, any>;
+
+                result = await callTool(block.name, toolInput);
               }
 
               toolResults.push({ type: "tool_result", tool_use_id: block.id, content: result });
@@ -531,9 +574,9 @@ app.post("/api/stores/:id/reviews", async (req: Request, res: Response) => {
     .maybeSingle();
 
   const old_count = current?.review_count ?? 0;
-  const old_avg   = parseFloat(current?.avg_rating ?? '0') || 0;
+  const old_avg = parseFloat(current?.avg_rating ?? '0') || 0;
   const review_count = old_count + 1;
-  const avg_rating   = (old_avg * old_count + rating) / review_count;
+  const avg_rating = (old_avg * old_count + rating) / review_count;
 
   await supabase
     .from("shop_ratings")
@@ -651,7 +694,7 @@ app.post("/api/activate", async (req: Request, res: Response) => {
 
   const { data: merchantApp } = await supabase
     .from("merchant_applications")
-    .select("name_of_owner")
+    .select("name_of_owner, name_of_store, email, phone_number, \"Type_of_store\", description")
     .eq("platform_email", platformEmail.trim())
     .eq("status", "approved")
     .maybeSingle();
@@ -728,8 +771,46 @@ app.post("/api/activate", async (req: Request, res: Response) => {
     return res.status(500).json({ ok: false, error: insertError.message });
   }
 
+  // 4. For merchants: create the merchant row (owner personal info)
+  let merchantRowId: string | null = null;
+  if (role === "merchant" && merchantApp) {
+    const { data: merchantRow, error: merchantError } = await supabase
+      .from("merchants")
+      .insert({
+        user_id: userId,
+        owner_name: merchantApp.name_of_owner,
+        phone_number: merchantApp.phone_number != null ? String(merchantApp.phone_number) : null,
+        owner_email: merchantApp.email,
+      })
+      .select("id")
+      .single();
+    if (merchantError) {
+      console.error("[/api/activate] merchant row creation failed:", merchantError.message);
+      return res.status(500).json({ ok: false, error: "merchant insert failed: " + merchantError.message });
+    }
+    merchantRowId = merchantRow.id;
+  }
+
+  // 5. For merchants: create the shop row (store details)
+  if (role === "merchant" && merchantApp) {
+    const { error: shopError } = await supabase.from("shops").insert({
+      owner_id: userId,
+      merchant_id: merchantRowId,
+      name: merchantApp.name_of_store ?? applicantName,
+      Type_of_store: merchantApp.Type_of_store ?? null,
+      description: merchantApp.description ?? null,
+    });
+    if (shopError) {
+      console.error("[/api/activate] shop creation failed:", shopError.message);
+    }
+  }
+
   return res.json({ ok: true });
 });
+
+/* ---------- INSTAGRAM AUTH ---------- */
+app.use("/auth/instagram", instagramAuthRouter);
+app.use("/api/instagram", instagramAuthRouter);
 
 /* ---------- META AUTH CALLBACK ---------- */
 
@@ -820,7 +901,7 @@ function startServer() {
       try {
         const { execSync } = await import('child_process');
         execSync(`npx kill-port ${PORT}`, { stdio: 'ignore' });
-      } catch {}
+      } catch { }
       setTimeout(startServer, 1500);
     } else {
       console.error('Server error:', err);

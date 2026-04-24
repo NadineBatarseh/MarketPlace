@@ -11,10 +11,11 @@ import DraftProductsPage from './pages/DraftProductsPage';
 import MerchantSettings from './pages/MerchantSettings';
 import MerchantShopSettings from './pages/MerchantShopSettings';
 import MerchantLoginModal from './components/MerchantLoginModal';
+import InstagramConnectPage from './pages/InstagramConnectPage';
 import ChatBot from '../components/chatbot/ChatBot';
 import './MerchantDashboard.css';
 
-type DashPage = 'home' | 'reviews' | 'billing' | 'editPage' | 'bulkUpload' | 'orders' | 'drafts' | 'settings' | 'shopSettings';
+type DashPage = 'home' | 'reviews' | 'billing' | 'editPage' | 'bulkUpload' | 'orders' | 'drafts' | 'settings' | 'shopSettings' | 'instagramConnect';
 
 function SidebarItem({
   icon,
@@ -41,7 +42,7 @@ export default function MerchantDashboard() {
   const { merchant, logout, isLoading } = useMerchantAuth();
   const [currentPage, setCurrentPage] = useState<DashPage>(() => {
     const p = searchParams.get('page');
-    const valid: DashPage[] = ['home', 'reviews', 'billing', 'editPage', 'bulkUpload', 'orders', 'drafts', 'settings', 'shopSettings'];
+    const valid: DashPage[] = ['home', 'reviews', 'billing', 'editPage', 'bulkUpload', 'orders', 'drafts', 'settings', 'shopSettings', 'instagramConnect'];
     return valid.includes(p as DashPage) ? (p as DashPage) : 'home';
   });
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -122,6 +123,7 @@ export default function MerchantDashboard() {
   };
 
   const renderPage = () => {
+    if (currentPage === 'instagramConnect') return <InstagramConnectPage />;
     if (currentPage === 'editPage') return <MerchantEditPage />;
     if (currentPage === 'reviews') return <MerchantReviews />;
     if (currentPage === 'billing') return <MerchantBilling />;
@@ -129,7 +131,7 @@ export default function MerchantDashboard() {
     if (currentPage === 'orders') return <MerchantOrders />;
     if (currentPage === 'drafts') return <DraftProductsPage />;
     if (currentPage === 'settings') return <MerchantSettings />;
-    if (currentPage === 'shopSettings') return <MerchantShopSettings />;
+    if (currentPage === 'shopSettings') return <MerchantShopSettings onNavigate={p => setCurrentPage(p as DashPage)} />;
     return <MerchantHome />;
   };
 
@@ -301,6 +303,19 @@ export default function MerchantDashboard() {
               label="رفع بالجملة"
               active={currentPage === 'bulkUpload'}
               onClick={() => setCurrentPage('bulkUpload')}
+            />
+
+            <SidebarItem
+              icon={
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+                  <circle cx="12" cy="12" r="4"/>
+                  <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/>
+                </svg>
+              }
+              label="ربط انستقرام"
+              active={currentPage === 'instagramConnect'}
+              onClick={() => setCurrentPage('instagramConnect')}
             />
           </nav>
 

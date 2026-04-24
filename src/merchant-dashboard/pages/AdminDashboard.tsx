@@ -619,6 +619,12 @@ export default function AdminDashboard() {
         <div className="ad-topbar-center">
           <h1 className="ad-topbar-title">لوحة تحكم الإدارة</h1>
         </div>
+        <button
+          className="ad-logout-btn"
+          onClick={async () => { await supabase.auth.signOut(); window.location.href = '/login'; }}
+        >
+          تسجيل الخروج
+        </button>
       </header>
 
       {/* ── Body: sidebar + content ── */}

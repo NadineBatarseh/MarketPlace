@@ -1850,3 +1850,142 @@
   margin: 0;
 }
 .md-nli-home-btn:hover { background: #e8572a; }
+
+/* ══════════════════════════════════════════════════════
+   Connected Accounts section  (inside MerchantShopSettings)
+   ══════════════════════════════════════════════════════ */
+
+.ca-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.ca-card {
+  border: 1.5px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: #fafafa;
+  transition: border-color 0.2s;
+}
+.ca-card:hover { border-color: #d1d5db; }
+
+.ca-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.ca-card-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.ca-icon-instagram {
+  background: linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+  color: #fff;
+}
+
+.ca-icon-meta {
+  background: #1877f2;
+  color: #fff;
+}
+
+.ca-card-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #1a1a2e;
+  line-height: 1.2;
+}
+
+.ca-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  margin-top: 0.2rem;
+}
+.ca-badge-connected { color: #16a34a; }
+.ca-badge-disconnected { color: #94a3b8; }
+
+.ca-card-desc {
+  font-size: 0.82rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.ca-currency-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.ca-currency-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.ca-currency-select {
+  flex: 1;
+  padding: 0.4rem 0.65rem;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: #1a1a2e;
+  background: #fff;
+  outline: none;
+  cursor: pointer;
+  direction: ltr;
+}
+.ca-currency-select:focus { border-color: #1877f2; }
+
+.ca-sync-result {
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+}
+.ca-sync-ok { background: #f0fdf4; color: #16a34a; }
+.ca-sync-error { background: #fef2f2; color: #dc2626; }
+
+.ca-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.25rem;
+}
+
+.ca-btn {
+  padding: 0.5rem 0.9rem;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+.ca-btn:disabled { opacity: 0.55; cursor: default; }
+
+.ca-btn-primary {
+  background: #1877f2;
+  color: #fff;
+}
+.ca-btn-primary:hover:not(:disabled) { background: #1464d8; }
+
+.ca-btn-secondary {
+  background: #f1f5f9;
+  color: #374151;
+  border: 1.5px solid #e5e7eb;
+}
+.ca-btn-secondary:hover:not(:disabled) { background: #e2e8f0; }
