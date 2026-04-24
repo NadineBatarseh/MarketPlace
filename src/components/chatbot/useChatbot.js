@@ -1,14 +1,14 @@
 import { useState, useRef, useEffect } from "react";
 import supabase from "../../lib/supabase";
 
-async function sendToAssistant(message, role, images, onChunk) {
+async function sendToAssistant(message, role, images, history, onChunk) {
   const { data: { session } } = await supabase.auth.getSession();
   const sb_auth_token = session?.access_token;
 
   const res = await fetch("http://localhost:4000/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, role, images, sb_auth_token }),
+    body: JSON.stringify({ message, role, images, history, sb_auth_token }),
   });
 
   const reader = res.body.getReader();
@@ -82,10 +82,17 @@ export function useChatbot(role, config) {
     try {
       setMessages((prev) => [...prev, { sender: "bot", text: "" }]);
 
+      // Build history from all messages except the welcome message and the empty bot placeholder we just added
+      const history = messages
+        .slice(1) // skip welcome message
+        .filter((m) => m.text) // skip empty placeholder
+        .map((m) => ({ role: m.sender === "user" ? "user" : "assistant", text: m.text }));
+
       await sendToAssistant(
         currentInput,
         role,
         currentImages.map((img) => ({ base64: img.base64, mediaType: img.mediaType })),
+        history,
         (partialText) => {
           setMessages((prev) => {
             const updated = [...prev];

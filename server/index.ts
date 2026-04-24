@@ -149,12 +149,13 @@ app.get("/api/products", async (_req: Request, res: Response) => {
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 app.post("/api/chat", async (req: Request, res: Response) => {
-  const { message, role, sb_auth_token, images, merchant_shop_id } = req.body as {
+  const { message, role, sb_auth_token, images, merchant_shop_id, history } = req.body as {
     message: string;
     role: string;
     sb_auth_token?: string;
     images?: { base64: string; mediaType: string }[];
     merchant_shop_id?: string;
+    history?: { role: "user" | "assistant"; text: string }[];
   };
 
   if (!message) return res.status(400).json({ ok: false, error: "Missing message" });
@@ -180,7 +181,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
 2. لا تطلب من التاجر أي معرّف (ID) أو رابط صورة أو shop_id — استخدم الأدوات للحصول عليها تلقائياً.
 3. عند استخدام أي أداة تحتاج shop_id، استخدم القيمة: ${merchant_shop_id ?? "غير متوفر"} تلقائياً.
 4. عندما يطلب التاجر عرض منتجاته أو منتجات متجره، استخدم list_my_products مباشرة — لا تطلب shop_id.
-5. عندما يذكر التاجر اسم منتج (مثل "حرام شتوي")، استخدم list_my_products أولاً للحصول على قائمة منتجاته، ثم حدّد المنتج المطلوب من القائمة باستخدام اسمه، ثم نفّذ العملية المطلوبة.
+5. عندما يذكر التاجر اسم منتج (مثل "حرام شتوي") أو يختار منتجاً برقمه من قائمة عرضتها سابقاً (مثل "1" أو "2")، استخدم list_my_products للحصول على قائمة منتجاته، ثم استخدم الـ UUID الحقيقي من النتيجة في أي أداة تحتاج id — لا تستخدم رقم الترتيب (1, 2, 3) أبداً كـ id.
 6. عندما يرفق التاجر صورة مع طلبه: الصورة تُرفع تلقائياً من قِبل السيرفر وتُحقن في أداة update_product أو create_product — لا تطلب رابط الصورة أبداً ولا تسأل عنه.
 7. لتحديث صورة منتج موجود: استدعِ list_my_products للحصول على id المنتج، ثم استدعِ update_product بهذا الـ id فقط — الصورة ستُضاف تلقائياً.
 8. عندما يطلب التاجر جلب منتجاته من انستقرام، أو استيرادها — استخدم حصراً instagram_import_products مع shop_id. بعد انتهاء الأداة، رد فقط بـ: "تم استيراد [العدد] منتجاً وحفظها كمسودات. راجعها وانشرها من [صفحة المسودات](/merchant-dashboard?page=drafts)." دون عرض أي قائمة منتجات.
@@ -206,7 +207,15 @@ app.post("/api/chat", async (req: Request, res: Response) => {
     // Get tools from the correct MCP server based on role
     const tools = await getTools(role);
 
-    const chatMessages: Anthropic.MessageParam[] = [{ role: "user", content: userContent }];
+    // Build conversation history (last 10 turns to avoid token bloat)
+    const historyMessages: Anthropic.MessageParam[] = (history ?? [])
+      .slice(-10)
+      .map((m) => ({ role: m.role, content: m.text }));
+
+    const chatMessages: Anthropic.MessageParam[] = [
+      ...historyMessages,
+      { role: "user", content: userContent },
+    ];
 
     // Pre-upload any attached images ONCE before the agentic loop.
     // Caching prevents re-uploading on every Claude tool-call retry.
@@ -215,6 +224,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
     let preUploadProductId: string | null = null; // UUID generated for add_product
     let preUploadIsReplace = false;
     let preExistingUrls: string[] = []; // existing image_urls before update (for merge)
+    let preUploadForProductId: string | null = null; // product ID the update upload was done for
 
     // ── Helpers ─────────────────────────────────────────────────────────────
     /** Extract the storage folder UUID from a product-images public URL. */
@@ -301,6 +311,14 @@ app.post("/api/chat", async (req: Request, res: Response) => {
 
                   const productId = input.id as string | undefined;
 
+                  // Reset cache if Claude retried with a different product ID (e.g. used display
+                  // number first, then corrected to the real UUID on a second attempt).
+                  if (preUploadedUrls !== null && preUploadForProductId !== productId) {
+                    console.log(`[chat] update_product: product ID changed (${preUploadForProductId} → ${productId}), resetting image cache`);
+                    preUploadedUrls = null;
+                    preExistingUrls = [];
+                  }
+
                   if (preUploadedUrls === null) {
                     preUploadIsReplace = isReplaceMode;
 
@@ -350,6 +368,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
                       const url = await uploadImage(dataUrl, storageFolder, startIndex + i);
                       if (url) preUploadedUrls.push(url);
                     }
+                    preUploadForProductId = productId ?? null;
                     console.log(`[chat] update_product: uploaded ${preUploadedUrls.length}/${images.length} image(s) to storage`);
                   } else {
                     console.log(`[chat] update_product: reusing cached uploads (${preUploadedUrls.length})`);

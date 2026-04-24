@@ -147,7 +147,7 @@ export function registerSupabaseTools(server: McpServer) {
   server.registerTool(
     "update_product",
     {
-      description: "Update fields of an existing product. Only the product's owner shop can update it. The sb_auth_token is automatically injected by the server — NEVER ask the user for it.",
+      description: "Update fields of an existing product. Only the product's owner shop can update it. The sb_auth_token is automatically injected by the server — NEVER ask the user for it. IMPORTANT: Before calling this tool, always call list_my_products first if the user referred to a product by name. If more than one product shares that name, you MUST show the merchant the full list (with ID, price, description, and image count) and ask them to clarify which one they mean before proceeding. Never guess or pick one arbitrarily.",
       inputSchema: {
         sb_auth_token:  z.string().optional().describe("Automatically injected by the server. Do NOT ask the user for this value."),
         id:             z.string().describe("Product UUID to update"),
@@ -189,7 +189,7 @@ export function registerSupabaseTools(server: McpServer) {
   server.registerTool(
     "delete_product",
     {
-      description: "Delete a product from the caller's shop. The sb_auth_token is automatically injected by the server — NEVER ask the user for it.",
+      description: "Delete a product from the caller's shop. The sb_auth_token is automatically injected by the server — NEVER ask the user for it. IMPORTANT: Before calling this tool, always call list_my_products first if the user referred to a product by name. If more than one product shares that name, you MUST show the merchant the full list (with ID, price, description, and image count) and ask them to clarify which one they want to delete before proceeding. Never guess or pick one arbitrarily.",
       inputSchema: {
         sb_auth_token: z.string().optional().describe("Automatically injected by the server. Do NOT ask the user for this value."),
         id:            z.string().describe("Product UUID to delete"),

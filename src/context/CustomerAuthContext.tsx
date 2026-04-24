@@ -13,6 +13,7 @@ interface CustomerAuthContextType {
   customer: Customer | null;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signup: (email: string, password: string, name: string) => Promise<{ success: boolean; error?: string }>;
+  signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   isLoading: boolean;
 }
@@ -100,12 +101,21 @@ export function CustomerAuthProvider({ children }: { children: React.ReactNode }
     return { success: true };
   };
 
+  const signInWithGoogle = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/store`,
+      },
+    });
+  };
+
   const logout = async () => {
     await supabase.auth.signOut();
   };
 
   return (
-    <CustomerAuthContext.Provider value={{ customer, login, signup, logout, isLoading }}>
+    <CustomerAuthContext.Provider value={{ customer, login, signup, signInWithGoogle, logout, isLoading }}>
       {children}
     </CustomerAuthContext.Provider>
   );
