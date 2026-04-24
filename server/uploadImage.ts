@@ -24,13 +24,19 @@ export async function uploadImage(
         .from('product-images')
         .upload(fileName, buffer, { contentType, upsert: true });
 
-      if (error) return null;
+      if (error) {
+        console.error(`[uploadImage] storage upload failed for "${fileName}":`, error.message);
+        return null;
+      }
       return supabase.storage.from('product-images').getPublicUrl(fileName).data.publicUrl;
     }
 
     // Handle remote HTTPS URLs
     const res = await fetch(metaUrl);
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error(`[uploadImage] fetch failed for remote URL (status ${res.status})`);
+      return null;
+    }
 
     const buffer = await res.arrayBuffer();
     const contentType = res.headers.get('content-type') ?? 'image/jpeg';
@@ -41,10 +47,14 @@ export async function uploadImage(
       .from('product-images')
       .upload(fileName, buffer, { contentType, upsert: true });
 
-    if (error) return null;
+    if (error) {
+      console.error(`[uploadImage] storage upload failed for "${fileName}":`, error.message);
+      return null;
+    }
 
     return supabase.storage.from('product-images').getPublicUrl(fileName).data.publicUrl;
-  } catch {
+  } catch (err: any) {
+    console.error('[uploadImage] unexpected error:', err?.message ?? err);
     return null;
   }
 }

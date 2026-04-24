@@ -8,6 +8,7 @@ import { fileURLToPath } from "url";
 import path from "path";
 import { supabase } from "./supabase.js";
 import { uploadImage } from "./uploadImage.js";
+import { randomUUID } from "crypto";
 import logisticsRouter from "../src/pages/delivery agent/LogisticsRoutes.js";
 import webhookRouter from "./webhooks.js";
 import searchRouter from "./search/searchRouter.js";
@@ -148,27 +149,19 @@ app.get("/api/products", async (_req: Request, res: Response) => {
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 app.post("/api/chat", async (req: Request, res: Response) => {
-  const { message, role, sb_auth_token, images } = req.body as {
+  const { message, role, sb_auth_token, images, merchant_shop_id } = req.body as {
     message: string;
     role: string;
     sb_auth_token?: string;
     images?: { base64: string; mediaType: string }[];
+    merchant_shop_id?: string;
   };
 
   if (!message) return res.status(400).json({ ok: false, error: "Missing message" });
 
-  // Resolve merchant shop_id from their auth token
-  let merchant_shop_id: string | undefined;
-  if (role === "merchant" && sb_auth_token) {
-    try {
-      const { data: { user } } = await supabase.auth.getUser(sb_auth_token);
-      if (user) {
-        const { data: shop } = await supabase
-          .from("shops").select("shop_id").eq("owner_id", user.id).maybeSingle();
-        merchant_shop_id = shop?.shop_id;
-      }
-    } catch {}
-  }
+  // ── MERCHANT AUTH GATE ─────────────────────────────────────────────────────
+  // Layer 2 protection: verify the merchant is logged in, has merchant role,
+  // and owns a shop before allowing any tool access or Claude calls.
 
   const systemPrompt = role === "merchant"
     ? `أنت مساعد ذكي للتاجر على منصة سوق لينك.
@@ -184,12 +177,16 @@ app.post("/api/chat", async (req: Request, res: Response) => {
 
 قواعد صارمة يجب اتباعها:
 1. لا تقل أبداً "لا أملك أدوات" أو "لا يمكنني الوصول لانستقرام" أو "النظام لا يدعم المسودات" — كل هذه المزايا موجودة ومفعّلة.
-2. عند استخدام أي أداة تحتاج shop_id، استخدم القيمة: ${merchant_shop_id ?? "غير متوفر"} تلقائياً دون أن تطلبه من المستخدم.
-3. عندما يطلب التاجر عرض منتجاته أو منتجات متجره، استخدم list_products مع shop_id.
-4. عندما يطلب التاجر جلب منتجاته من انستقرام، أو استيرادها، أو استخراجها من منشوراته، أو أي عبارة مشابهة — استخدم حصراً instagram_import_products مع shop_id. بعد انتهاء الأداة، رد فقط بـ: "تم استيراد [العدد] منتجاً وحفظها كمسودات. راجعها وانشرها من [صفحة المسودات](/merchant-dashboard?page=drafts)." دون عرض أي قائمة منتجات.
+2. لا تطلب من التاجر أي معرّف (ID) أو رابط صورة أو shop_id — استخدم الأدوات للحصول عليها تلقائياً.
+3. عند استخدام أي أداة تحتاج shop_id، استخدم القيمة: ${merchant_shop_id ?? "غير متوفر"} تلقائياً.
+4. عندما يطلب التاجر عرض منتجاته أو منتجات متجره، استخدم list_my_products مباشرة — لا تطلب shop_id.
+5. عندما يذكر التاجر اسم منتج (مثل "حرام شتوي")، استخدم list_my_products أولاً للحصول على قائمة منتجاته، ثم حدّد المنتج المطلوب من القائمة باستخدام اسمه، ثم نفّذ العملية المطلوبة.
+6. عندما يرفق التاجر صورة مع طلبه: الصورة تُرفع تلقائياً من قِبل السيرفر وتُحقن في أداة update_product أو create_product — لا تطلب رابط الصورة أبداً ولا تسأل عنه.
+7. لتحديث صورة منتج موجود: استدعِ list_my_products للحصول على id المنتج، ثم استدعِ update_product بهذا الـ id فقط — الصورة ستُضاف تلقائياً.
+8. عندما يطلب التاجر جلب منتجاته من انستقرام، أو استيرادها — استخدم حصراً instagram_import_products مع shop_id. بعد انتهاء الأداة، رد فقط بـ: "تم استيراد [العدد] منتجاً وحفظها كمسودات. راجعها وانشرها من [صفحة المسودات](/merchant-dashboard?page=drafts)." دون عرض أي قائمة منتجات.
 
 أجب دائماً باللغة العربية بشكل واضح ومنظم.`
-    : `أنت مساعد ذكي لمنصة سوق لينك. ساعد المستخدم في البحث عن المنتجات والمتاجر.
+  : `أنت مساعد ذكي لمنصة سوق لينك. ساعد المستخدم في البحث عن المنتجات والمتاجر.
 أجب دائماً باللغة العربية بشكل واضح ومختصر.`;
 
   // Build user message content (text + optional images)
@@ -206,10 +203,35 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   res.setHeader("Connection", "keep-alive");
 
   try {
-    // Get tools from MCP server (filtered by role)
+    // Get tools from the correct MCP server based on role
     const tools = await getTools(role);
 
     const chatMessages: Anthropic.MessageParam[] = [{ role: "user", content: userContent }];
+
+    // Pre-upload any attached images ONCE before the agentic loop.
+    // Caching prevents re-uploading on every Claude tool-call retry.
+    // null = not yet uploaded this request.
+    let preUploadedUrls: string[] | null = null;
+    let preUploadProductId: string | null = null; // UUID generated for add_product
+    let preUploadIsReplace = false;
+    let preExistingUrls: string[] = []; // existing image_urls before update (for merge)
+
+    // ── Helpers ─────────────────────────────────────────────────────────────
+    /** Extract the storage folder UUID from a product-images public URL. */
+    function extractStorageFolder(url: string): string | null {
+      try {
+        const parsed = new URL(url);
+        const parts = parsed.pathname.split('/').filter(Boolean);
+        const bucketIdx = parts.indexOf('product-images');
+        if (bucketIdx !== -1 && parts[bucketIdx + 1]) {
+          return decodeURIComponent(parts[bucketIdx + 1]);
+        }
+      } catch {
+        const match = url.match(/product-images\/([^/?#]+)\//);
+        if (match) return match[1];
+      }
+      return null;
+    }
 
     // Agentic loop: Claude → tool call → MCP executes → back to Claude → final answer
     while (true) {
@@ -224,14 +246,128 @@ app.post("/api/chat", async (req: Request, res: Response) => {
       chatMessages.push({ role: "assistant", content: response.content });
 
       if (response.stop_reason === "tool_use") {
-        // Claude wants to call a tool — forward each call to MCP server
         const toolResults: Anthropic.ToolResultBlockParam[] = [];
 
         for (const block of response.content) {
           if (block.type === "tool_use") {
             console.log(`[chat] Claude calling tool: ${block.name}`, block.input);
             try {
-              const result = await callTool(block.name, block.input as Record<string, any>);
+              let result: string;
+
+              if (role === "merchant") {
+                const input: Record<string, any> = { ...(block.input as Record<string, any>), sb_auth_token };
+
+                // ── Image injection for add_product ──────────────────────────
+                // The server pre-uploads images, generates the product UUID (used as
+                // the storage folder), and injects both into the tool call so that
+                // the DB row id matches the storage folder path.
+                const isAddTool    = block.name === "add_my_product" || block.name === "add_product" || block.name === "create_product";
+                const isUpdateTool = block.name === "update_my_product" || block.name === "update_product";
+
+                if (images?.length && isAddTool) {
+                  if (preUploadedUrls === null) {
+                    preUploadProductId = randomUUID();
+                    preUploadedUrls = [];
+                    for (let i = 0; i < images.length; i++) {
+                      const dataUrl = `data:${images[i].mediaType};base64,${images[i].base64}`;
+                      const url = await uploadImage(dataUrl, preUploadProductId, i);
+                      if (url) preUploadedUrls.push(url);
+                    }
+                    console.log(`[chat] add_product: uploaded ${preUploadedUrls.length}/${images.length} image(s) to folder "${preUploadProductId}"`);
+                  } else {
+                    console.log(`[chat] add_product: reusing cached uploads (${preUploadedUrls.length})`);
+                  }
+                  // Always inject — tool rejects if image_urls is empty.
+                  input.product_id = preUploadProductId;
+                  input.image_urls = preUploadedUrls;
+                }
+
+                // ── Image injection for update_product ───────────────────────
+                // The supabase tools use field "id" (not "product_id") and expect
+                // image_urls as a full merged array — there is no append_image_urls.
+                if (images?.length && isUpdateTool) {
+                  // Normalise: Claude may send product_id but the tool schema uses id.
+                  if (input.product_id && !input.id) {
+                    input.id = input.product_id;
+                    delete input.product_id;
+                  }
+                  // Strip any fake/hallucinated URLs Claude put in these fields.
+                  delete input.image_urls;
+                  delete input.append_image_urls;
+                  delete input.replace_images;
+
+                  const isReplaceMode = input.replace_images_flag === true;
+                  delete input.replace_images_flag;
+
+                  const productId = input.id as string | undefined;
+
+                  if (preUploadedUrls === null) {
+                    preUploadIsReplace = isReplaceMode;
+
+                    let storageFolder: string = productId ?? randomUUID();
+                    let startIndex = 0;
+
+                    if (productId) {
+                      const { data: productRow } = await supabase
+                        .from("products")
+                        .select("image_urls")
+                        .eq("id", productId)
+                        .maybeSingle();
+
+                      const existingUrls: string[] = productRow?.image_urls ?? [];
+                      preExistingUrls = existingUrls;
+
+                      if (existingUrls.length > 0) {
+                        const extracted = extractStorageFolder(existingUrls[0]);
+                        if (extracted) storageFolder = extracted;
+                      }
+
+                      console.log(`[chat] update_product: storage folder = "${storageFolder}", existing images = ${existingUrls.length}`);
+
+                      const { data: existingFiles } = await supabase.storage
+                        .from("product-images")
+                        .list(storageFolder);
+                      const existing = existingFiles ?? [];
+
+                      if (isReplaceMode && existing.length > 0) {
+                        const paths = existing.map((f: any) => `${storageFolder}/${f.name}`);
+                        await supabase.storage.from("product-images").remove(paths);
+                        preExistingUrls = [];
+                        startIndex = 0;
+                      } else {
+                        const maxIdx = existing.reduce((max: number, f: any) => {
+                          const n = parseInt(f.name.split('.')[0], 10);
+                          return isNaN(n) ? max : Math.max(max, n);
+                        }, -1);
+                        startIndex = maxIdx + 1;
+                        console.log(`[chat] update_product: startIndex=${startIndex}`);
+                      }
+                    }
+
+                    preUploadedUrls = [];
+                    for (let i = 0; i < images.length; i++) {
+                      const dataUrl = `data:${images[i].mediaType};base64,${images[i].base64}`;
+                      const url = await uploadImage(dataUrl, storageFolder, startIndex + i);
+                      if (url) preUploadedUrls.push(url);
+                    }
+                    console.log(`[chat] update_product: uploaded ${preUploadedUrls.length}/${images.length} image(s) to storage`);
+                  } else {
+                    console.log(`[chat] update_product: reusing cached uploads (${preUploadedUrls.length})`);
+                  }
+
+                  // Inject the full merged list — supabase update_product takes image_urls directly.
+                  if (preUploadedUrls.length > 0) {
+                    input.image_urls = preUploadIsReplace
+                      ? preUploadedUrls
+                      : [...preExistingUrls, ...preUploadedUrls];
+                  }
+                }
+
+                result = await callTool(block.name, input);
+              } else {
+                result = await callTool(block.name, block.input as Record<string, any>);
+              }
+
               toolResults.push({ type: "tool_result", tool_use_id: block.id, content: result });
             } catch (err: any) {
               toolResults.push({ type: "tool_result", tool_use_id: block.id, content: `خطأ: ${err.message}`, is_error: true });
