@@ -31,11 +31,10 @@ export default function ProductListTemplate({
   bottomBar,
 }: ProductListTemplateProps) {
   return (
-    <div className="pt-page">
-      {/* ── Shared nav ── */}
+    <>
       <Topbar />
       <StoreNav />
-
+      <div className="pt-page">
       {/* ── CONTENT ── */}
       <div className="pt-wrapper">
         {/* Breadcrumb */}
@@ -85,5 +84,6 @@ export default function ProductListTemplate({
         </div>
       </div>
     </div>
+    </>
   );
 }

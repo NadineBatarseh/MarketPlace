@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import supabase from '../../lib/supabase';
 import Topbar from '../../components/Topbar';
 import StoreNav from '../../components/StoreNav';
+import { useShop } from '../../context/ShopContext';
+import CartConfirmModal from '../../components/CartConfirmModal';
 import './ProductDetailPage.css';
 
 const NOT_FOUND = "المعلومة غير متوفرة";
@@ -11,6 +13,7 @@ const safeText = (v?: string | null) => (v && v.trim() ? v : NOT_FOUND);
 const ProductDetailPage: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { toggleFavorite, isFavorited, isInCart, addToCart: addToCartCtx } = useShop();
 
   // Data states
   const [loadingData, setLoadingData] = useState(true);
@@ -27,7 +30,7 @@ const ProductDetailPage: React.FC = () => {
 
   // UI states (keep design)
   const [qty, setQty] = useState(1);
-  const [isFav, setIsFav] = useState(false);
+  const isFav = product ? isFavorited(product.id) : false;
   const [activeThumb, setActiveThumb] = useState(0);
   const [thumbOffset, setThumbOffset] = useState(0);
   const THUMBS_PER_PAGE = 7;
@@ -37,10 +40,16 @@ const ProductDetailPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState('desc');
 
   // Nav counters
-  const [favCount, setFavCount] = useState(0);
+  const [favCount] = useState(0);
   const [cartCount, setCartCount] = useState(0);
   const [cartProductIds, setCartProductIds] = useState<Set<string>>(new Set());
   const [cartMsg, setCartMsg] = useState<string | null>(null);
+  const cartMsgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showCartMsg = (msg: string) => {
+    if (cartMsgTimerRef.current) clearTimeout(cartMsgTimerRef.current);
+    setCartMsg(msg);
+    cartMsgTimerRef.current = setTimeout(() => setCartMsg(null), 3000);
+  };
 
   // Share menu
   const [showShareMenu, setShowShareMenu] = useState(false);
@@ -267,21 +276,29 @@ const ProductDetailPage: React.FC = () => {
   };
 
   const toggleFav = () => {
-    const nowFav = !isFav;
-    setIsFav(nowFav);
-    setFavCount(prev => nowFav ? prev + 1 : Math.max(0, prev - 1));
+    if (!currentUser) { showCartMsg('يجب تسجيل الدخول أو إنشاء حساب أولاً'); return; }
+    if (!product) return;
+    toggleFavorite({
+      id: product.id,
+      name: product.title ?? '',
+      image: product.image_urls?.[0] ?? '',
+      price: parseFloat(String(product.price ?? '0').replace(/[^\d.]/g, '')) || 0,
+      inStock: true,
+    });
   };
 
+  const [showCartConfirm, setShowCartConfirm] = useState(false);
+
   const addToCart = () => {
-    const productId = product?.id;
-    if (!productId) return;
-    if (cartProductIds.has(productId)) {
-      setCartMsg('لقد أضفت هذا المنتج من قبل');
+    if (!currentUser) { showCartMsg('يجب تسجيل الدخول أو إنشاء حساب أولاً'); return; }
+    if (!product) return;
+    if (isInCart(product.id)) {
+      setShowCartConfirm(true);
       return;
     }
-    setCartProductIds(prev => new Set(prev).add(productId));
-    setCartCount(prev => prev + 1);
-    setCartMsg(null);
+    const price = parseFloat(String(product.price ?? '0').replace(/[^\d.]/g, '')) || 0;
+    addToCartCtx({ id: product.id, name: product.title ?? '', image: product.image_urls?.[0] ?? '', price });
+    showCartMsg('✓ تمت الإضافة إلى السلة');
   };
 
   const prevImage = () => {
@@ -538,7 +555,9 @@ const ProductDetailPage: React.FC = () => {
                 </div>
 
                 <div className="btn-group">
-                  <button className="btn-cart" onClick={addToCart}>🛒 أضف إلى السلة</button>
+                  <button className="btn-cart" onClick={addToCart}>
+                    🛒 أضف إلى السلة
+                  </button>
                   <button
                     className={`btn-fav ${isFav ? 'active' : ''}`}
                     onClick={toggleFav}
@@ -832,6 +851,17 @@ const ProductDetailPage: React.FC = () => {
             </div>
         </>
       </div>
+      {showCartConfirm && product && (
+        <CartConfirmModal
+          onConfirm={() => {
+            const price = parseFloat(String(product.price ?? '0').replace(/[^\d.]/g, '')) || 0;
+            addToCartCtx({ id: product.id, name: product.title ?? '', image: product.image_urls?.[0] ?? '', price });
+            showCartMsg('✓ تمت إضافة قطعة أخرى إلى السلة');
+            setShowCartConfirm(false);
+          }}
+          onCancel={() => setShowCartConfirm(false)}
+        />
+      )}
     </>
   );
 };

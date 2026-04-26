@@ -1,0 +1,62 @@
+.ccm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ccm-box {
+  background: #fff;
+  border-radius: 14px;
+  padding: 28px 32px;
+  max-width: 360px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  direction: rtl;
+  font-family: var(--font-main);
+}
+
+.ccm-msg {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+.ccm-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.ccm-btn {
+  padding: 10px 32px;
+  border-radius: 8px;
+  border: none;
+  font-family: var(--font-main);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.ccm-btn:hover { opacity: 0.85; }
+
+.ccm-btn-yes {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.ccm-btn-no {
+  background: var(--color-border);
+  color: var(--color-text);
+}
+
+.ccm-btn-danger {
+  background: #d9534f;
+  color: #fff;
+}

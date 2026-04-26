@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import supabase from '../../lib/supabase';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
@@ -82,9 +82,25 @@ export default function OrderHistoryPage() {
   const [activeFilter, setFilter] = useState('all');
   const [search, setSearch]       = useState('');
 
-  useEffect(() => {
-    if (!authLoading && !customer) navigate('/store');
-  }, [authLoading, customer, navigate]);
+  if (!authLoading && !customer) {
+    return (
+      <>
+        <Topbar />
+        <StoreNav />
+        <div className="oh-page" dir="rtl">
+          <div className="oh-empty">
+            <div className="oh-empty-icon">🔒</div>
+            <h3>يجب تسجيل الدخول لعرض طلباتك</h3>
+            <p>قم بتسجيل الدخول أو إنشاء حساب للوصول إلى سجل طلباتك</p>
+            <div className="oh-guest-actions">
+              <button type="button" className="oh-btn oh-btn-primary" onClick={() => navigate('/login')}>تسجيل الدخول</button>
+              <button type="button" className="oh-btn" onClick={() => navigate('/signup')}>إنشاء حساب</button>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   useEffect(() => {
     if (!customer) return;

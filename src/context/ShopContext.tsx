@@ -111,11 +111,13 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
     if (!userId) return null;
     if (cartSerialIdRef.current !== null) return cartSerialIdRef.current;
 
-    let { data: row } = await supabase
+    const { data: rows } = await supabase
       .from('carts')
       .select('cartsSerial_id')
       .eq('user_id', userId)
-      .maybeSingle();
+      .order('cartsSerial_id', { ascending: false })
+      .limit(1);
+    let row = rows?.[0] ?? null;
 
     if (!row) {
       const { data: newRow, error } = await supabase
@@ -135,11 +137,13 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
     if (!userId) return null;
     if (favSerialIdRef.current !== null) return favSerialIdRef.current;
 
-    let { data: row } = await supabase
+    const { data: rows } = await supabase
       .from('favorites')
       .select('favoriteSerial_id')
       .eq('user_id', userId)
-      .maybeSingle();
+      .order('favoriteSerial_id', { ascending: false })
+      .limit(1);
+    let row = rows?.[0] ?? null;
 
     if (!row) {
       const { data: newRow, error } = await supabase
@@ -170,14 +174,14 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
 
       const { data: items, error } = await supabase
         .from('cart_items')
-        .select('produc_id, quantity, products(id, title, image_urls, price)')
+        .select('product_id, quantity, products(id, title, image_urls, price)')
         .eq('cartSerial_id', serialId);
 
       if (error) { console.error('[ShopContext] load cart_items failed:', error); return; }
       if (!items) return;
 
       setCartItems((items as any[]).map((item) => ({
-        id: item.produc_id,
+        id: item.product_id,
         name: item.products?.title ?? 'منتج',
         image: item.products?.image_urls?.[0] ?? '',
         price: parseFloat(String(item.products?.price ?? '0').replace(/[^\d.]/g, '')) || 0,
@@ -256,12 +260,12 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
             .from('cart_items')
             .update({ quantity: existing.quantity + 1 })
             .eq('cartSerial_id', serialId)
-            .eq('produc_id', String(product.id))
+            .eq('product_id', String(product.id))
             .then(({ error }) => { if (error) console.error('[ShopContext] cart update failed:', error); });
         } else {
           supabase
             .from('cart_items')
-            .insert({ cartSerial_id: serialId, produc_id: String(product.id), quantity: 1 })
+            .insert({ cartSerial_id: serialId, product_id: String(product.id), quantity: 1 })
             .then(({ error }) => { if (error) console.error('[ShopContext] cart insert failed:', error); });
         }
       });
@@ -278,7 +282,7 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
           .from('cart_items')
           .delete()
           .eq('cartSerial_id', serialId)
-          .eq('produc_id', String(id))
+          .eq('product_id', String(id))
           .then(({ error }) => { if (error) console.error('[ShopContext] cart delete failed:', error); });
       });
     }
@@ -296,7 +300,7 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
           .from('cart_items')
           .update({ quantity: qty })
           .eq('cartSerial_id', serialId)
-          .eq('produc_id', String(id))
+          .eq('product_id', String(id))
           .then(({ error }) => { if (error) console.error('[ShopContext] cart qty update failed:', error); });
       });
     }

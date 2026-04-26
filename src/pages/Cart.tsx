@@ -1,9 +1,12 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ProductListTemplate from '../components/ProductListTemplate';
 import ProductRow from '../components/ProductRow';
 import QuantitySelector from '../components/QuantitySelector';
 import Topbar from '../components/Topbar';
+import CartConfirmModal from '../components/CartConfirmModal';
 import { useShop } from '../context/ShopContext';
+import type { CartItem } from '../context/ShopContext';
 import '../styles/productTable.css';
 
 const SHIPPING_COST = 15;
@@ -17,10 +20,13 @@ const VALID_COUPONS: Record<string, number> = {
 
 export default function Cart() {
   const { cartItems, removeFromCart, updateCartQty, clearCart } = useShop();
+  const navigate = useNavigate();
 
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState('');
   const [couponError, setCouponError] = useState('');
+  const [pendingRemove, setPendingRemove] = useState<CartItem | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const couponDiscount = appliedCoupon ? VALID_COUPONS[appliedCoupon] ?? 0 : 0;
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -78,7 +84,7 @@ export default function Cart() {
         <span>{total.toFixed(2)} ر.س</span>
       </div>
 
-      <button type="button" className="pt-btn-checkout">
+      <button type="button" className="pt-btn-checkout" onClick={() => navigate('/checkout')}>
         المتابعة للدفع &larr;
       </button>
     </div>
@@ -107,7 +113,7 @@ export default function Cart() {
         )}
       </div>
 
-      <button type="button" className="pt-btn-clear" onClick={clearCart}>
+      <button type="button" className="pt-btn-clear" onClick={() => setShowClearConfirm(true)}>
         مسح السلة
       </button>
     </div>
@@ -116,49 +122,75 @@ export default function Cart() {
   /* ── Empty State ── */
   if (cartItems.length === 0) {
     return (
-      <div className="pt-page">
+      <>
         <Topbar />
-        <div className="pt-empty">
-          <div className="pt-empty-icon">🛒</div>
-          <h2>سلة التسوق فارغة</h2>
-          <p>لم تقم بإضافة أي منتجات بعد</p>
-          <a href="/store" className="pt-btn-shop">تصفح المنتجات</a>
+        <div className="pt-page">
+          <div className="pt-empty">
+            <div className="pt-empty-icon">🛒</div>
+            <h2>سلة التسوق فارغة</h2>
+            <p>لم تقم بإضافة أي منتجات بعد</p>
+            <a href="/store" className="pt-btn-shop">تصفح المنتجات</a>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   return (
-    <ProductListTemplate
-      title="سلة التسوق"
-      itemCount={cartItems.length}
-      columns={['المنتج', 'السعر', 'الكمية', 'المجموع']}
-      sidePanel={sidePanel}
-      bottomBar={bottomBar}
-    >
-      {cartItems.map((item) => (
-        <ProductRow
-          key={item.id}
-          image={item.image}
-          name={item.name}
-          onRemove={() => removeFromCart(item.id)}
-        >
-          <td className="pt-cell pt-cell-price">
-            {item.price.toFixed(2)} ر.س
-          </td>
+    <>
+      <ProductListTemplate
+        title="سلة التسوق"
+        itemCount={cartItems.length}
+        columns={['المنتج', 'السعر', 'الكمية', 'المجموع']}
+        sidePanel={sidePanel}
+        bottomBar={bottomBar}
+      >
+        {cartItems.map((item) => (
+          <ProductRow
+            key={item.id}
+            image={item.image}
+            name={item.name}
+            onRemove={() => setPendingRemove(item)}
+          >
+            <td className="pt-cell pt-cell-price">
+              {item.price.toFixed(2)} ر.س
+            </td>
 
-          <td className="pt-cell pt-cell-qty">
-            <QuantitySelector
-              value={item.quantity}
-              onChange={(qty) => updateCartQty(item.id, qty)}
-            />
-          </td>
+            <td className="pt-cell pt-cell-qty">
+              <QuantitySelector
+                value={item.quantity}
+                onChange={(qty) => updateCartQty(item.id, qty)}
+              />
+            </td>
 
-          <td className="pt-cell pt-cell-subtotal">
-            <strong>{(item.price * item.quantity).toFixed(2)} ر.س</strong>
-          </td>
-        </ProductRow>
-      ))}
-    </ProductListTemplate>
+            <td className="pt-cell pt-cell-subtotal">
+              <strong>{(item.price * item.quantity).toFixed(2)} ر.س</strong>
+            </td>
+          </ProductRow>
+        ))}
+      </ProductListTemplate>
+
+      {pendingRemove && (
+        <CartConfirmModal
+          message={`هل أنت متأكد أنك تريد حذف "${pendingRemove.name}" من السلة؟`}
+          confirmLabel="حذف"
+          cancelLabel="إلغاء"
+          confirmDanger
+          onConfirm={() => { removeFromCart(pendingRemove.id); setPendingRemove(null); }}
+          onCancel={() => setPendingRemove(null)}
+        />
+      )}
+
+      {showClearConfirm && (
+        <CartConfirmModal
+          message="هل أنت متأكد أنك تريد حذف جميع المنتجات من السلة؟"
+          confirmLabel="مسح الكل"
+          cancelLabel="إلغاء"
+          confirmDanger
+          onConfirm={() => { clearCart(); setShowClearConfirm(false); }}
+          onCancel={() => setShowClearConfirm(false)}
+        />
+      )}
+    </>
   );
 }

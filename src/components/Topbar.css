@@ -21,7 +21,104 @@
   direction: rtl;
 }
 
-/* ── Logo ── */
+/* ── Classes used directly in Topbar JSX ── */
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.logo-img {
+  height: 42px;
+  width: auto;
+  object-fit: contain;
+}
+.logo-text { line-height: 1.1; }
+.logo-text .ar { font-size: 17px; font-weight: 800; color: var(--color-primary); font-family: var(--font-main); }
+.logo-text .en { font-size: 11px; font-weight: 500; color: var(--color-muted); letter-spacing: 1px; font-family: var(--font-main); }
+
+.search-bar {
+  flex: 1;
+  max-width: 460px;
+  margin: 0 32px;
+  position: relative;
+}
+.search-bar input {
+  width: 100%;
+  padding: 10px 44px 10px 16px;
+  border: 1.5px solid var(--color-border);
+  border-radius: 50px;
+  font-family: var(--font-main);
+  font-size: 14px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  outline: none;
+  transition: border-color 0.2s;
+  direction: rtl;
+}
+.search-bar input:focus { border-color: var(--color-primary); }
+.search-bar .search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-muted);
+  pointer-events: none;
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-shrink: 0;
+}
+.nav-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  position: relative;
+  text-decoration: none;
+  color: var(--color-text);
+  padding: 4px 6px;
+  border-radius: 8px;
+  transition: color 0.15s;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.nav-action svg { width: 22px; height: 22px; }
+.nav-action span { font-size: 11px; color: var(--color-muted); font-family: var(--font-main); font-weight: 500; }
+.nav-action:hover { color: var(--color-primary); }
+.nav-action--active { color: var(--color-primary); }
+
+.nav-action-btn {
+  background: none;
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.badge {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  background: var(--color-badge);
+  color: white;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  font-size: 9px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Logo (topbar- prefixed aliases, kept for backward compat) ── */
 .topbar-logo {
   display: flex;
   align-items: center;

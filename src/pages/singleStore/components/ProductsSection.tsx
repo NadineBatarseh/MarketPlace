@@ -21,7 +21,7 @@ interface Props {
   onLoadMore: () => void;
   onViewModeChange: (mode: 'grid' | 'list') => void;
   onToggleWishlist: (e: MouseEvent, id: string) => void;
-  onAddToCart: (e: MouseEvent) => void;
+  onAddToCart: (e: MouseEvent, product: Product) => void;
 }
 
 export default function ProductsSection({

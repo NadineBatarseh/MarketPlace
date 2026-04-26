@@ -7,7 +7,7 @@ interface Props {
   product: Product;
   inWishlist: boolean;
   onToggleWishlist: (e: MouseEvent, id: string) => void;
-  onAddToCart: (e: MouseEvent) => void;
+  onAddToCart: (e: MouseEvent, product: Product) => void;
 }
 
 export default function ProductCard({ product, inWishlist, onToggleWishlist, onAddToCart }: Props) {
@@ -90,7 +90,7 @@ export default function ProductCard({ product, inWishlist, onToggleWishlist, onA
             <span className="currency">₪</span> {product.price}
           </div>
         )}
-        <button className="add-to-cart" onClick={onAddToCart}>أضف للسلة</button>
+        <button className="add-to-cart" onClick={e => onAddToCart(e, product)}>أضف للسلة</button>
       </div>
     </div>
   );

@@ -5,6 +5,8 @@ import './storePage.css';
 import { useStore } from './hooks/useStore';
 import { useProducts } from './hooks/useProducts';
 import { useToast } from './hooks/useToast';
+import { useSharedAuth } from '../../context/AuthContext';
+import { useShop } from '../../context/ShopContext';
 import type { Product } from './types';
 
 import StoreNav from '../../components/StoreNav';
@@ -15,6 +17,7 @@ import ProductsSection from './components/ProductsSection';
 import Footer from './components/Footer';
 import Toast from './components/Toast';
 import Topbar from '../../components/Topbar';
+import CartConfirmModal from '../../components/CartConfirmModal';
 interface Props {
   shopId: string;
 }
@@ -23,8 +26,11 @@ export default function StorePage({ shopId }: Props) {
   const { store, loading: storeLoading, error: storeError } = useStore(shopId);
   const { products, total, loading: productsLoading, sort, handleSortChange, handleLoadMore } = useProducts(shopId);
   const { toast, toastVisible, showToast } = useToast();
+  const { rawUser } = useSharedAuth();
+  const { addToCart: addToCartCtx, isInCart, toggleFavorite, isFavorited, favoriteItems } = useShop();
 
-  const [wishlist, setWishlist] = useState<Set<string>>(new Set());
+  const wishlist = new Set(favoriteItems.map(item => String(item.id)));
+  const [confirmProduct, setConfirmProduct] = useState<Product | null>(null);
   const [activeColor, setActiveColor] = useState('#2a7a3b');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [openFilters, setOpenFilters] = useState<FilterState>({
@@ -69,21 +75,39 @@ export default function StorePage({ shopId }: Props) {
 
   function toggleWishlist(e: MouseEvent, id: string) {
     e.stopPropagation();
-    setWishlist(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-        showToast('تمت الإزالة من المفضلة');
-      } else {
-        next.add(id);
-        showToast('❤ تمت الإضافة للمفضلة');
-      }
-      return next;
-    });
+    if (!rawUser) {
+      showToast('يجب تسجيل الدخول أو إنشاء حساب أولاً');
+      return;
+    }
+    const product = displayedProducts.find(p => p.id === id);
+    if (!product) return;
+    const price = typeof product.price === 'number' ? product.price : parseFloat(String(product.price ?? '0')) || 0;
+    toggleFavorite({ id: product.id, name: product.title, image: product.image_urls?.[0] ?? '', price, inStock: true });
+    if (isFavorited(id)) {
+      showToast('تمت الإزالة من المفضلة');
+    } else {
+      showToast('❤ تمت الإضافة للمفضلة');
+    }
   }
 
-  function addToCart(e: MouseEvent) {
+  function addToCart(e: MouseEvent, product: Product) {
     e.stopPropagation();
+    if (!rawUser) {
+      showToast('يجب تسجيل الدخول أو إنشاء حساب أولاً');
+      return;
+    }
+
+    if (isInCart(product.id)) {
+      setConfirmProduct(product);
+      return;
+    }
+
+    addToCartCtx({
+      id: product.id,
+      name: product.title,
+      image: product.image_urls?.[0] ?? '',
+      price: typeof product.price === 'number' ? product.price : parseFloat(String(product.price ?? '0')) || 0,
+    });
     showToast('✓ تمت الإضافة إلى السلة');
   }
 
@@ -123,6 +147,21 @@ export default function StorePage({ shopId }: Props) {
       </div>
       <Footer store={store} />
       <Toast message={toast} visible={toastVisible} />
+      {confirmProduct && (
+        <CartConfirmModal
+          onConfirm={() => {
+            addToCartCtx({
+              id: confirmProduct.id,
+              name: confirmProduct.title,
+              image: confirmProduct.image_urls?.[0] ?? '',
+              price: typeof confirmProduct.price === 'number' ? confirmProduct.price : parseFloat(String(confirmProduct.price ?? '0')) || 0,
+            });
+            showToast('✓ تمت إضافة قطعة أخرى إلى السلة');
+            setConfirmProduct(null);
+          }}
+          onCancel={() => setConfirmProduct(null)}
+        />
+      )}
     </>
   );
 }
