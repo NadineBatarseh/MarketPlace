@@ -1393,6 +1393,339 @@
 .mep-save-btn:hover { background: #e8572a; }
 .mep-save-btn:active { transform: scale(0.99); }
 
+/* ── GPS button inline with field label ── */
+.mep-field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+.mep-field-label-row label { margin-bottom: 0; }
+
+.mep-geo-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: transparent;
+  color: #1a1a2e;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0.28rem 0.65rem;
+  font-size: 0.77rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.mep-geo-btn:hover:not(:disabled) { border-color: #1a1a2e; background: #f1f5f9; }
+.mep-geo-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.mep-geo-coords {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #16a34a;
+}
+
+.mep-geo-error {
+  font-size: 0.78rem;
+  color: #dc2626;
+  margin: 0.3rem 0 0;
+}
+
+/* ── Required field star & incomplete highlight ── */
+.mep-req {
+  color: #dc2626;
+  font-size: 0.95em;
+  margin-right: 2px;
+  font-weight: 900;
+}
+
+.mep-label-hint {
+  font-size: 0.78em;
+  font-weight: 400;
+  color: #94a3b8;
+  margin-right: 4px;
+}
+
+/* Orange border + background when field is incomplete */
+.mep-field--incomplete input,
+.mep-field--incomplete select,
+.mep-field--incomplete textarea {
+  border-color: #f97316 !important;
+  background: #fff7ed !important;
+}
+.mep-field--incomplete label {
+  color: #c2410c;
+}
+.mep-logo-area.mep-field--incomplete {
+  border: 1.5px solid #f97316;
+  border-radius: 10px;
+  padding: 0.75rem;
+  background: #fff7ed;
+}
+
+.mep-incomplete-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #fff7ed;
+  border: 1.5px solid #fed7aa;
+  border-radius: 8px;
+  padding: 0.65rem 1rem;
+  font-size: 0.87rem;
+  font-weight: 600;
+  color: #c2410c;
+  margin-bottom: 1.25rem;
+}
+.mep-incomplete-banner::before { content: '⚠️'; }
+
+.mep-section-req-note {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #c2410c;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 5px;
+  padding: 0.15rem 0.5rem;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+}
+
+/* ── Publish section inside ShopSettings ── */
+.mep-publish-section {
+  border: 2px solid #e8572a30;
+  background: #fff9f7;
+  border-radius: 12px;
+}
+
+.mep-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.mep-check {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.88rem;
+  color: #64748b;
+}
+.mep-check--done { color: #15803d; }
+
+.mep-check-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 900;
+  flex-shrink: 0;
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1.5px solid #fca5a5;
+}
+.mep-check-icon--done {
+  background: #dcfce7;
+  color: #16a34a;
+  border-color: #86efac;
+}
+
+.mep-check-label { font-weight: 600; }
+
+.mep-publish-loading {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  margin: 0 0 1rem;
+}
+
+.mep-publish-btn {
+  width: 100%;
+  padding: 0.85rem;
+  background: linear-gradient(135deg, #e8572a, #f97316);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(232,87,42,0.3);
+  transition: opacity 0.2s, transform 0.15s;
+  letter-spacing: 0.02em;
+}
+.mep-publish-btn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+.mep-publish-btn:disabled {
+  background: #cbd5e1;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.mep-publish-note {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  text-align: center;
+  margin: 0.5rem 0 0;
+}
+
+.mep-published-state {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  border-radius: 10px;
+  padding: 0.9rem 1.1rem;
+  color: #15803d;
+  font-weight: 800;
+  font-size: 0.95rem;
+}
+
+/* ── Publish button — top of page ── */
+.mep-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.25rem;
+}
+.mep-top-row .mep-title {
+  margin-bottom: 0;
+}
+
+.mep-publish-btn-top {
+  flex-shrink: 0;
+  padding: 0.45rem 1.1rem;
+  background: #1e3a5f;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+  white-space: nowrap;
+}
+.mep-publish-btn-top:hover:not(:disabled) {
+  background: #162d4a;
+  transform: translateY(-1px);
+}
+.mep-publish-btn-top:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.mep-published-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  border-radius: 8px;
+  padding: 0.4rem 0.9rem;
+  color: #15803d;
+  font-size: 0.82rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.mep-publish-error-inline {
+  font-size: 0.78rem;
+  color: #dc2626;
+  margin: 0 0 0.4rem;
+}
+
+.mep-publish-top-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+/* ── Publish missing-fields alert modal ── */
+.mep-alert-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.mep-alert-box {
+  background: #fff;
+  border-radius: 14px;
+  padding: 1.75rem 2rem;
+  max-width: 380px;
+  width: 90%;
+  text-align: right;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  direction: rtl;
+}
+.mep-alert-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #92400e;
+  margin: 0 0 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.mep-alert-title::before {
+  content: "⚠️";
+}
+.mep-alert-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  padding: 0.6rem 0.85rem;
+}
+.mep-alert-list li {
+  padding: 0.25rem 0;
+  font-size: 0.85rem;
+  color: #78350f;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.mep-alert-x {
+  color: #dc2626;
+  font-weight: 700;
+}
+.mep-alert-hint {
+  font-size: 0.78rem;
+  color: #b45309;
+  font-weight: 600;
+  margin: 0 0 1.25rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed #fbbf24;
+}
+.mep-alert-close-btn {
+  width: 100%;
+  padding: 0.55rem 1rem;
+  background: #1e3a5f;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.mep-alert-close-btn:hover {
+  background: #162d4a;
+}
+
 .mep-info-banner {
   background: #eff6ff;
   color: #1d4ed8;
@@ -1989,3 +2322,141 @@
   border: 1.5px solid #e5e7eb;
 }
 .ca-btn-secondary:hover:not(:disabled) { background: #e2e8f0; }
+
+/* ── Sidebar publish CTA ── */
+.md-sidebar-publish {
+  background: linear-gradient(135deg, #e8572a18, #f9731618);
+  border: 1.5px solid #e8572a40;
+  border-radius: 8px;
+  margin-bottom: 0.25rem;
+  position: relative;
+}
+.md-sidebar-publish .md-sidebar-item-label { color: #e8572a; font-weight: 800; }
+.md-sidebar-publish .md-sidebar-item-icon { color: #e8572a; }
+.md-sidebar-publish:hover { background: linear-gradient(135deg, #e8572a28, #f9731628) !important; }
+.md-sidebar-publish.md-active { background: linear-gradient(135deg, #e8572a30, #f9731630) !important; }
+
+.md-sidebar-publish-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e8572a;
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  animation: md-pulse 2s ease-in-out infinite;
+}
+@keyframes md-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.5; transform: scale(1.4); }
+}
+
+/* ── MerchantHome activation banner ── */
+.mh-activation-banner {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: linear-gradient(135deg, #fffbeb, #fff7ed);
+  border: 1.5px solid #fde68a;
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.mh-activation-icon {
+  font-size: 1.75rem;
+  flex-shrink: 0;
+}
+
+.mh-activation-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.mh-activation-text strong {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #92400e;
+}
+
+.mh-activation-text span {
+  font-size: 0.82rem;
+  color: #b45309;
+}
+
+.mh-activation-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #e8572a;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.5rem 1.1rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.18s;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.mh-activation-btn svg { transform: scaleX(-1); }
+.mh-activation-btn:hover { background: #c94520; }
+
+/* ── WhatsApp split field ── */
+.mep-whatsapp-split {
+  display: flex;
+  align-items: stretch;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fafafa;
+  transition: border-color 0.2s;
+}
+.mep-whatsapp-split:focus-within {
+  border-color: #1a1a2e;
+  background: #fff;
+}
+.mep-whatsapp-split .mep-whatsapp-code {
+  padding: 0.75rem 0.6rem;
+  border: none;
+  border-right: 1.5px solid #e5e7eb;
+  border-radius: 0;
+  background: #f1f5f9;
+  font-family: var(--font-main);
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #374151;
+  outline: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  direction: ltr;
+}
+.mep-whatsapp-prefix {
+  padding: 0 0.55rem;
+  display: flex;
+  align-items: center;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #64748b;
+  background: #f8f7f5;
+  border-right: 1.5px solid #e5e7eb;
+  flex-shrink: 0;
+  user-select: none;
+}
+.mep-whatsapp-split .mep-whatsapp-local {
+  flex: 1;
+  padding: 0.75rem 0.75rem;
+  border: none;
+  background: transparent;
+  font-family: var(--font-main);
+  font-size: 0.95rem;
+  outline: none;
+  direction: ltr;
+  color: #1a1a2e;
+  min-width: 0;
+}
+.mep-whatsapp-local::placeholder { color: #9ca3af; letter-spacing: 0.05em; }

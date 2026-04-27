@@ -40,6 +40,7 @@ export default function MerchantDashboard() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { merchant, logout, isLoading } = useMerchantAuth();
+  const [highlightIncomplete, setHighlightIncomplete] = useState(false);
   const [currentPage, setCurrentPage] = useState<DashPage>(() => {
     const p = searchParams.get('page');
     const valid: DashPage[] = ['home', 'reviews', 'billing', 'editPage', 'bulkUpload', 'orders', 'drafts', 'settings', 'shopSettings', 'instagramConnect'];
@@ -131,8 +132,8 @@ export default function MerchantDashboard() {
     if (currentPage === 'orders') return <MerchantOrders />;
     if (currentPage === 'drafts') return <DraftProductsPage />;
     if (currentPage === 'settings') return <MerchantSettings />;
-    if (currentPage === 'shopSettings') return <MerchantShopSettings onNavigate={p => setCurrentPage(p as DashPage)} />;
-    return <MerchantHome />;
+    if (currentPage === 'shopSettings') return <MerchantShopSettings onNavigate={p => { setCurrentPage(p as DashPage); setHighlightIncomplete(false); }} highlightIncomplete={highlightIncomplete} />;
+    return <MerchantHome onNavigate={(p: string, highlight?: boolean) => { setCurrentPage(p as DashPage); setHighlightIncomplete(!!highlight); }} />;
   };
 
   return (

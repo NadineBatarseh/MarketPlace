@@ -13,6 +13,9 @@ export interface MerchantShop {
   instagram: string | null;
   merchant_id: string;
   Type_of_store: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  status: string;
 }
 
 export interface Merchant {
@@ -53,6 +56,10 @@ async function fetchMerchantShop(userId: string): Promise<MerchantShop | null> {
     instagram: data.instagram ?? null,
     merchant_id: data.merchant_id,
     Type_of_store: data.Type_of_store ?? null,
+    latitude: data.shop_lat ?? null,
+    longitude: data.shop_lng ?? null,
+    // Strip accidental surrounding quotes from the DB default ('''pending''' → 'pending')
+    status: (data.status ?? 'pending').replace(/^'|'$/g, ''),
   };
 }
 
