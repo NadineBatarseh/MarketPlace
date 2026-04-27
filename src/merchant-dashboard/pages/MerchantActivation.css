@@ -1,0 +1,287 @@
+/* ══════════════════════════════════════════════════════
+   MerchantActivation.css — Store publish / onboarding
+   RTL, SouqLink palette (#1a1a2e dark, #e8572a accent)
+   ══════════════════════════════════════════════════════ */
+
+.ma-root {
+  padding: 2rem;
+  max-width: 700px;
+  direction: rtl;
+  font-family: var(--font-main, 'Segoe UI', sans-serif);
+  position: relative;
+}
+
+/* ── Toast ── */
+.ma-toast {
+  position: fixed;
+  top: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  padding: 0.75rem 1.5rem;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.18);
+  pointer-events: none;
+  animation: ma-slide-in 0.25s ease;
+}
+.ma-toast--success {
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  color: #15803d;
+}
+.ma-toast--error {
+  background: #fef2f2;
+  border: 1.5px solid #fca5a5;
+  color: #b91c1c;
+}
+@keyframes ma-slide-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(-12px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ── Header ── */
+.ma-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+  flex-wrap: wrap;
+}
+
+.ma-title {
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: #1a1a2e;
+  margin: 0 0 0.25rem;
+}
+
+.ma-subtitle {
+  font-size: 0.9rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.ma-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-top: 0.2rem;
+}
+.ma-status-published {
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1.5px solid #bbf7d0;
+}
+.ma-status-pending {
+  background: #fffbeb;
+  color: #d97706;
+  border: 1.5px solid #fde68a;
+}
+
+/* ── Progress bar ── */
+.ma-progress-wrap {
+  margin-bottom: 1.5rem;
+}
+
+.ma-progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  color: #64748b;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+
+.ma-progress-bar {
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.ma-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #e8572a, #f97316);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+/* ── Checklist ── */
+.ma-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-bottom: 2rem;
+}
+
+.ma-loading {
+  text-align: center;
+  color: #94a3b8;
+  padding: 2rem;
+  font-size: 0.9rem;
+}
+
+.ma-check-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: #fff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  transition: border-color 0.2s, background 0.2s;
+}
+.ma-check-item.ma-check-done {
+  background: #f8fafc;
+  border-color: #bbf7d0;
+}
+
+.ma-check-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1.5px solid #fca5a5;
+}
+.ma-check-icon--done {
+  background: #dcfce7;
+  color: #16a34a;
+  border-color: #86efac;
+}
+
+.ma-check-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.ma-check-label {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.ma-check-hint {
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+
+.ma-check-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #e8572a;
+  background: #fff5f2;
+  border: 1px solid #fcd5c8;
+  border-radius: 6px;
+  padding: 0.3rem 0.65rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.ma-check-action:hover { background: #ffe8e0; }
+.ma-check-action svg { transform: scaleX(-1); }
+
+/* ── Publish button ── */
+.ma-publish-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.ma-publish-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  background: linear-gradient(135deg, #e8572a 0%, #f97316 100%);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 0.9rem 2.5rem;
+  font-size: 1.05rem;
+  font-weight: 900;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+  box-shadow: 0 4px 16px rgba(232,87,42,0.35);
+  letter-spacing: 0.02em;
+  min-width: 200px;
+}
+.ma-publish-btn:hover:not(:disabled) {
+  opacity: 0.92;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 22px rgba(232,87,42,0.45);
+}
+.ma-publish-btn:active:not(:disabled) { transform: translateY(0); }
+.ma-publish-btn:disabled {
+  background: #cbd5e1;
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.ma-btn-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: ma-spin 0.7s linear infinite;
+}
+@keyframes ma-spin {
+  to { transform: rotate(360deg); }
+}
+
+.ma-publish-note {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  margin: 0;
+}
+
+/* ── Published state ── */
+.ma-published-state {
+  text-align: center;
+  padding: 2.5rem 1.5rem;
+  background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+  border: 2px solid #86efac;
+  border-radius: 16px;
+}
+
+.ma-published-icon {
+  font-size: 3rem;
+  margin-bottom: 0.75rem;
+}
+
+.ma-published-title {
+  font-size: 1.2rem;
+  font-weight: 900;
+  color: #15803d;
+  margin: 0 0 0.5rem;
+}
+
+.ma-published-desc {
+  font-size: 0.9rem;
+  color: #4ade80;
+  margin: 0;
+  color: #166534;
+}

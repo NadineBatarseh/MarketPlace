@@ -28,7 +28,7 @@ const STATUS_LABEL: Record<string, { label: string; color: string }> = {
 
 const fmt = (id: number) => `ORD-${String(id).padStart(3, '0')}`;
 
-export default function MerchantHome() {
+export default function MerchantHome({ onNavigate }: { onNavigate?: (page: string, highlight?: boolean) => void }) {
   const { merchant } = useMerchantAuth();
   const [stats, setStats] = useState<Stats>({ unpaidTotal: 0, accountBalance: 0, visitors: 0, newOrders: 0 });
   const [orders, setOrders] = useState<RecentOrder[]>([]);
@@ -109,9 +109,32 @@ export default function MerchantHome() {
     return <div className="mh-root"><div className="md-page-loading">جاري تحميل البيانات...</div></div>;
   }
 
+  const isPending = !merchant?.shop?.status || merchant.shop.status === 'pending';
+
   return (
     <div className="mh-root">
       {error && <div className="md-page-error md-page-error--spaced">{error}</div>}
+
+      {/* ── Activation banner ── */}
+      {isPending && merchant?.shop && (
+        <div className="mh-activation-banner">
+          <div className="mh-activation-icon">🚀</div>
+          <div className="mh-activation-text">
+            <strong>متجرك غير منشور بعد</strong>
+            <span>أكمل إعداد ملفك واضغط "انشر المتجر" لتظهر للعملاء</span>
+          </div>
+          <button
+            type="button"
+            className="mh-activation-btn"
+            onClick={() => onNavigate?.('shopSettings', true)}
+          >
+            إكمال الإعداد
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* ── Stat Cards ── */}
       <div className="mh-stats">

@@ -170,14 +170,14 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
 
       const { data: items, error } = await supabase
         .from('cart_items')
-        .select('produc_id, quantity, products(id, title, image_urls, price)')
+        .select('product_id, quantity, products(id, title, image_urls, price)')
         .eq('cartSerial_id', serialId);
 
       if (error) { console.error('[ShopContext] load cart_items failed:', error); return; }
       if (!items) return;
 
       setCartItems((items as any[]).map((item) => ({
-        id: item.produc_id,
+        id: item.product_id,
         name: item.products?.title ?? 'منتج',
         image: item.products?.image_urls?.[0] ?? '',
         price: parseFloat(String(item.products?.price ?? '0').replace(/[^\d.]/g, '')) || 0,
@@ -256,12 +256,12 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
             .from('cart_items')
             .update({ quantity: existing.quantity + 1 })
             .eq('cartSerial_id', serialId)
-            .eq('produc_id', String(product.id))
+            .eq('product_id', String(product.id))
             .then(({ error }) => { if (error) console.error('[ShopContext] cart update failed:', error); });
         } else {
           supabase
             .from('cart_items')
-            .insert({ cartSerial_id: serialId, produc_id: String(product.id), quantity: 1 })
+            .insert({ cartSerial_id: serialId, product_id: String(product.id), quantity: 1 })
             .then(({ error }) => { if (error) console.error('[ShopContext] cart insert failed:', error); });
         }
       });
@@ -278,7 +278,7 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
           .from('cart_items')
           .delete()
           .eq('cartSerial_id', serialId)
-          .eq('produc_id', String(id))
+          .eq('product_id', String(id))
           .then(({ error }) => { if (error) console.error('[ShopContext] cart delete failed:', error); });
       });
     }
@@ -296,7 +296,7 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
           .from('cart_items')
           .update({ quantity: qty })
           .eq('cartSerial_id', serialId)
-          .eq('produc_id', String(id))
+          .eq('product_id', String(id))
           .then(({ error }) => { if (error) console.error('[ShopContext] cart qty update failed:', error); });
       });
     }
