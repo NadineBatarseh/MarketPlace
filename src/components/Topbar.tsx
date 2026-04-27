@@ -5,6 +5,7 @@ import { useShop } from '../context/ShopContext';
 import { useMerchantAuth } from '../merchant-dashboard/context/MerchantAuthContext';
 import { useCustomerAuth } from '../context/CustomerAuthContext';
 import MerchantLoginModal from '../merchant-dashboard/components/MerchantLoginModal';
+import ChangePasswordModal from './ChangePasswordModal';
 import SearchInput from './SearchInput';
 
 interface Props {
@@ -34,6 +35,7 @@ export default function Topbar({
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [merchantModalOpen, setMerchantModalOpen] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -203,6 +205,13 @@ export default function Topbar({
                 )}
                 <button
                   type="button"
+                  className="topbar-dropdown-item"
+                  onClick={() => { setChangePasswordOpen(true); setDropdownOpen(false); }}
+                >
+                  🔑 تغيير كلمة المرور
+                </button>
+                <button
+                  type="button"
                   className="topbar-dropdown-item topbar-dropdown-item--logout"
                   onClick={handleLogout}
                 >
@@ -219,6 +228,10 @@ export default function Topbar({
           onClose={() => setMerchantModalOpen(false)}
           onSuccess={handleMerchantLoginSuccess}
         />
+      )}
+
+      {changePasswordOpen && (
+        <ChangePasswordModal onClose={() => setChangePasswordOpen(false)} />
       )}
     </>
   );
