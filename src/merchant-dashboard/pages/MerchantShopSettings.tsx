@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { useMerchantAuth, MerchantShop } from '../context/MerchantAuthContext';
 import supabase from '../../lib/supabase';
+import { usePublishReadiness } from '../hooks/usePublishReadiness';
 
 interface SyncResult {
   synced: number;
@@ -11,35 +12,104 @@ interface SyncResult {
 
 const API_BASE = 'http://localhost:4000';
 
-const STORE_TYPES = [
-  'ملابس رجالية', 'ملابس نسائية', 'ملابس أطفال', 'ملابس رياضية',
-  'عبايات وأزياء محتشمة', 'ملابس سهرة وزفاف', 'ملابس داخلية',
-  'أحذية', 'حقائب وشنط', 'إكسسوارات', 'مجوهرات وأساور',
-  'ساعات', 'نظارات', 'متجر أزياء متكامل',
-];
+// Red star shown on required field labels
+const Req = () => <span className="mep-req">*</span>;
 
-export default function MerchantShopSettings({ onNavigate }: { onNavigate?: (page: string) => void }) {
+interface Props {
+  onNavigate?: (page: string) => void;
+  highlightIncomplete?: boolean;
+}
+
+export default function MerchantShopSettings({ onNavigate, highlightIncomplete = false }: Props) {
   const { merchant, updateShopLocally } = useMerchantAuth();
   const shop = merchant!.shop;
   const isCreate = shop === null;
 
-  const [name, setName] = useState(shop?.name ?? '');
-  const [location, setLocation] = useState(shop?.location ?? '');
+  const [name, setName]             = useState(shop?.name ?? '');
+  const [location, setLocation]     = useState(shop?.location ?? '');
   const [description, setDescription] = useState(shop?.description ?? '');
-  const [whatsapp, setWhatsapp] = useState(shop?.whatsapp ?? '');
-  const [facebook, setFacebook] = useState(shop?.facebook ?? '');
-  const [instagram, setInstagram] = useState(shop?.instagram ?? '');
-  const [typeOfStore, setTypeOfStore] = useState<string>(shop?.Type_of_store ?? '');
-  const [logoUrl, setLogoUrl] = useState<string | null>(shop?.shopLogo ?? null);
-  const [saving, setSaving] = useState(false);
+  const _initWA = (() => {
+    const d = (shop?.whatsapp ?? '').replace(/\D/g, '');
+    if (d.startsWith('972') && d.length > 4) return { code: '972', local: d.slice(4) };
+    if (d.startsWith('970') && d.length > 4) return { code: '970', local: d.slice(4) };
+    if (d.startsWith('05')) return { code: '970', local: d.slice(2) };
+    if (d.startsWith('5') && d.length <= 9) return { code: '970', local: d.slice(1) };
+    return { code: '970', local: d };
+  })();
+  const [whatsappCode, setWhatsappCode] = useState(_initWA.code);
+  const [whatsappLocal, setWhatsappLocal] = useState(_initWA.local);
+  const [facebook, setFacebook]     = useState(shop?.facebook ?? '');
+  const [instagram, setInstagram]   = useState(shop?.instagram ?? '');
+  const [logoUrl, setLogoUrl]       = useState<string | null>(shop?.shopLogo ?? null);
+  const [saving, setSaving]         = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [saveError, setSaveError] = useState('');
+  const [saveError, setSaveError]   = useState('');
   const logoInputRef = useRef<HTMLInputElement>(null);
 
+  // Publish readiness
+  const { checks, allPassed } = usePublishReadiness(shop);
+  const [publishing, setPublishing]       = useState(false);
+  const [publishSuccess, setPublishSuccess] = useState(false);
+  const [publishError, setPublishError]   = useState('');
+  const [showMissingAlert, setShowMissingAlert] = useState(false);
+
   // Meta Catalog sync
-  const [metaSyncing, setMetaSyncing] = useState(false);
+  const [metaSyncing, setMetaSyncing]       = useState(false);
   const [metaSyncResult, setMetaSyncResult] = useState<SyncResult | null>(null);
-  const [metaSyncError, setMetaSyncError] = useState('');
+  const [metaSyncError, setMetaSyncError]   = useState('');
+
+  // Returns orange class when field is incomplete and highlight mode is on
+  const inc = (missing: boolean) =>
+    highlightIncomplete && missing ? ' mep-field--incomplete' : '';
+
+  const logoMissing     = !logoUrl;
+  const nameMissing     = name.trim().length === 0;
+  const descMissing     = description.trim().length < 20;
+  const locationMissing = location.trim().length === 0;
+  const socialMissing   = !instagram.trim() && !facebook.trim() && !whatsappLocal.trim();
+
+  const handlePublish = async () => {
+    if (!shop) return;
+    if (!allPassed) {
+      setShowMissingAlert(true);
+      return;
+    }
+    setPublishing(true);
+    setPublishError('');
+
+    if (!navigator.geolocation) {
+      setPublishError('متصفحك لا يدعم تحديد الموقع — يرجى استخدام متصفح حديث');
+      setPublishing(false);
+      return;
+    }
+
+    let publishLat: number;
+    let publishLng: number;
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 })
+      );
+      publishLat = pos.coords.latitude;
+      publishLng = pos.coords.longitude;
+    } catch {
+      setPublishError('تعذّر الوصول إلى موقعك — يرجى السماح بالوصول للموقع لنشر المتجر');
+      setPublishing(false);
+      return;
+    }
+
+    const { error } = await supabase
+      .from('shops')
+      .update({ status: 'published', shop_lat: publishLat, shop_lng: publishLng })
+      .eq('shop_id', shop.shop_id);
+
+    if (error) {
+      setPublishError('تعذّر نشر المتجر: ' + error.message);
+    } else {
+      updateShopLocally({ ...shop, status: 'published', latitude: publishLat, longitude: publishLng });
+      setPublishSuccess(true);
+    }
+    setPublishing(false);
+  };
 
   const handleMetaSync = async () => {
     setMetaSyncing(true);
@@ -47,15 +117,19 @@ export default function MerchantShopSettings({ onNavigate }: { onNavigate?: (pag
     setMetaSyncError('');
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) { setMetaSyncError('Session expired — please log in again.'); setMetaSyncing(false); return; }
+      if (!session?.access_token) {
+        setMetaSyncError('Session expired — please log in again.');
+        setMetaSyncing(false);
+        return;
+      }
       const res = await fetch(`${API_BASE}/api/catalog/sync`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
       const json = await res.json();
-      if (!res.ok && res.status !== 207) { setMetaSyncError(json.error ?? 'Sync failed'); }
-      else { setMetaSyncResult(json as SyncResult); }
+      if (!res.ok && res.status !== 207) setMetaSyncError(json.error ?? 'Sync failed');
+      else setMetaSyncResult(json as SyncResult);
     } catch (e) {
       setMetaSyncError(e instanceof Error ? e.message : 'Network error');
     }
@@ -71,19 +145,30 @@ export default function MerchantShopSettings({ onNavigate }: { onNavigate?: (pag
   };
 
   const handleSave = async () => {
-    if (!name.trim() || !location.trim() || !typeOfStore) {
-      setSaveError('يرجى ملء اسم المتجر والموقع ونوع المتجر');
+    if (!name.trim()) {
+      setSaveError('يرجى ملء اسم المتجر');
       return;
     }
     setSaving(true);
     setSaveError('');
 
+    const whatsappFull = whatsappLocal.trim()
+      ? whatsappCode + '5' + whatsappLocal.trim()
+      : null;
+
+    const payload = {
+      name: name.trim(),
+      location: location.trim() || null,
+      description: description.trim() || null,
+      shopLogo: logoUrl,
+      whatsapp: whatsappFull,
+      facebook: facebook.trim() || null,
+      instagram: instagram.trim() || null,
+    };
+
     if (isCreate) {
       const { data: merchantRow, error: mErr } = await supabase
-        .from('merchants')
-        .select('id')
-        .eq('user_id', merchant!.id)
-        .single();
+        .from('merchants').select('id').eq('user_id', merchant!.id).single();
 
       if (mErr || !merchantRow) {
         setSaveError('تعذر العثور على سجل التاجر');
@@ -93,20 +178,8 @@ export default function MerchantShopSettings({ onNavigate }: { onNavigate?: (pag
 
       const { data, error: insertErr } = await supabase
         .from('shops')
-        .insert({
-          owner_id: merchant!.id,
-          merchant_id: merchantRow.id,
-          name: name.trim(),
-          location: location.trim(),
-          description: description.trim() || null,
-          shopLogo: logoUrl,
-          Type_of_store: typeOfStore,
-          whatsapp: whatsapp.trim() || null,
-          facebook: facebook.trim() || null,
-          instagram: instagram.trim() || null,
-        })
-        .select()
-        .single();
+        .insert({ owner_id: merchant!.id, merchant_id: merchantRow.id, ...payload })
+        .select().single();
 
       if (insertErr || !data) {
         setSaveError('تعذّر إنشاء المتجر: ' + (insertErr?.message ?? 'خطأ غير معروف'));
@@ -125,6 +198,9 @@ export default function MerchantShopSettings({ onNavigate }: { onNavigate?: (pag
         instagram: data.instagram ?? null,
         merchant_id: data.merchant_id,
         Type_of_store: data.Type_of_store ?? null,
+        latitude: data.shop_lat ?? null,
+        longitude: data.shop_lng ?? null,
+        status: (data.status ?? 'pending').replace(/^'|'$/g, ''),
       };
       updateShopLocally(newShop);
       setSaving(false);
@@ -134,20 +210,11 @@ export default function MerchantShopSettings({ onNavigate }: { onNavigate?: (pag
     }
 
     // UPDATE
-    const { error: updateErr } = await supabase
-      .from('shops')
-      .update({
-        name: name.trim(),
-        location: location.trim(),
-        description: description.trim() || null,
-        shopLogo: logoUrl,
-        Type_of_store: typeOfStore,
-        whatsapp: whatsapp.trim() || null,
-        facebook: facebook.trim() || null,
-        instagram: instagram.trim() || null,
-      })
+
+    const { data: rows, error: updateErr } = await supabase
+      .from('shops').update(payload)
       .eq('shop_id', shop!.shop_id)
-      .eq('owner_id', merchant!.id);
+      .select();
 
     if (updateErr) {
       setSaveError('تعذّر الحفظ: ' + updateErr.message);
@@ -155,16 +222,26 @@ export default function MerchantShopSettings({ onNavigate }: { onNavigate?: (pag
       return;
     }
 
+    const savedRow = rows?.[0];
+    if (!savedRow) {
+      setSaveError('تعذّر الحفظ: لا توجد صلاحية لتعديل هذا المتجر — تحقق من إعدادات RLS في Supabase');
+      setSaving(false);
+      return;
+    }
+
     updateShopLocally({
       ...shop!,
-      name: name.trim(),
-      location: location.trim(),
-      description: description.trim() || null,
-      shopLogo: logoUrl,
-      Type_of_store: typeOfStore,
-      whatsapp: whatsapp.trim() || null,
-      facebook: facebook.trim() || null,
-      instagram: instagram.trim() || null,
+      name: savedRow.name ?? name.trim(),
+      location: savedRow.location ?? (location.trim() || null),
+      description: savedRow.description ?? (description.trim() || null),
+      shopLogo: savedRow.shopLogo ?? logoUrl,
+      Type_of_store: savedRow.Type_of_store ?? shop!.Type_of_store,
+      whatsapp: savedRow.whatsapp ?? whatsappFull,
+      facebook: savedRow.facebook ?? (facebook.trim() || null),
+      instagram: savedRow.instagram ?? (instagram.trim() || null),
+      latitude: savedRow.shop_lat ?? shop!.latitude,
+      longitude: savedRow.shop_lng ?? shop!.longitude,
+      status: (savedRow.status as string ?? shop!.status).replace(/^'|'$/g, ''),
     });
     setSaving(false);
     setSaveSuccess(true);
@@ -173,13 +250,50 @@ export default function MerchantShopSettings({ onNavigate }: { onNavigate?: (pag
 
   return (
     <div className="mep-root">
-      <h1 className="mep-title">{isCreate ? 'إنشاء متجرك' : 'إعدادات المتجر'}</h1>
+      <div className="mep-top-row">
+        <h1 className="mep-title">{isCreate ? 'إنشاء متجرك' : 'إعدادات المتجر'}</h1>
 
-      {/* Logo */}
+        {!isCreate && (
+          shop?.status === 'published' ? (
+            <div className="mep-published-badge">
+              <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              منشور
+            </div>
+          ) : (
+            <div className="mep-publish-top-wrap">
+              {publishError && <p className="mep-publish-error-inline">{publishError}</p>}
+              <button
+                type="button"
+                className="mep-publish-btn-top"
+                onClick={handlePublish}
+                disabled={publishing}
+              >
+                {publishing ? 'جاري النشر...' : 'انشر المتجر'}
+              </button>
+            </div>
+          )
+        )}
+      </div>
+
+      {publishSuccess && <div className="mep-save-success">🎉 تم نشر متجرك بنجاح!</div>}
+
+      {highlightIncomplete && (
+        <div className="mep-incomplete-banner">
+          أكمل الحقول المميزة بالبرتقالي لتتمكن من نشر متجرك
+        </div>
+      )}
+
+      {/* ── Logo ── */}
       <div className="mep-section">
-        <h2 className="mep-section-title">🖼️ شعار المتجر</h2>
-        <div className="mep-logo-area">
-          <div className="mep-logo-preview" onClick={() => logoInputRef.current?.click()} title="انقر لتغيير الشعار">
+        <h2 className="mep-section-title">🖼️ شعار المتجر <Req /></h2>
+        <div className={`mep-logo-area${inc(logoMissing)}`}>
+          <div
+            className="mep-logo-preview"
+            onClick={() => logoInputRef.current?.click()}
+            title="انقر لتغيير الشعار"
+          >
             {logoUrl
               ? <img src={logoUrl} alt="شعار المتجر" />
               : <span className="mep-logo-placeholder">🏪</span>
@@ -194,64 +308,123 @@ export default function MerchantShopSettings({ onNavigate }: { onNavigate?: (pag
               📁 اختر صورة
             </button>
           </div>
-          <input ref={logoInputRef} type="file" accept="image/*" onChange={handleLogoChange} className="mep-file-hidden" aria-label="اختر شعار المتجر" />
+          <input
+            ref={logoInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleLogoChange}
+            className="mep-file-hidden"
+            aria-label="اختر شعار المتجر"
+          />
         </div>
       </div>
 
-      {/* Basic info */}
+      {/* ── Basic info ── */}
       <div className="mep-section">
         <h2 className="mep-section-title">📋 معلومات المتجر</h2>
         <div className="mep-fields">
-          <div className="mep-field">
-            <label>اسم المتجر</label>
-            <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="أدخل اسم متجرك" />
+
+          <div className={`mep-field${inc(nameMissing)}`}>
+            <label>اسم المتجر <Req /></label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="أدخل اسم متجرك"
+            />
           </div>
-          <div className="mep-field">
-            <label>الموقع / المنطقة</label>
-            <input type="text" value={location} onChange={e => setLocation(e.target.value)} placeholder="مثال: الرياض، حي النزهة" />
+
+          <div className={`mep-field${inc(locationMissing)}`}>
+            <label>المنطقة / المدينة <Req /></label>
+            <input
+              type="text"
+              value={location}
+              onChange={e => setLocation(e.target.value)}
+              placeholder="مثال: الرياض، حي النزهة"
+            />
           </div>
-          <div className="mep-field">
-            <label>وصف المتجر</label>
-            <input type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="وصف مختصر عن متجرك" />
+
+          <div className={`mep-field${inc(descMissing)}`}>
+            <label>
+              وصف المتجر <Req />
+              <span className="mep-label-hint">(20 حرف على الأقل)</span>
+            </label>
+            <input
+              type="text"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="وصف مختصر عن متجرك ومنتجاتك"
+            />
           </div>
-          <div className="mep-field">
-            <label>نوع المتجر *</label>
-            <select value={typeOfStore} onChange={e => setTypeOfStore(e.target.value)}>
-              <option value="">-- اختر نوع المتجر --</option>
-              {STORE_TYPES.map(t => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          </div>
+
         </div>
       </div>
 
-      {/* Social links */}
+      {/* ── Social links ── */}
       <div className="mep-section">
-        <h2 className="mep-section-title">🔗 روابط التواصل الاجتماعي</h2>
+        <h2 className="mep-section-title">
+          🔗 روابط التواصل الاجتماعي
+          {highlightIncomplete && socialMissing && (
+            <span className="mep-section-req-note">مطلوب واحد على الأقل</span>
+          )}
+        </h2>
         <div className="mep-fields">
+
           <div className="mep-field">
             <label>واتساب</label>
-            <input type="text" value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="مثال: 966501234567" dir="ltr" />
+            <div className="mep-whatsapp-split" dir="ltr">
+              <select
+                value={whatsappCode}
+                onChange={e => setWhatsappCode(e.target.value)}
+                className="mep-whatsapp-code"
+              >
+                <option value="970">+970</option>
+                <option value="972">+972</option>
+              </select>
+              <span className="mep-whatsapp-prefix">05</span>
+              <input
+                type="text"
+                value={whatsappLocal}
+                onChange={e => setWhatsappLocal(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                placeholder="XXXXXXXX"
+                maxLength={8}
+                className="mep-whatsapp-local"
+                dir="ltr"
+              />
+            </div>
           </div>
+
           <div className="mep-field">
             <label>فيسبوك</label>
-            <input type="text" value={facebook} onChange={e => setFacebook(e.target.value)} placeholder="رابط صفحة الفيسبوك" dir="ltr" />
+            <input
+              type="text"
+              value={facebook}
+              onChange={e => setFacebook(e.target.value)}
+              placeholder="رابط صفحة الفيسبوك"
+              dir="ltr"
+            />
           </div>
+
           <div className="mep-field">
             <label>إنستجرام</label>
-            <input type="text" value={instagram} onChange={e => setInstagram(e.target.value)} placeholder="@username أو رابط الحساب" dir="ltr" />
+            <input
+              type="text"
+              value={instagram}
+              onChange={e => setInstagram(e.target.value)}
+              placeholder="@username أو رابط الحساب"
+              dir="ltr"
+            />
           </div>
+
         </div>
       </div>
 
-      {/* Connected Accounts */}
+      {/* ── Connected Accounts ── */}
       {!isCreate && (
         <div className="mep-section">
           <h2 className="mep-section-title">🔌 الحسابات المرتبطة</h2>
           <div className="ca-grid">
 
-            {/* Instagram card */}
             <div className="ca-card">
               <div className="ca-card-header">
                 <div className="ca-card-icon ca-icon-instagram">
@@ -280,7 +453,6 @@ export default function MerchantShopSettings({ onNavigate }: { onNavigate?: (pag
               </div>
             </div>
 
-            {/* Meta Catalog card */}
             <div className="ca-card">
               <div className="ca-card-header">
                 <div className="ca-card-icon ca-icon-meta">
@@ -294,7 +466,6 @@ export default function MerchantShopSettings({ onNavigate }: { onNavigate?: (pag
                 </div>
               </div>
               <p className="ca-card-desc">زامن منتجاتك مع كتالوج Meta لعرضها على Facebook وInstagram Shopping.</p>
-
               {metaSyncResult && (
                 <div className="ca-sync-result ca-sync-ok">
                   ✓ تمت مزامنة {metaSyncResult.synced} منتج في {metaSyncResult.batches} دفعة
@@ -302,7 +473,6 @@ export default function MerchantShopSettings({ onNavigate }: { onNavigate?: (pag
                 </div>
               )}
               {metaSyncError && <div className="ca-sync-result ca-sync-error">✕ {metaSyncError}</div>}
-
               <div className="ca-card-actions">
                 <button type="button" className="ca-btn ca-btn-primary" onClick={handleMetaSync} disabled={metaSyncing}>
                   {metaSyncing ? 'جاري المزامنة...' : '↑ مزامنة جميع المنتجات'}
@@ -324,6 +494,26 @@ export default function MerchantShopSettings({ onNavigate }: { onNavigate?: (pag
       <button type="button" className="mep-save-btn" onClick={handleSave} disabled={saving}>
         {saving ? 'جاري الحفظ...' : isCreate ? '🚀 إنشاء المتجر' : '💾 حفظ الإعدادات'}
       </button>
+
+      {showMissingAlert && (
+        <div className="mep-alert-overlay" onClick={() => setShowMissingAlert(false)}>
+          <div className="mep-alert-box" onClick={e => e.stopPropagation()}>
+            <h3 className="mep-alert-title">أكمل هذه الخطوات لنشر متجرك</h3>
+            <ul className="mep-alert-list">
+              {checks.filter(c => !c.passed).map(c => (
+                <li key={c.id}>
+                  <span className="mep-alert-x">✗</span> {c.label}
+                </li>
+              ))}
+            </ul>
+            <p className="mep-alert-hint">احفظ الإعدادات أولاً ثم اضغط «انشر المتجر»</p>
+            <button type="button" className="mep-alert-close-btn" onClick={() => setShowMissingAlert(false)}>
+              حسناً، سأكملها
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

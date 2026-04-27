@@ -716,7 +716,7 @@ app.post("/api/activate", async (req: Request, res: Response) => {
 
   const { data: merchantApp } = await supabase
     .from("merchant_applications")
-    .select("name_of_owner, name_of_store, email, phone_number, \"Type_of_store\", description")
+    .select("name_of_owner, name_of_store, email, phone_number, \"Type_of_store\", description, city")
     .eq("platform_email", platformEmail.trim())
     .eq("status", "approved")
     .maybeSingle();
@@ -821,6 +821,7 @@ app.post("/api/activate", async (req: Request, res: Response) => {
       name: merchantApp.name_of_store ?? applicantName,
       Type_of_store: merchantApp.Type_of_store ?? null,
       description: merchantApp.description ?? null,
+      location: merchantApp.city ?? null,
     });
     if (shopError) {
       console.error("[/api/activate] shop creation failed:", shopError.message);

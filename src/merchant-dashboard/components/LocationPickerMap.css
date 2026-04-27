@@ -1,0 +1,70 @@
+/* ══════════════════════════════════════════════
+   LocationPickerMap.css — interactive map picker
+   RTL-compatible, SouqLink palette
+   ══════════════════════════════════════════════ */
+
+.lpm-root {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.lpm-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.lpm-geo-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #1a1a2e;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s, opacity 0.18s;
+}
+.lpm-geo-btn:hover:not(:disabled) { background: #2d2d4e; }
+.lpm-geo-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.lpm-coords {
+  font-size: 0.8rem;
+  color: #16a34a;
+  font-weight: 600;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+}
+
+.lpm-error {
+  font-size: 0.83rem;
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  padding: 0.4rem 0.7rem;
+}
+
+.lpm-map {
+  width: 100%;
+  height: 320px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  cursor: crosshair;
+  z-index: 0;
+}
+
+.lpm-hint {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  margin: 0;
+  text-align: center;
+}
