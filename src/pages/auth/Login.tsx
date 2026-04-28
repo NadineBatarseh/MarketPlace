@@ -22,12 +22,27 @@ export default function Login() {
     const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
 
     if (authError || !data.user) {
+      // Check if this is a Google account trying to use password login
+      if (authError?.message === 'Invalid login credentials') {
+        const { data: userRow } = await supabase
+          .from('Users')
+          .select('provider')
+          .eq('email', email.trim().toLowerCase())
+          .maybeSingle();
+
+        if (userRow?.provider === 'google') {
+          setLoading(false);
+          setError('هذا الحساب مرتبط بـ Google — استخدم زر "تسجيل الدخول بـ Google" ولا تحتاج إلى كلمة مرور');
+          return;
+        }
+      }
+
       setLoading(false);
       setError(
-        authError?.message === 'Invalid login credentials'
-          ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة'
-          : authError?.message === 'Email not confirmed'
+        authError?.message === 'Email not confirmed'
           ? 'لم يتم تأكيد البريد الإلكتروني بعد — تحقق من بريدك واضغط على رابط التأكيد'
+          : authError?.message === 'Invalid login credentials'
+          ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة'
           : 'حدث خطأ غير متوقع'
       );
       return;
@@ -74,7 +89,10 @@ export default function Login() {
             />
           </div>
           <div className="auth-field">
-            <label>كلمة المرور</label>
+            <div className="auth-field-label-row">
+              <label>كلمة المرور</label>
+              <Link to="/forgot-password" className="auth-forgot-link">نسيت كلمة المرور؟</Link>
+            </div>
             <div className="auth-input-wrap">
               <input
                 type={showPassword ? 'text' : 'password'}

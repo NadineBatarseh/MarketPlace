@@ -22,6 +22,8 @@ import Cart from "./pages/Cart";
 import Favorite from "./pages/Favorite";
 import CheckoutPage from "./pages/checkout/CheckoutPage";
 import Login from "./pages/auth/Login";
+import ForgotPassword from "./pages/auth/ForgotPassword";
+import ResetPassword from "./pages/auth/ResetPassword";
 import CustomerSignup from "./pages/auth/CustomerSignup";
 import MerchantApplication from "./pages/auth/MerchantApplication";
 import DeliveryApplication from "./pages/auth/DeliveryApplication";
@@ -85,6 +87,8 @@ export default function App() {
 
               {/* Auth pages — always public */}
               <Route path="/login" element={<Login />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/signup" element={<CustomerSignup />} />
               <Route path="/merchant-application" element={<MerchantApplication />} />
               <Route path="/delivery-application" element={<DeliveryApplication />} />

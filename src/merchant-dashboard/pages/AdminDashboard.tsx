@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import emailjs from '@emailjs/browser';
 import supabase from '../../lib/supabase';
+import ChangePasswordModal from '../../components/ChangePasswordModal';
 import './AdminDashboard.css';
 
 interface MerchantApp {
@@ -120,6 +121,7 @@ export default function AdminDashboard() {
   const [activeSection, setActiveSection] = useState<Section>('merchant');
   const contentRef = useRef<HTMLElement>(null);
   const [activeTab, setActiveTab] = useState<FilterTab>('pending');
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   // Merchant state
   const [apps, setApps] = useState<MerchantApp[]>([]);
@@ -619,12 +621,22 @@ export default function AdminDashboard() {
         <div className="ad-topbar-center">
           <h1 className="ad-topbar-title">لوحة تحكم الإدارة</h1>
         </div>
-        <button
-          className="ad-logout-btn"
-          onClick={async () => { await supabase.auth.signOut(); window.location.href = '/login'; }}
-        >
-          تسجيل الخروج
-        </button>
+        <div className="ad-topbar-actions">
+          <button
+            type="button"
+            className="ad-topbar-btn"
+            onClick={() => setShowChangePassword(true)}
+          >
+            🔑 تغيير كلمة المرور
+          </button>
+          <button
+            type="button"
+            className="ad-topbar-btn ad-topbar-btn--logout"
+            onClick={async () => { await supabase.auth.signOut(); window.location.href = '/login'; }}
+          >
+            تسجيل الخروج
+          </button>
+        </div>
       </header>
 
       {/* ── Body: sidebar + content ── */}
@@ -1401,6 +1413,10 @@ export default function AdminDashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {showChangePassword && (
+        <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
       )}
     </div>
   );

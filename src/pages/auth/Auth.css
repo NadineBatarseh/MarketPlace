@@ -191,6 +191,20 @@
   color: var(--auth-muted);
 }
 
+/* ── Forgot password link row ── */
+.auth-field-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.auth-forgot-link {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--auth-green);
+  text-decoration: none;
+}
+.auth-forgot-link:hover { text-decoration: underline; }
+
 /* ── Error ── */
 .auth-error {
   background: #fef2f2;

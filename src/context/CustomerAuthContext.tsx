@@ -71,6 +71,7 @@ export function CustomerAuthProvider({ children }: { children: React.ReactNode }
       name,
       role: 'customer',
       status: 'approved',
+      provider: 'email',
     });
 
     return { success: true };

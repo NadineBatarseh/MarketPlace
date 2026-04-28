@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import supabase from '../../lib/supabase';
 import { useSharedAuth } from '../../context/AuthContext';
+import ChangePasswordModal from '../../components/ChangePasswordModal';
 import './DriverDashboard.css';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -106,6 +107,7 @@ export default function DriverDashboard() {
   const [avgDailyEarnings, setAvgDailyEarnings] = useState(0);
   const [loading, setLoading]         = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   const initials = getInitials(name ?? 'م');
   const greeting = getGreeting();
@@ -293,7 +295,7 @@ export default function DriverDashboard() {
         </div>
 
         <div className="dd-sidebar-profile">
-          <div className="dd-avatar" style={{ background: avatarColor(name ?? 'م') }}>
+          <div className="dd-avatar" style={{ '--dd-avatar-bg': avatarColor(name ?? 'م') } as React.CSSProperties}>
             {initials}
           </div>
           <div className="dd-avatar-info">
@@ -344,7 +346,11 @@ export default function DriverDashboard() {
             <span className="dd-nav-icon">👤</span>
             الملف الشخصي
           </span>
-          <button className="dd-nav-item" onClick={handleLogout}>
+          <button type="button" className="dd-nav-item" onClick={() => setShowChangePassword(true)}>
+            <span className="dd-nav-icon">🔑</span>
+            تغيير كلمة المرور
+          </button>
+          <button type="button" className="dd-nav-item" onClick={handleLogout}>
             <span className="dd-nav-icon">⏻</span>
             تسجيل الخروج
           </button>
@@ -357,8 +363,8 @@ export default function DriverDashboard() {
         <header className="dd-header">
           <div className="dd-header-right">
             <div className="dd-shift-badge">⏰ الوردية: {shiftLabel}</div>
-            <button className="dd-icon-btn">🔔</button>
-            <div className="dd-header-avatar" style={{ background: avatarColor(name ?? 'م') }}>
+            <button type="button" className="dd-icon-btn">🔔</button>
+            <div className="dd-header-avatar" style={{ '--dd-avatar-bg': avatarColor(name ?? 'م') } as React.CSSProperties}>
               {initials}
             </div>
           </div>
@@ -433,6 +439,7 @@ export default function DriverDashboard() {
               <div className="dd-orders-header-right">
                 <select
                   className="dd-status-filter"
+                  aria-label="تصفية حسب الحالة"
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
                 >
@@ -472,7 +479,7 @@ export default function DriverDashboard() {
                           <div className="dd-customer">
                             <div
                               className="dd-customer-avatar"
-                              style={{ background: avatarColor(o.customer_name) }}
+                              style={{ '--dd-avatar-bg': avatarColor(o.customer_name) } as React.CSSProperties}
                             >
                               {custInitials}
                             </div>
@@ -500,6 +507,10 @@ export default function DriverDashboard() {
 
         </div>
       </div>
+
+      {showChangePassword && (
+        <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
+      )}
     </div>
   );
 }

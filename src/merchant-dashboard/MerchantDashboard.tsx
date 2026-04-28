@@ -11,6 +11,7 @@ import DraftProductsPage from './pages/DraftProductsPage';
 import MerchantSettings from './pages/MerchantSettings';
 import MerchantShopSettings from './pages/MerchantShopSettings';
 import MerchantLoginModal from './components/MerchantLoginModal';
+import ChangePasswordModal from '../components/ChangePasswordModal';
 import InstagramConnectPage from './pages/InstagramConnectPage';
 import ChatBot from '../components/chatbot/ChatBot';
 import './MerchantDashboard.css';
@@ -48,6 +49,7 @@ export default function MerchantDashboard() {
   });
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const avatarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -187,6 +189,17 @@ export default function MerchantDashboard() {
                     <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
                   </svg>
                   إعدادات الحساب
+                </button>
+                <button
+                  type="button"
+                  className="md-avatar-menu-item"
+                  onClick={() => { setShowChangePassword(true); setShowAvatarMenu(false); }}
+                >
+                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                  تغيير كلمة المرور
                 </button>
                 <button
                   type="button"
@@ -347,6 +360,10 @@ export default function MerchantDashboard() {
       </div>
 
       <ChatBot role="merchant" />
+
+      {showChangePassword && (
+        <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
+      )}
     </div>
   );
 }

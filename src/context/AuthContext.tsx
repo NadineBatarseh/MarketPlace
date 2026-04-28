@@ -77,12 +77,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const role = rawUser.user_metadata?.role?.trim() || 'customer';
         if (role === 'customer') {
           const name = rawUser.user_metadata?.full_name ?? rawUser.email?.split('@')[0] ?? null;
+          const provider = rawUser.app_metadata?.provider === 'google' ? 'google' : 'email';
           await supabase.from('Users').insert({
             user_id: rawUser.id,
             email: rawUser.email,
             name,
             role: 'customer',
             status: 'approved',
+            provider,
           });
           setRole('customer');
           setName(name);

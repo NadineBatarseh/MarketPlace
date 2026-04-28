@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import supabase from '../../lib/supabase';
 import { useSharedAuth } from '../../context/AuthContext';
 import RouteMap, { type MapStop } from './components/RouteMap';
+import ChangePasswordModal from '../../components/ChangePasswordModal';
 import './DriverDashboard.css';
 
 function getInitials(name: string): string {
@@ -34,6 +35,7 @@ export default function DriverRouteMap() {
   const [driverLoc, setDriverLoc] = useState<{ lat: number; lng: number } | null>(null);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string | null>(null);
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   const initials = getInitials(name ?? 'م');
 
@@ -194,7 +196,10 @@ export default function DriverRouteMap() {
 
         <div className="dd-sidebar-footer">
           <span className="dd-nav-item"><span className="dd-nav-icon">👤</span>الملف الشخصي</span>
-          <button className="dd-nav-item" onClick={handleLogout}>
+          <button type="button" className="dd-nav-item" onClick={() => setShowChangePassword(true)}>
+            <span className="dd-nav-icon">🔑</span>تغيير كلمة المرور
+          </button>
+          <button type="button" className="dd-nav-item" onClick={handleLogout}>
             <span className="dd-nav-icon">⏻</span>تسجيل الخروج
           </button>
         </div>
@@ -273,6 +278,10 @@ export default function DriverRouteMap() {
           )}
         </div>
       </div>
+
+      {showChangePassword && (
+        <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
+      )}
     </div>
   );
 }

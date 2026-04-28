@@ -55,6 +55,33 @@ body:has(.ad-root) {
   color: rgba(255,255,255,0.9);
 }
 
+.ad-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ad-topbar-btn {
+  padding: 0.45rem 1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.25);
+  background: rgba(255,255,255,0.08);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+  font-family: inherit;
+}
+.ad-topbar-btn:hover { background: rgba(255,255,255,0.16); }
+
+.ad-topbar-btn--logout {
+  border-color: rgba(239,68,68,0.5);
+  color: #fca5a5;
+}
+.ad-topbar-btn--logout:hover { background: rgba(239,68,68,0.15); }
+
 /* ── Body ── */
 .ad-body {
   display: flex;
