@@ -42,7 +42,14 @@ export default function ForgotPassword() {
     });
 
     if (error) {
-      setErrorMsg('حدث خطأ أثناء إرسال الرابط، حاول مرة أخرى');
+      const msg = error.message?.toLowerCase() ?? '';
+      if (msg.includes('rate') || msg.includes('limit') || error.status === 429) {
+        setErrorMsg('تم إرسال رابط مسبقاً — انتظر دقيقة ثم حاول مرة أخرى');
+      } else if (msg.includes('email') && msg.includes('not')) {
+        setErrorMsg('هذا البريد غير مسجل في نظام المصادقة — تواصل مع الدعم');
+      } else {
+        setErrorMsg('حدث خطأ أثناء إرسال الرابط، حاول مرة أخرى');
+      }
       setState('error');
       return;
     }
@@ -63,7 +70,7 @@ export default function ForgotPassword() {
             <br /><br />
             افتح بريدك الإلكتروني واضغط على الرابط — صلاحيته ساعة واحدة.
           </p>
-          <Link to="/login" className="auth-submit" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
+          <Link to="/login" className="auth-submit auth-submit--link">
             العودة لتسجيل الدخول
           </Link>
         </div>

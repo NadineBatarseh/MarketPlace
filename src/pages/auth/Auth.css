@@ -245,6 +245,16 @@
   cursor: default;
 }
 
+/* ── Centered card variant ── */
+.auth-card--centered { text-align: center; }
+
+/* ── Submit as block link ── */
+.auth-submit--link {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+}
+
 /* ── Switch Link ── */
 .auth-switch {
   text-align: center;

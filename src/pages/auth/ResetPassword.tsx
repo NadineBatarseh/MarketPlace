@@ -56,14 +56,21 @@ export default function ResetPassword() {
     setLoading(true);
     const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
     setLoading(false);
-    if (updateError) { setError('حدث خطأ أثناء تغيير كلمة المرور، حاول مرة أخرى'); return; }
+    if (updateError) {
+      if (updateError.status === 422 || updateError.message?.includes('invalid')) {
+        setError('انتهت صلاحية الرابط أو تم استخدامه مسبقاً — اطلب رابطاً جديداً من صفحة نسيت كلمة المرور');
+      } else {
+        setError('حدث خطأ أثناء تغيير كلمة المرور، حاول مرة أخرى');
+      }
+      return;
+    }
     setStatus('success');
   };
 
   if (status === 'loading') {
     return (
       <div className="auth-page" dir="rtl">
-        <div className="auth-card" style={{ textAlign: 'center' }}>
+        <div className="auth-card auth-card--centered">
           <div className="auth-logo">⏳</div>
           <h1 className="auth-title">جاري التحقق من الرابط...</h1>
         </div>
@@ -84,8 +91,7 @@ export default function ResetPassword() {
           </p>
           <Link
             to="/forgot-password"
-            className="auth-submit"
-            style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}
+            className="auth-submit auth-submit--link"
           >
             طلب رابط جديد
           </Link>
