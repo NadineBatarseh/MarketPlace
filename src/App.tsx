@@ -51,7 +51,7 @@ const ROLE_HOME: Record<string, string> = {
 function RoleHomeRedirect() {
   const { rawUser, role, isLoading } = useSharedAuth();
   if (isLoading) return null;
-  if (!rawUser) return <Navigate to="/store" replace />;
+  if (!rawUser || role === 'customer') return <Navigate to="/store" replace />;
   return <Navigate to={ROLE_HOME[role ?? ''] ?? '/store'} replace />;
 }
 
@@ -99,6 +99,7 @@ export default function App() {
 
               {/* Customer or guest browsing — other roles redirected to their home */}
               <Route path="/store" element={<RoleGuard allowedRoles={['customer']} allowGuests><HomePage /></RoleGuard>} />
+              <Route path="/stores-list" element={<RoleGuard allowedRoles={['customer']} allowGuests><StoreListPage /></RoleGuard>} />
               <Route path="/store/:shopId" element={<RoleGuard allowedRoles={['customer']} allowGuests><StoreWrapper /></RoleGuard>} />
               <Route path="/stores/:shopId" element={<RoleGuard allowedRoles={['customer']} allowGuests><StorePageWrapper /></RoleGuard>} />
               <Route path="/product/:id" element={<RoleGuard allowedRoles={['customer']} allowGuests><ProductDetailPage /></RoleGuard>} />
