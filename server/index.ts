@@ -9,7 +9,6 @@ import path from "path";
 import { supabase } from "./supabase.js";
 import { uploadImage } from "./uploadImage.js";
 import { randomUUID } from "crypto";
-import logisticsRouter from "../src/pages/delivery agent/LogisticsRoutes.js";
 import webhookRouter from "./webhooks.js";
 import searchRouter from "./search/searchRouter.js";
 import productUploadRouter from "./routes/productUploadRouter.js";
@@ -492,7 +491,6 @@ app.use("/api/products", productCRUDRouter);
 app.use("/api/webhooks/supabase-products", supabaseProductWebhookRouter);
 
 /* ---------- LOGISTICS ---------- */
-app.use("/api/logistics", logisticsRouter);
 
 /* ---------- DEBUG (remove after fixing) ---------- */
 

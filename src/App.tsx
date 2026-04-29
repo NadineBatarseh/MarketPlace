@@ -1,7 +1,7 @@
+import HomePage from './pages/home/HomePage';
 import StoreListPage from './pages/storeList/StoreListPage';
 import SearchResultsPage from './pages/search/SearchResultsPage';
 import DeliveryAgentPage from './pages/delivery agent/DeliveryAgentPage';
-import CollectorPage from './pages/delivery agent/CollectorPage';
 import HubPage from './pages/delivery agent/HubPage';
 import DelivererPage from './pages/delivery agent/DelivererPage';
 import DriverDashboard from './pages/delivery agent/DriverDashboard';
@@ -98,7 +98,7 @@ export default function App() {
               <Route path="/meta-connect" element={<MetaConnectPage />} />
 
               {/* Customer or guest browsing — other roles redirected to their home */}
-              <Route path="/store" element={<RoleGuard allowedRoles={['customer']} allowGuests><StoreListPage /></RoleGuard>} />
+              <Route path="/store" element={<RoleGuard allowedRoles={['customer']} allowGuests><HomePage /></RoleGuard>} />
               <Route path="/store/:shopId" element={<RoleGuard allowedRoles={['customer']} allowGuests><StoreWrapper /></RoleGuard>} />
               <Route path="/stores/:shopId" element={<RoleGuard allowedRoles={['customer']} allowGuests><StorePageWrapper /></RoleGuard>} />
               <Route path="/product/:id" element={<RoleGuard allowedRoles={['customer']} allowGuests><ProductDetailPage /></RoleGuard>} />
@@ -125,8 +125,7 @@ export default function App() {
               <Route path="/c" element={<RoleGuard allowedRoles={['delivery']}><DelivererPage /></RoleGuard>} />
 
               {/* Delivery or Hub worker */}
-              <Route path="/hub" element={<RoleGuard allowedRoles={['delivery', 'hubworker']}><HubPage /></RoleGuard>} />
-              <Route path="/collector" element={<RoleGuard allowedRoles={['delivery', 'hubworker']}><CollectorPage /></RoleGuard>} />
+             // <Route path="/hub" element={<RoleGuard allowedRoles={['delivery', 'hubworker']}><HubPage /></RoleGuard>} />
             </Routes>
           </BrowserRouter>
         </ShopProviderWithAuth>
