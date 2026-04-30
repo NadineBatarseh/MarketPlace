@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import LogisticsSettingsPage from '../../pages/admin/logistics/LogisticsSettingsPage';
+import BatchMonitorPage from '../../pages/admin/BatchMonitorPage';
 import emailjs from '@emailjs/browser';
 import supabase from '../../lib/supabase';
 import ChangePasswordModal from '../../components/ChangePasswordModal';
@@ -44,13 +46,14 @@ interface HubWorkerApp {
 }
 
 type FilterTab = 'pending' | 'approved' | 'rejected';
-type Section = 'merchant' | 'delivery' | 'hubworker' | 'batches';
+type Section = 'merchant' | 'delivery' | 'hubworker' | 'batches' | 'logistics';
 
 interface BatchConfigForm {
   max_driver_capacity: number;
   max_stops_per_batch: number;
   max_allowed_wait: number;
   max_distance_km: number;
+  max_wait_days: number;
 }
 
 interface BatchShop {
@@ -179,9 +182,9 @@ export default function AdminDashboard() {
   // Batch config state
   // draftConfig holds raw string values for the inputs so the user can type freely.
   // batchConfig / savedConfig hold parsed numbers for comparison and saving.
-  const defaultConfig: BatchConfigForm = { max_driver_capacity: 20, max_stops_per_batch: 6, max_allowed_wait: 60, max_distance_km: 5 };
+  const defaultConfig: BatchConfigForm = { max_driver_capacity: 20, max_stops_per_batch: 6, max_allowed_wait: 60, max_distance_km: 5, max_wait_days: 3 };
   const [savedConfig, setSavedConfig]     = useState<BatchConfigForm>(defaultConfig);
-  const [draftConfig, setDraftConfig]     = useState({ max_driver_capacity: '20', max_stops_per_batch: '6', max_allowed_wait: '60', max_distance_km: '5' });
+  const [draftConfig, setDraftConfig]     = useState({ max_driver_capacity: '20', max_stops_per_batch: '6', max_allowed_wait: '60', max_distance_km: '5', max_wait_days: '3' });
   const [configLoading, setConfigLoading] = useState(false);
   const [configSaving, setConfigSaving]   = useState(false);
   const [configError, setConfigError]     = useState('');
@@ -193,13 +196,15 @@ export default function AdminDashboard() {
     max_stops_per_batch: parseFloat(draftConfig.max_stops_per_batch) || savedConfig.max_stops_per_batch,
     max_allowed_wait:    parseFloat(draftConfig.max_allowed_wait)    || savedConfig.max_allowed_wait,
     max_distance_km:     parseFloat(draftConfig.max_distance_km)     || savedConfig.max_distance_km,
+    max_wait_days:       parseFloat(draftConfig.max_wait_days)       || savedConfig.max_wait_days,
   };
 
   const configChanged =
     parsedConfig.max_driver_capacity !== savedConfig.max_driver_capacity ||
     parsedConfig.max_stops_per_batch !== savedConfig.max_stops_per_batch ||
     parsedConfig.max_allowed_wait    !== savedConfig.max_allowed_wait    ||
-    parsedConfig.max_distance_km     !== savedConfig.max_distance_km;
+    parsedConfig.max_distance_km     !== savedConfig.max_distance_km     ||
+    parsedConfig.max_wait_days       !== savedConfig.max_wait_days;
 
   const toggleBatch = (idx: number) => setExpandedBatches(prev => {
     const next = new Set(prev); next.has(idx) ? next.delete(idx) : next.add(idx); return next;
@@ -257,7 +262,7 @@ export default function AdminDashboard() {
     setConfigError('');
     const { data, error } = await supabase
       .from('batch_config')
-      .select('max_driver_capacity, max_stops_per_batch, max_allowed_wait, max_distance_km')
+      .select('max_driver_capacity, max_stops_per_batch, max_allowed_wait, max_distance_km, max_wait_days')
       .single();
     if (error) setConfigError('تعذّر تحميل الإعدادات: ' + error.message);
     else if (data) {
@@ -268,6 +273,7 @@ export default function AdminDashboard() {
         max_stops_per_batch: String(d.max_stops_per_batch),
         max_allowed_wait:    String(d.max_allowed_wait),
         max_distance_km:     String(d.max_distance_km),
+        max_wait_days:       String(d.max_wait_days),
       });
     }
     setConfigLoading(false);
@@ -284,6 +290,7 @@ export default function AdminDashboard() {
         max_stops_per_batch: parsedConfig.max_stops_per_batch,
         max_allowed_wait:    parsedConfig.max_allowed_wait,
         max_distance_km:     parsedConfig.max_distance_km,
+        max_wait_days:       parsedConfig.max_wait_days,
       })
       .eq('id', 1);
     if (error) setConfigError('فشل الحفظ: ' + error.message);
@@ -607,8 +614,8 @@ export default function AdminDashboard() {
   const filteredDelivery = deliveryApps.filter(a => a.status === activeTab);
   const filteredHub = hubApps.filter(a => a.status === activeTab);
 
-  const loading = activeSection === 'merchant' ? appsLoading : activeSection === 'delivery' ? deliveryLoading : hubLoading;
-  const loadError = activeSection === 'merchant' ? appsError : activeSection === 'delivery' ? deliveryError : hubError;
+  const loading = activeSection === 'merchant' ? appsLoading : activeSection === 'delivery' ? deliveryLoading : activeSection === 'hubworker' ? hubLoading : false;
+  const loadError = activeSection === 'merchant' ? appsError : activeSection === 'delivery' ? deliveryError : activeSection === 'hubworker' ? hubError : '';
   const currentApps = activeSection === 'merchant' ? filteredMerchants : activeSection === 'delivery' ? filteredDelivery : filteredHub;
   const allCurrentApps = activeSection === 'merchant' ? apps : activeSection === 'delivery' ? deliveryApps : hubApps;
 
@@ -664,11 +671,19 @@ export default function AdminDashboard() {
 
           <div
             className={`ad-sidebar-item${activeSection === 'batches' ? ' ad-sidebar-item--active' : ''}`}
-            onClick={() => { setActiveSection('batches'); loadBatches(); loadConfig(); }}
+            onClick={() => setActiveSection('batches')}
           >
             <span className="ad-sidebar-icon">🗂</span>
             تجميعات الاستلام
             {batches.length > 0 && <span className="ad-sidebar-badge">{batches.length}</span>}
+          </div>
+
+          <div
+            className={`ad-sidebar-item${activeSection === 'logistics' ? ' ad-sidebar-item--active' : ''}`}
+            onClick={() => setActiveSection('logistics')}
+          >
+            <span className="ad-sidebar-icon">⚙️</span>
+            إعدادات خوارزمية التوزيع
           </div>
 
         </aside>
@@ -678,7 +693,7 @@ export default function AdminDashboard() {
           {loadError && <div className="ad-error">{loadError}</div>}
 
           {/* Filter tabs — only for application sections */}
-          {activeSection !== 'batches' && (
+          {activeSection !== 'batches' && activeSection !== 'logistics' && (
             <div className="ad-tabs">
               {(['pending', 'approved', 'rejected'] as FilterTab[]).map(tab => {
                 const count = allCurrentApps.filter(a => a.status === tab).length;
@@ -697,7 +712,7 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {activeSection !== 'batches' && (loading ? (
+          {activeSection !== 'batches' && activeSection !== 'logistics' && (loading ? (
             <div className="ad-loading">جاري تحميل الطلبات...</div>
           ) : currentApps.length === 0 ? (
             <div className="ad-empty">لا توجد طلبات في هذا القسم</div>
@@ -896,8 +911,18 @@ export default function AdminDashboard() {
         </div>
           ))}
 
+          {/* ── Logistics settings section ── */}
+          {activeSection === 'logistics' && (
+            <LogisticsSettingsPage embedded />
+          )}
+
           {/* ── Batches section ── */}
           {activeSection === 'batches' && (
+            <BatchMonitorPage />
+          )}
+
+          {/* ── Batches section (legacy inline — kept for reference) ── */}
+          {false && (
             <div className="ad-batches-layout">
 
               {/* Left: batch list */}
@@ -1132,6 +1157,26 @@ export default function AdminDashboard() {
                             onChange={e => { setConfigSuccess(false); setDraftConfig(p => ({ ...p, max_distance_km: e.target.value })); }}
                           />
                           <span className="ad-config-unit">كم</span>
+                        </div>
+                      </div>
+
+                      {/* Max wait days */}
+                      <div className="ad-config-field">
+                        <div className="ad-config-label-row">
+                          <span className="ad-config-label-text">أقصى أيام انتظار الشحنة</span>
+                          <button className="ad-config-info-btn" onClick={e => { e.stopPropagation(); setActiveTooltip(t => t === 'wait_days' ? null : 'wait_days'); }}>!</button>
+                          {activeTooltip === 'wait_days' && (
+                            <div className="ad-config-tooltip">الحد الأقصى لعدد الأيام التي يُسمح فيها للشحنة بالانتظار قبل الاستلام — يُحسب الموعد النهائي تلقائياً عند إنشاء الشحنة</div>
+                          )}
+                        </div>
+                        <div className="ad-config-input-row">
+                          <input type="number" min={1} max={30} className="ad-config-input"
+                            title="أقصى أيام انتظار الشحنة"
+                            placeholder="أدخل عدد الأيام"
+                            value={draftConfig.max_wait_days}
+                            onChange={e => { setConfigSuccess(false); setDraftConfig(p => ({ ...p, max_wait_days: e.target.value })); }}
+                          />
+                          <span className="ad-config-unit">يوم</span>
                         </div>
                       </div>
 

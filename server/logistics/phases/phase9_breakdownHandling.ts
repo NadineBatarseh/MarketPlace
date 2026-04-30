@@ -1,0 +1,79 @@
+import supabase from '../../supabase';
+import { Shipment } from '../types';
+
+interface BreakdownResult {
+  re_pooled: string[];
+  stranded: string[];
+}
+
+// Phase 9 — Breakdown Handling
+// When a courier reports a breakdown, shipments are split by physical custody:
+//   batched / reserved → re-pool as 'available' (still at origin, not yet collected)
+//   picked_up          → mark as 'stranded' (physically in the vehicle)
+export async function handleBreakdown(batchId: string): Promise<BreakdownResult> {
+  const { data: shipments, error } = await supabase
+    .from('shipments')
+    .select('id, status')
+    .eq('batch_id', batchId);
+
+  if (error || !shipments) {
+    console.error('[Phase 9] handleBreakdown fetch error:', error?.message);
+    return { re_pooled: [], stranded: [] };
+  }
+
+  const notYetCollected = (shipments as Pick<Shipment, 'id' | 'status'>[])
+    .filter(s => s.status === 'batched' || s.status === 'reserved')
+    .map(s => s.id);
+
+  const alreadyCollected = (shipments as Pick<Shipment, 'id' | 'status'>[])
+    .filter(s => s.status === 'picked_up')
+    .map(s => s.id);
+
+  // Re-pool shipments that haven't been collected yet
+  if (notYetCollected.length > 0) {
+    const { error: rePoolError } = await supabase
+      .from('shipments')
+      .update({
+        status: 'available',
+        batch_id: null,
+        reserved_until: null,
+        delayed_reason: null,
+        delayed_until: null,
+      })
+      .in('id', notYetCollected);
+
+    if (rePoolError) {
+      console.error('[Phase 9] re-pool error:', rePoolError.message);
+    }
+  }
+
+  // Mark physically collected shipments as stranded
+  if (alreadyCollected.length > 0) {
+    const { error: strandedError } = await supabase
+      .from('shipments')
+      .update({ status: 'stranded' })
+      .in('id', alreadyCollected);
+
+    if (strandedError) {
+      console.error('[Phase 9] stranded update error:', strandedError.message);
+    }
+
+    // Alert dispatchers — in production this would send a push notification or email
+    console.warn(
+      `[Phase 9] STRANDED shipments require manual handling: [${alreadyCollected.join(', ')}]`
+    );
+  }
+
+  // Mark the batch as cancelled
+  await supabase
+    .from('batches')
+    .update({ status: 'cancelled' })
+    .eq('id', batchId);
+
+  console.log(
+    `[Phase 9] Breakdown handled for batch ${batchId}. ` +
+    `Re-pooled: ${notYetCollected.length}, Stranded: ${alreadyCollected.length}`
+  );
+
+  return { re_pooled: notYetCollected, stranded: alreadyCollected };
+}

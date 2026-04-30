@@ -16,6 +16,7 @@ import metaCatalogRouter from "./routes/metaCatalogAPIRouter.js";
 import productCRUDRouter from "./routes/productCRUDRouter.js";
 import supabaseProductWebhookRouter from "./routes/supabaseProductWebhookRouter.js";
 import instagramAuthRouter from "./routes/instagramAuthRouter.js";
+import { logisticsRouter, bootstrapLogistics } from "./logistics/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -491,6 +492,7 @@ app.use("/api/products", productCRUDRouter);
 app.use("/api/webhooks/supabase-products", supabaseProductWebhookRouter);
 
 /* ---------- LOGISTICS ---------- */
+app.use('/api/logistics', logisticsRouter);
 
 /* ---------- DEBUG (remove after fixing) ---------- */
 
@@ -912,9 +914,10 @@ if (process.env.NODE_ENV === "production") {
 const PORT = Number(process.env.PORT) || 4000;
 
 function startServer() {
-  const server = app.listen(PORT, () =>
-    console.log(`✅ Server running on http://localhost:${PORT}`)
-  );
+  const server = app.listen(PORT, () => {
+    console.log(`✅ Server running on http://localhost:${PORT}`);
+    bootstrapLogistics();
+  });
 
   server.on('error', async (err: NodeJS.ErrnoException) => {
     if (err.code === 'EADDRINUSE') {
