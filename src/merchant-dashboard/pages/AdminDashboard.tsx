@@ -110,6 +110,7 @@ type ApproveModalState<T> = {
   message: string;
   sending: boolean;
   error: string;
+  generatingEmail?: boolean;
 };
 
 type RejectModalState<T> = {
@@ -296,6 +297,68 @@ export default function AdminDashboard() {
     if (error) setConfigError('فشل الحفظ: ' + error.message);
     else { setConfigSuccess(true); setSavedConfig({ ...parsedConfig }); loadBatches(); }
     setConfigSaving(false);
+  };
+
+  // ── Platform email generation ────────────────────────────────────────────────
+
+  const arabicToLatin: Record<string, string> = {
+    'ا': 'a', 'أ': 'a', 'إ': 'a', 'آ': 'a', 'ء': 'a', 'ى': 'a',
+    'ب': 'b', 'ت': 't', 'ث': 'th', 'ج': 'j', 'ح': 'h', 'خ': 'kh',
+    'د': 'd', 'ذ': 'dh', 'ر': 'r', 'ز': 'z', 'س': 's', 'ش': 'sh',
+    'ص': 's', 'ض': 'd', 'ط': 't', 'ظ': 'z', 'ع': 'a', 'غ': 'gh',
+    'ف': 'f', 'ق': 'q', 'ك': 'k', 'ل': 'l', 'م': 'm', 'ن': 'n',
+    'ه': 'h', 'و': 'w', 'ي': 'y', 'ة': 'a', 'ئ': 'y', 'ؤ': 'w',
+  };
+
+  const normalizeName = (name: string) =>
+    name
+      .split('')
+      .map(ch => arabicToLatin[ch] ?? ch)
+      .join('')
+      .toLowerCase()
+      .replace(/\s+/g, '')
+      .replace(/[^a-z0-9]/g, '');
+
+  const randomShortCode = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const length = Math.random() < 0.5 ? 4 : 5;
+    return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  };
+
+  const generateUniqueEmail = async (
+    name: string,
+    table: 'merchant_applications' | 'delivery_applications' | 'hubworker_applications'
+  ): Promise<string> => {
+    const base = normalizeName(name);
+    let email = `${base}${randomShortCode()}@souqlink.com`;
+    for (let i = 0; i < 10; i++) {
+      const candidate = `${base}${randomShortCode()}@souqlink.com`;
+      const { data } = await supabase.from(table).select('id').eq('platform_email', candidate).maybeSingle();
+      email = candidate;
+      if (!data) break;
+    }
+    return email;
+  };
+
+  const generateMerchantEmail = async () => {
+    if (!approveModal.app) return;
+    setApproveModal(prev => ({ ...prev, generatingEmail: true }));
+    const email = await generateUniqueEmail(approveModal.app.name_of_store, 'merchant_applications');
+    setApproveModal(prev => ({ ...prev, platformEmail: email, generatingEmail: false }));
+  };
+
+  const generateDeliveryEmail = async () => {
+    if (!deliveryApproveModal.app) return;
+    setDeliveryApproveModal(prev => ({ ...prev, generatingEmail: true }));
+    const email = await generateUniqueEmail(deliveryApproveModal.app.name, 'delivery_applications');
+    setDeliveryApproveModal(prev => ({ ...prev, platformEmail: email, generatingEmail: false }));
+  };
+
+  const generateHubEmail = async () => {
+    if (!hubApproveModal.app) return;
+    setHubApproveModal(prev => ({ ...prev, generatingEmail: true }));
+    const email = await generateUniqueEmail(hubApproveModal.app.name, 'hubworker_applications');
+    setHubApproveModal(prev => ({ ...prev, platformEmail: email, generatingEmail: false }));
   };
 
   // ── Merchant loaders / actions ──────────────────────────────────────────────
@@ -1214,14 +1277,24 @@ export default function AdminDashboard() {
             <p className="ad-modal-to">إلى: <strong>{approveModal.app.email}</strong></p>
             <div className="ad-modal-field">
               <label className="ad-modal-label">البريد الإلكتروني الرسمي للتاجر *</label>
-              <input
-                type="email"
-                className="ad-modal-input"
-                placeholder="merchant@souqlink.com"
-                value={approveModal.platformEmail}
-                onChange={e => setApproveModal(prev => ({ ...prev, platformEmail: e.target.value }))}
-                disabled={approveModal.sending}
-              />
+              <div className="ad-modal-input-row">
+                <input
+                  type="email"
+                  className="ad-modal-input"
+                  placeholder="merchant@souqlink.com"
+                  value={approveModal.platformEmail}
+                  onChange={e => setApproveModal(prev => ({ ...prev, platformEmail: e.target.value }))}
+                  disabled={approveModal.sending || !!approveModal.generatingEmail}
+                />
+                <button
+                  type="button"
+                  className="ad-btn ad-btn--generate"
+                  onClick={generateMerchantEmail}
+                  disabled={approveModal.sending || !!approveModal.generatingEmail}
+                >
+                  {approveModal.generatingEmail ? '...' : 'توليد'}
+                </button>
+              </div>
             </div>
             <div className="ad-modal-field">
               <label className="ad-modal-label">نص الرسالة</label>
@@ -1299,14 +1372,24 @@ export default function AdminDashboard() {
             <p className="ad-modal-to">إلى: <strong>{deliveryApproveModal.app.email}</strong></p>
             <div className="ad-modal-field">
               <label className="ad-modal-label">البريد الإلكتروني الرسمي للمندوب *</label>
-              <input
-                type="email"
-                className="ad-modal-input"
-                placeholder="delivery@souqlink.com"
-                value={deliveryApproveModal.platformEmail}
-                onChange={e => setDeliveryApproveModal(prev => ({ ...prev, platformEmail: e.target.value }))}
-                disabled={deliveryApproveModal.sending}
-              />
+              <div className="ad-modal-input-row">
+                <input
+                  type="email"
+                  className="ad-modal-input"
+                  placeholder="delivery@souqlink.com"
+                  value={deliveryApproveModal.platformEmail}
+                  onChange={e => setDeliveryApproveModal(prev => ({ ...prev, platformEmail: e.target.value }))}
+                  disabled={deliveryApproveModal.sending || !!deliveryApproveModal.generatingEmail}
+                />
+                <button
+                  type="button"
+                  className="ad-btn ad-btn--generate"
+                  onClick={generateDeliveryEmail}
+                  disabled={deliveryApproveModal.sending || !!deliveryApproveModal.generatingEmail}
+                >
+                  {deliveryApproveModal.generatingEmail ? '...' : 'توليد'}
+                </button>
+              </div>
             </div>
             <div className="ad-modal-field">
               <label className="ad-modal-label">نص الرسالة</label>
@@ -1383,14 +1466,24 @@ export default function AdminDashboard() {
             <p className="ad-modal-to">إلى: <strong>{hubApproveModal.app.email}</strong></p>
             <div className="ad-modal-field">
               <label className="ad-modal-label">البريد الإلكتروني الرسمي للعامل *</label>
-              <input
-                type="email"
-                className="ad-modal-input"
-                placeholder="hub@souqlink.com"
-                value={hubApproveModal.platformEmail}
-                onChange={e => setHubApproveModal(prev => ({ ...prev, platformEmail: e.target.value }))}
-                disabled={hubApproveModal.sending}
-              />
+              <div className="ad-modal-input-row">
+                <input
+                  type="email"
+                  className="ad-modal-input"
+                  placeholder="hub@souqlink.com"
+                  value={hubApproveModal.platformEmail}
+                  onChange={e => setHubApproveModal(prev => ({ ...prev, platformEmail: e.target.value }))}
+                  disabled={hubApproveModal.sending || !!hubApproveModal.generatingEmail}
+                />
+                <button
+                  type="button"
+                  className="ad-btn ad-btn--generate"
+                  onClick={generateHubEmail}
+                  disabled={hubApproveModal.sending || !!hubApproveModal.generatingEmail}
+                >
+                  {hubApproveModal.generatingEmail ? '...' : 'توليد'}
+                </button>
+              </div>
             </div>
             <div className="ad-modal-field">
               <label className="ad-modal-label">نص الرسالة</label>
