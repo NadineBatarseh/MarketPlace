@@ -33,35 +33,6 @@ interface Product {
   shop_id: string;
 }
 
-// ── Secondary Nav ─────────────────────────────────────────────────────────────
-
-function SecondaryNav() {
-  const navigate = useNavigate();
-  const links = [
-    { label: 'الصفحة الرئيسية', href: '/store' },
-    { label: 'الأقسام', anchor: 'categories' },
-    { label: 'المتاجر', anchor: 'stores' },
-    { label: 'العروض', anchor: 'deals' },
-  ];
-  const go = (e: React.MouseEvent<HTMLAnchorElement>, href?: string, anchor?: string) => {
-    e.preventDefault();
-    if (href) navigate(href);
-    else if (anchor) document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth' });
-  };
-  return (
-    <nav className="hp-subnav">
-      <div className="hp-subnav__inner">
-        {links.map(l => (
-          <a key={l.label} href={l.href ?? `#${l.anchor}`} className="hp-subnav__link"
-            onClick={e => go(e, l.href, l.anchor)}>
-            {l.label}
-          </a>
-        ))}
-      </div>
-    </nav>
-  );
-}
-
 // ── Hero ──────────────────────────────────────────────────────────────────────
 
 const SLIDES = [
@@ -85,52 +56,22 @@ function HeroSection() {
   return (
     <div className="hp-hero-wrap">
       <section className="hp-hero">
-        {/* Decorative shapes */}
-        <div className="hp-hero__bg-circle hp-hero__bg-circle--1" />
-        <div className="hp-hero__bg-circle hp-hero__bg-circle--2" />
+        <div className="hp-hero__overlay" />
 
         <div className="hp-hero__inner">
-          {/* RIGHT — main content (RTL: flex-start = visual right) */}
           <div className="hp-hero__content" key={cur}>
             <h1 className="hp-hero__title">{slide.title}</h1>
             <p className="hp-hero__subtitle">{slide.subtitle}</p>
             <button className="hp-hero__cta" onClick={() => navigate('/store')}>تسوق الآن</button>
           </div>
-
-          {/* CENTER — decorative logo mark */}
-          <div className="hp-hero__center">
-            <div className="hp-hero__emblem">
-              <svg width="90" height="90" viewBox="0 0 100 100" fill="none">
-                <circle cx="50" cy="50" r="48" fill="rgba(19,101,64,0.08)" />
-                <circle cx="50" cy="50" r="35" fill="rgba(19,101,64,0.12)" />
-                <path d="M30 55 Q50 35 70 55" stroke="#136540" strokeWidth="3" fill="none" strokeLinecap="round"/>
-                <circle cx="50" cy="58" r="10" fill="#136540" opacity="0.15"/>
-                <path d="M43 48 L50 38 L57 48" stroke="#136540" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
-          </div>
-
-          {/* LEFT — sale box (RTL: flex-end = visual left) */}
-          <div className="hp-hero__sale">
-            <div className="hp-hero__sale-tag">عروض حصرية!</div>
-            <p className="hp-hero__sale-sub">لفترة محدودة</p>
-            <p className="hp-hero__sale-pct">
-              خصم حتى <strong>30%</strong>
-            </p>
-            <p className="hp-hero__sale-desc">على مجموعة مختارة</p>
-            <button className="hp-hero__sale-btn"
-              onClick={() => document.getElementById('deals')?.scrollIntoView({ behavior: 'smooth' })}>
-              تسوق الآن
-            </button>
-          </div>
         </div>
 
         {/* Arrows */}
-        <button className="hp-hero__arr hp-hero__arr--r"
+        <button type="button" aria-label="السابق" title="السابق" className="hp-hero__arr hp-hero__arr--r"
           onClick={() => setCur(c => (c - 1 + SLIDES.length) % SLIDES.length)}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
-        <button className="hp-hero__arr hp-hero__arr--l"
+        <button type="button" aria-label="التالي" title="التالي" className="hp-hero__arr hp-hero__arr--l"
           onClick={() => setCur(c => (c + 1) % SLIDES.length)}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
         </button>
@@ -138,7 +79,7 @@ function HeroSection() {
         {/* Dots */}
         <div className="hp-hero__dots">
           {SLIDES.map((_, i) => (
-            <button key={i} className={`hp-hero__dot${i === cur ? ' hp-hero__dot--on' : ''}`} onClick={() => setCur(i)} />
+            <button type="button" key={i} aria-label={`الشريحة ${i + 1}`} title={`الشريحة ${i + 1}`} className={`hp-hero__dot${i === cur ? ' hp-hero__dot--on' : ''}`} onClick={() => setCur(i)} />
           ))}
         </div>
       </section>
@@ -161,7 +102,6 @@ function CategoryCard({ cat }: { cat: Category }) {
 }
 
 function CategoriesSection({ cats, loading }: { cats: Category[]; loading: boolean }) {
-  const navigate = useNavigate();
   return (
     <section className="hp-section" id="categories">
       <div className="hp-wrap">
@@ -171,10 +111,10 @@ function CategoriesSection({ cats, loading }: { cats: Category[]; loading: boole
 
         {loading ? (
           <div className="hp-cat-grid">
-            {Array.from({ length: 6 }).map((_, i) => (
+            {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="hp-cat-card hp-cat-card--sk">
                 <div className="hp-sk-circle" />
-                <div className="hp-sk-line" style={{ width: 56 }} />
+                <div className="hp-sk-line hp-sk-line--56" />
               </div>
             ))}
           </div>
@@ -182,22 +122,17 @@ function CategoriesSection({ cats, loading }: { cats: Category[]; loading: boole
           <p className="hp-empty">لا توجد أقسام حالياً</p>
         ) : (
           <div className="hp-cat-grid">
-            {cats.slice(0, 6).map(c => <CategoryCard key={c.id} cat={c} />)}
+            {cats.map(c => <CategoryCard key={c.id} cat={c} />)}
           </div>
         )}
-
-        <div className="hp-center-action">
-          <button className="hp-see-all-btn" onClick={() => navigate('/store')}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
-            عرض جميع الأقسام
-          </button>
-        </div>
       </div>
     </section>
   );
 }
 
 // ── Stores ────────────────────────────────────────────────────────────────────
+
+const STORES_INITIAL = 6;
 
 function StoreCard({ store }: { store: Store }) {
   const navigate = useNavigate();
@@ -210,30 +145,25 @@ function StoreCard({ store }: { store: Store }) {
           <div className="hp-store-card__logo-ph">{store.name.charAt(0)}</div>
         )}
       </div>
-      <div className="hp-store-card__info">
-        <p className="hp-store-card__name">{store.name}</p>
-        <div className="hp-store-card__rating">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill={store.avg_rating ? '#f5a623' : '#d1d5db'}>
-            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-          </svg>
-          {store.avg_rating ? (
-            <>
-              <span className="hp-store-card__score">{Number(store.avg_rating).toFixed(1)}</span>
-              <span className="hp-store-card__cnt">({store.review_count})</span>
-            </>
-          ) : (
-            <span className="hp-store-card__cnt">جديد</span>
-          )}
-        </div>
+      <p className="hp-store-card__name">{store.name}</p>
+      <div className="hp-store-card__rating">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill={store.avg_rating ? '#f5a623' : '#d1d5db'}>
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+        </svg>
+        {store.avg_rating ? (
+          <span className="hp-store-card__score">{Number(store.avg_rating).toFixed(1)}</span>
+        ) : (
+          <span className="hp-store-card__cnt">جديد</span>
+        )}
       </div>
     </div>
   );
 }
 
 function StoresSection({ stores, loading }: { stores: Store[]; loading: boolean }) {
-  const navigate = useNavigate();
-  const rowRef = useRef<HTMLDivElement>(null);
-  const scrollBy = (dir: number) => { rowRef.current?.scrollBy({ left: dir * 220, behavior: 'smooth' }); };
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? stores : stores.slice(0, STORES_INITIAL);
+  const hasMore = stores.length > STORES_INITIAL;
 
   return (
     <section className="hp-section hp-section--alt" id="stores">
@@ -242,39 +172,35 @@ function StoresSection({ stores, loading }: { stores: Store[]; loading: boolean 
           <h2 className="hp-section-title">متاجر موثوقة</h2>
         </div>
 
-        <div className="hp-store-carousel">
-          <button className="hp-carousel-arr hp-carousel-arr--r" onClick={() => scrollBy(-1)}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6"/></svg>
-          </button>
-
-          <div className="hp-store-row" ref={rowRef}>
-            {loading
-              ? Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="hp-store-card hp-store-card--sk">
-                    <div className="hp-sk-circle hp-sk-circle--sm" />
-                    <div style={{ flex: 1 }}>
-                      <div className="hp-sk-line" style={{ width: 80 }} />
-                      <div className="hp-sk-line" style={{ width: 55, marginTop: 5 }} />
-                    </div>
-                  </div>
-                ))
-              : stores.slice(0, 10).map(s => <StoreCard key={s.shop_id} store={s} />)
-            }
+        {loading ? (
+          <div className="hp-store-grid">
+            {Array.from({ length: STORES_INITIAL }).map((_, i) => (
+              <div key={i} className="hp-store-card hp-store-card--sk">
+                <div className="hp-sk-circle" />
+                <div className="hp-sk-line hp-sk-line--70" />
+                <div className="hp-sk-line hp-sk-line--44" />
+              </div>
+            ))}
           </div>
+        ) : stores.length === 0 ? (
+          <p className="hp-empty">لا توجد متاجر حالياً</p>
+        ) : (
+          <div className="hp-store-grid">
+            {visible.map(s => <StoreCard key={s.shop_id} store={s} />)}
+          </div>
+        )}
 
-          <button className="hp-carousel-arr hp-carousel-arr--l" onClick={() => scrollBy(1)}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
-          </button>
-        </div>
-
-        {stores.length === 0 && !loading && <p className="hp-empty">لا توجد متاجر حالياً</p>}
-
-        <div className="hp-center-action">
-          <button className="hp-see-all-btn" onClick={() => navigate('/store')}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
-            عرض جميع المتاجر
-          </button>
-        </div>
+        {hasMore && !loading && (
+          <div className="hp-center-action">
+            <button className="hp-see-all-btn" onClick={() => setShowAll(v => !v)}>
+              {showAll ? 'عرض أقل' : 'عرض المزيد من المتاجر'}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                className={showAll ? 'hp-chevron-up' : 'hp-chevron-down'}>
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -356,11 +282,14 @@ function ProductCard({ product }: { product: Product }) {
   );
 }
 
+const PRODUCTS_INITIAL = 8;
+
 function ProductsSection({ products, loading }: { products: Product[]; loading: boolean }) {
   const [tab, setTab] = useState<'new'|'deals'>('new');
-  const rowRef = useRef<HTMLDivElement>(null);
-  const scrollBy = (dir: number) => { rowRef.current?.scrollBy({ left: dir * 220, behavior: 'smooth' }); };
+  const [showAll, setShowAll] = useState(false);
   const shown = tab === 'deals' ? products.filter(p => p.discount_pct != null) : products;
+  const visible = showAll ? shown : shown.slice(0, PRODUCTS_INITIAL);
+  const hasMore = shown.length > PRODUCTS_INITIAL;
 
   return (
     <section className="hp-section" id="deals">
@@ -368,74 +297,41 @@ function ProductsSection({ products, loading }: { products: Product[]; loading: 
         <div className="hp-section-hd">
           <h2 className="hp-section-title">منتجات حديثة وعروض مميزة</h2>
           <div className="hp-tabs">
-            <button className={`hp-tab${tab==='new'?' hp-tab--on':''}`} onClick={() => setTab('new')}>جديدنا</button>
-            <button className={`hp-tab${tab==='deals'?' hp-tab--on':''}`} onClick={() => setTab('deals')}>عروض خاصة</button>
+            <button type="button" className={`hp-tab${tab==='new'?' hp-tab--on':''}`} onClick={() => { setTab('new'); setShowAll(false); }}>جديدنا</button>
+            <button type="button" className={`hp-tab${tab==='deals'?' hp-tab--on':''}`} onClick={() => { setTab('deals'); setShowAll(false); }}>عروض خاصة</button>
           </div>
         </div>
 
-        <div className="hp-prod-carousel">
-          <button className="hp-carousel-arr hp-carousel-arr--r" onClick={() => scrollBy(-1)}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6"/></svg>
-          </button>
-
-          {loading ? (
-            <div className="hp-prod-row" ref={rowRef}>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="hp-prod-card hp-prod-card--sk">
-                  <div className="hp-sk-rect" />
-                  <div style={{padding:'10px 12px'}}>
-                    <div className="hp-sk-line" style={{width:'80%'}} />
-                    <div className="hp-sk-line" style={{width:'50%',marginTop:6}} />
-                    <div className="hp-sk-btn" />
-                  </div>
+        {loading ? (
+          <div className="hp-prod-grid">
+            {Array.from({ length: PRODUCTS_INITIAL }).map((_, i) => (
+              <div key={i} className="hp-prod-card hp-prod-card--sk">
+                <div className="hp-sk-rect" />
+                <div className="hp-prod-card-sk-body">
+                  <div className="hp-sk-line hp-sk-line--80" />
+                  <div className="hp-sk-line hp-sk-line--50" />
+                  <div className="hp-sk-btn" />
                 </div>
-              ))}
-            </div>
-          ) : shown.length === 0 ? (
-            <p className="hp-empty">{tab==='deals'?'لا توجد عروض خاصة':'لا توجد منتجات'}</p>
-          ) : (
-            <div className="hp-prod-row" ref={rowRef}>
-              {shown.slice(0, 10).map(p => <ProductCard key={p.id} product={p} />)}
-            </div>
-          )}
-
-          <button className="hp-carousel-arr hp-carousel-arr--l" onClick={() => scrollBy(1)}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ── Newsletter ────────────────────────────────────────────────────────────────
-
-function Newsletter() {
-  const [email, setEmail] = useState('');
-  const [done, setDone] = useState(false);
-  const submit = () => { if (email.trim()) setDone(true); };
-
-  return (
-    <section className="hp-newsletter">
-      <div className="hp-wrap hp-newsletter__inner">
-        <div className="hp-newsletter__text">
-          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="1.8" style={{flexShrink:0}}>
-            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-            <polyline points="22,6 12,13 2,6"/>
-          </svg>
-          <div>
-            <h2 className="hp-newsletter__title">اشترك في نشرتنا الإخبارية</h2>
-            <p className="hp-newsletter__sub">احصل على أحدث العروض والخصومات مباشرة في بريدك الإلكتروني</p>
+              </div>
+            ))}
           </div>
-        </div>
-        {done ? (
-          <div className="hp-newsletter__ok">✓ شكراً! تم الاشتراك بنجاح</div>
+        ) : shown.length === 0 ? (
+          <p className="hp-empty">{tab==='deals'?'لا توجد عروض خاصة':'لا توجد منتجات'}</p>
         ) : (
-          <div className="hp-newsletter__form">
-            <input type="email" className="hp-newsletter__input" placeholder="أدخل بريدك الإلكتروني"
-              value={email} onChange={e => setEmail(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && submit()} />
-            <button className="hp-newsletter__btn" onClick={submit}>اشترك</button>
+          <div className="hp-prod-grid">
+            {visible.map(p => <ProductCard key={p.id} product={p} />)}
+          </div>
+        )}
+
+        {hasMore && !loading && (
+          <div className="hp-center-action">
+            <button type="button" className="hp-see-all-btn" onClick={() => setShowAll(v => !v)}>
+              {showAll ? 'عرض أقل' : 'عرض المزيد من المنتجات'}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                className={showAll ? 'hp-chevron-up' : 'hp-chevron-down'}>
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
           </div>
         )}
       </div>
@@ -471,26 +367,22 @@ function Footer() {
           </div>
           <p className="hp-footer__about">منصة تجمع أفضل المتاجر المحلية الموثوقة.<br />تجربة تسوق مميزة وآمنة.</p>
           <div className="hp-footer__socials">
-            {/* Instagram */}
-            <a href="#" className="hp-footer__social">
+            <a href="#" className="hp-footer__social" title="Instagram" aria-label="Instagram">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/>
               </svg>
             </a>
-            {/* Facebook */}
-            <a href="#" className="hp-footer__social">
+            <a href="#" className="hp-footer__social" title="Facebook" aria-label="Facebook">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/>
               </svg>
             </a>
-            {/* Twitter/X */}
-            <a href="#" className="hp-footer__social">
+            <a href="#" className="hp-footer__social" title="Twitter / X" aria-label="Twitter / X">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none">
                 <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
               </svg>
             </a>
-            {/* YouTube */}
-            <a href="#" className="hp-footer__social">
+            <a href="#" className="hp-footer__social" title="YouTube" aria-label="YouTube">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M22.54 6.42a2.78 2.78 0 0 0-1.95-1.96C18.88 4 12 4 12 4s-6.88 0-8.59.46a2.78 2.78 0 0 0-1.95 1.96A29 29 0 0 0 1 12a29 29 0 0 0 .46 5.58A2.78 2.78 0 0 0 3.41 19.54C5.12 20 12 20 12 20s6.88 0 8.59-.46a2.78 2.78 0 0 0 1.95-1.96A29 29 0 0 0 23 12a29 29 0 0 0-.46-5.58z"/>
                 <polygon points="9.75 15.02 15.5 12 9.75 8.98 9.75 15.02"/>
@@ -506,12 +398,12 @@ function Footer() {
 
         <div>
           <h4 className="hp-footer__col-ttl">خدمة العملاء</h4>
-          <ul className="hp-footer__links">{service.map(s => <li key={s}><button className="hp-footer__lbtn">{s}</button></li>)}</ul>
+          <ul className="hp-footer__links">{service.map(s => <li key={s}><button type="button" className="hp-footer__lbtn">{s}</button></li>)}</ul>
         </div>
 
         <div>
           <h4 className="hp-footer__col-ttl">مساعدة</h4>
-          <ul className="hp-footer__links">{help.map(s => <li key={s}><button className="hp-footer__lbtn">{s}</button></li>)}</ul>
+          <ul className="hp-footer__links">{help.map(s => <li key={s}><button type="button" className="hp-footer__lbtn">{s}</button></li>)}</ul>
         </div>
 
         <div>
@@ -564,12 +456,10 @@ export default function HomePage() {
   return (
     <div dir="rtl" className="hp-page">
       <Topbar />
-      <SecondaryNav />
       <HeroSection />
       <CategoriesSection cats={cats} loading={loadingCats} />
       <StoresSection stores={stores} loading={loadingStores} />
       <ProductsSection products={products} loading={loadingProds} />
-      <Newsletter />
       <Footer />
     </div>
   );

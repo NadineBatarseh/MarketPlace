@@ -55,6 +55,10 @@ export default function Topbar({
 
   function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== 'Enter') return;
+    submitSearch();
+  }
+
+  function submitSearch() {
     const q = (searchQuery ?? navQuery).trim();
     if (!q) return;
     if (onSearchSubmit) { onSearchSubmit(q); return; }
@@ -84,6 +88,7 @@ export default function Topbar({
   return (
     <>
       <header className="topbar">
+        {/* Logo */}
         <a href="#" className="logo" onClick={(e) => { e.preventDefault(); navigate('/store'); }}>
           <img src="/logo.png" alt="Souq Link" className="logo-img" />
           <div className="logo-text">
@@ -92,64 +97,85 @@ export default function Topbar({
           </div>
         </a>
 
+        {/* Nav links */}
+        <nav className="topbar-nav-links">
+          <span
+            className={`topbar-nav-link${pathname === '/store' || pathname === '/' ? ' active' : ''}`}
+            onClick={() => navigate('/store')}
+          >الصفحة الرئيسية</span>
+          <span
+            className={`topbar-nav-link${pathname === '/stores-list' ? ' active' : ''}`}
+            onClick={() => navigate('/stores-list')}
+          >المتاجر</span>
+          <span className="topbar-nav-link">الأقسام</span>
+          <span className="topbar-nav-link">العروض</span>
+        </nav>
+
+        {/* Search bar */}
         <div className="search-bar">
           <SearchInput
             className="topbar-search-input"
             value={searchQuery ?? navQuery}
             onChange={handleSearchChange}
             onKeyDown={handleSearchKeyDown}
-            placeholder="ابحث ..."
+            placeholder="ابحث عن منتج أو متجر..."
           />
+          <button className="search-submit-btn" onClick={submitSearch} type="button" title="بحث" aria-label="بحث">
+            <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" width="14" height="14">
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.35-4.35" />
+            </svg>
+          </button>
         </div>
 
         <nav className="nav-actions">
-          {/* Stores */}
+          {/* Home */}
           <div
-            className={`nav-action${pathname === '/stores-list' ? ' nav-action--active' : ''}`}
-            onClick={() => navigate('/stores-list')}
+            className={`nav-action${pathname === '/store' ? ' nav-action--active' : ''}`}
+            onClick={() => navigate('/store')}
+            title="الرئيسية"
           >
             <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
               <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
               <polyline points="9 22 9 12 15 12 15 22"/>
             </svg>
-            <span>المتاجر</span>
           </div>
 
           {/* Wishlist */}
           <div
             className={`nav-action${pathname === '/favorites' ? ' nav-action--active' : ''}`}
             onClick={() => navigate('/favorites')}
+            title="Wishlist"
           >
             {favCount > 0 && <div className="badge">{favCount}</div>}
             <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
             </svg>
-            <span>Wishlist</span>
           </div>
 
           {/* Orders */}
           <div
             className={`nav-action${pathname === '/orders' ? ' nav-action--active' : ''}`}
             onClick={() => navigate('/orders')}
+            title="الطلبات"
           >
             <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
               <path d="M18 8h1a4 4 0 0 1 0 8h-1" /><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" />
               <line x1="6" y1="1" x2="6" y2="4" /><line x1="10" y1="1" x2="10" y2="4" /><line x1="14" y1="1" x2="14" y2="4" />
             </svg>
-            <span>الطلبات</span>
           </div>
 
           {/* Cart */}
           <div
             className={`nav-action${pathname === '/cart' ? ' nav-action--active' : ''}`}
             onClick={() => navigate('/cart')}
+            title="السلة"
           >
             {cartCount > 0 && <div className="badge">{cartCount}</div>}
             <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
               <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
               <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
             </svg>
-            <span>السلة</span>
           </div>
 
           {/* Account with dropdown */}
@@ -158,11 +184,11 @@ export default function Topbar({
               type="button"
               className="nav-action nav-action-btn"
               onClick={() => setDropdownOpen(v => !v)}
+              title={displayName ?? 'الحساب'}
             >
               <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
               </svg>
-              <span>{displayName ?? 'الحساب'}</span>
             </button>
 
             {/* Guest dropdown */}
