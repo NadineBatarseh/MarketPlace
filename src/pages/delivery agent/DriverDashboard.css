@@ -1,3 +1,154 @@
+/* ── Notification bell + dropdown panel ──────────────────────────────────── */
+
+.dd-notif-bell-wrap {
+  position: relative;
+}
+
+.dd-icon-btn {
+  position: relative;
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+
+.dd-icon-btn:hover { background: rgba(255,255,255,0.08); }
+
+.dd-notif-badge {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: dd-pulse 1s infinite;
+}
+
+.dd-notif-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  width: 300px;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  z-index: 200;
+  overflow: hidden;
+  animation: dd-slide-up 0.2s ease;
+  direction: rtl;
+}
+
+.dd-notif-panel-header {
+  padding: 12px 16px;
+  font-weight: 700;
+  font-size: 14px;
+  color: #0f172a;
+  border-bottom: 1px solid #f1f5f9;
+  background: #f8fafc;
+}
+
+.dd-notif-panel-item {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.dd-notif-panel-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+  animation: dd-pulse 1.2s infinite;
+}
+
+.dd-notif-panel-body {
+  flex: 1;
+}
+
+.dd-notif-panel-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: #0f172a;
+  margin: 0 0 2px;
+}
+
+.dd-notif-panel-route {
+  font-size: 13px;
+  font-weight: 600;
+  color: #f97316;
+  margin: 0 0 4px;
+}
+
+.dd-notif-panel-meta {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0 0 4px;
+}
+
+.dd-notif-panel-timer {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0ea5e9;
+  margin: 0 0 10px;
+  transition: color 0.3s;
+}
+
+.dd-notif-panel-timer.urgent { color: #ef4444; }
+
+.dd-notif-panel-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.dd-notif-btn {
+  flex: 1;
+  padding: 8px 0;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.dd-notif-btn:active { transform: scale(0.96); }
+
+.dd-notif-btn.accept {
+  background: #22c55e;
+  color: #fff;
+}
+
+.dd-notif-btn.decline {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.dd-notif-panel-empty {
+  padding: 20px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: #94a3b8;
+  margin: 0;
+}
+
+@keyframes dd-slide-up {
+  from { transform: translateY(8px); opacity: 0; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+
+@keyframes dd-pulse {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.15); }
+}
+
 /* ── Layout ──────────────────────────────────────────────────────────────── */
 
 .dd-root {

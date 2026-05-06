@@ -45,10 +45,17 @@ interface LogisticsSettingsPageProps {
   embedded?: boolean;
 }
 
-// Backward-compat overrides: settings key → existing DB column name
+// Maps settings keys to their DB column names where they differ
 const COL_OVERRIDE: Record<string, string> = {
-  MAX_VOLUME_PER_BATCH:  'max_driver_capacity',
-  MAX_FLOW_WAITING_TIME: 'max_allowed_wait',
+  MAX_VOLUME:                         'max_driver_capacity',
+  MAX_STOPS:                          'max_stops_per_batch',
+  CYCLE_INTERVAL_MINUTES:             'flow_grouping_window_minutes',
+  MAX_FLOW_WAITING_MINUTES:           'max_allowed_wait',
+  W_N:                                'weight_shipment_count',
+  W_U:                                'weight_urgency',
+  W_D:                                'weight_duration',
+  BASE_PENALTY:                       'base_dead_end_penalty',
+  INTRA_CITY_MIN_TIME_BUFFER_MINUTES: 'min_time_to_zone_b_for_addition',
 };
 
 function settingToDbCol(key: string): string {

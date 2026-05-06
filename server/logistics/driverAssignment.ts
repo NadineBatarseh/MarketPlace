@@ -79,10 +79,17 @@ export async function atomicAssign(
   return Array.isArray(data) && data.length > 0;
 }
 
-// Simulate notifying a driver (replace with real push notification service)
+// Notify a driver by inserting into driver_notifications — picked up via Supabase Realtime on the dashboard.
 async function notifyDriver(courierId: string, batchId: string): Promise<void> {
-  console.log(`[Driver Assignment] Notifying courier ${courierId} for batch ${batchId}`);
-  // In production: send push notification via FCM / APNs
+  const { error } = await supabase
+    .from('driver_notifications')
+    .insert({ courier_id: courierId, batch_id: batchId, status: 'pending' });
+
+  if (error) {
+    console.error('[Driver Assignment] notifyDriver insert error:', error.message);
+  } else {
+    console.log(`[Driver Assignment] Notifying courier ${courierId} for batch ${batchId}`);
+  }
 }
 
 // Simulate waiting for a driver to accept within the timeout window

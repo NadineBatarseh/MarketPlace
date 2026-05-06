@@ -7,6 +7,14 @@ import './DriverDashboard.css';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
+interface PendingBatchNotification {
+  notificationId: string;
+  batchId: string;
+  route: string[];
+  shipmentCount: number;
+  totalVolume: number;
+}
+
 interface DriverInfo {
   driver_id: number;
   shift_start: string | null;
@@ -108,6 +116,8 @@ export default function DriverDashboard() {
   const [loading, setLoading]         = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [pendingNotifications, setPendingNotifications] = useState<PendingBatchNotification[]>([]);
+  const [showNotifPanel, setShowNotifPanel] = useState(false);
 
   const initials = getInitials(name ?? 'م');
   const greeting = getGreeting();
@@ -117,7 +127,105 @@ export default function DriverDashboard() {
   useEffect(() => {
     if (!rawUser) return;
     fetchAll();
+    loadPendingNotifications();
   }, [rawUser?.id]);
+
+  // ── Load existing pending notifications from DB ───────────────────────────
+  async function loadPendingNotifications() {
+    if (!rawUser?.id) return;
+
+    const { data: notifs } = await supabase
+      .from('driver_notifications')
+      .select('id, batch_id')
+      .eq('courier_id', rawUser.id)
+      .eq('status', 'pending');
+
+    if (!notifs?.length) return;
+
+    const enriched = await Promise.all(
+      notifs.map(async (n) => {
+        const { data: batch } = await supabase
+          .from('batches')
+          .select('route, total_volume, ab_shipment_ids')
+          .eq('id', n.batch_id)
+          .single();
+        return {
+          notificationId: n.id as string,
+          batchId:        n.batch_id as string,
+          route:          (batch?.route as string[]) ?? [],
+          shipmentCount:  (batch?.ab_shipment_ids as string[])?.length ?? 0,
+          totalVolume:    batch?.total_volume ?? 0,
+        };
+      })
+    );
+
+    setPendingNotifications(enriched);
+  }
+
+  // ── Realtime: listen for incoming batch assignments ────────────────────────
+  useEffect(() => {
+    if (!rawUser?.id) return;
+
+    const channel = supabase
+      .channel('driver-batch-notifications')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'driver_notifications',
+          filter: `courier_id=eq.${rawUser.id}`,
+        },
+        async (payload) => {
+          const batchId        = payload.new.batch_id as string;
+          const notificationId = payload.new.id as string;
+
+          const { data: batch } = await supabase
+            .from('batches')
+            .select('route, total_volume, ab_shipment_ids')
+            .eq('id', batchId)
+            .single();
+
+          if (!batch) return;
+
+          setPendingNotifications((prev) => {
+            if (prev.some((n) => n.notificationId === notificationId)) return prev;
+            return [...prev, {
+              notificationId,
+              batchId,
+              route:         (batch.route as string[]) ?? [],
+              shipmentCount: (batch.ab_shipment_ids as string[])?.length ?? 0,
+              totalVolume:   batch.total_volume ?? 0,
+            }];
+          });
+          setShowNotifPanel(true);
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [rawUser?.id]);
+
+  async function handleAcceptBatch(notif: PendingBatchNotification) {
+    if (!rawUser?.id) return;
+    await supabase.from('batch_acceptances').insert({
+      batch_id:   notif.batchId,
+      courier_id: rawUser.id,
+    });
+    await supabase
+      .from('driver_notifications')
+      .update({ status: 'accepted' })
+      .eq('id', notif.notificationId);
+    setPendingNotifications((prev) => prev.filter((n) => n.notificationId !== notif.notificationId));
+  }
+
+  async function handleDeclineBatch(notifId: string) {
+    await supabase
+      .from('driver_notifications')
+      .update({ status: 'declined' })
+      .eq('id', notifId);
+    setPendingNotifications((prev) => prev.filter((n) => n.notificationId !== notifId));
+  }
 
   async function fetchAll() {
     setLoading(true);
@@ -363,7 +471,44 @@ export default function DriverDashboard() {
         <header className="dd-header">
           <div className="dd-header-right">
             <div className="dd-shift-badge">⏰ الوردية: {shiftLabel}</div>
-            <button type="button" className="dd-icon-btn">🔔</button>
+            <div className="dd-notif-bell-wrap">
+              <button
+                type="button"
+                className="dd-icon-btn"
+                onClick={() => setShowNotifPanel((v) => !v)}
+              >
+                🔔
+                {pendingNotifications.length > 0 && <span className="dd-notif-badge">{pendingNotifications.length}</span>}
+              </button>
+
+              {showNotifPanel && (
+                <div className="dd-notif-panel">
+                  <div className="dd-notif-panel-header">الإشعارات</div>
+                  {pendingNotifications.length > 0 ? (
+                    pendingNotifications.map((notif) => (
+                      <div key={notif.notificationId} className="dd-notif-panel-item">
+                        <div className="dd-notif-panel-icon">🚚</div>
+                        <div className="dd-notif-panel-body">
+                          <p className="dd-notif-panel-title">طلب توصيل جديد</p>
+                          <p className="dd-notif-panel-route">
+                            {notif.route.join(' ← ')}
+                          </p>
+                          <p className="dd-notif-panel-meta">
+                            {notif.shipmentCount} شحنة · {notif.totalVolume.toFixed(0)} وحدة
+                          </p>
+                          <div className="dd-notif-panel-actions">
+                            <button className="dd-notif-btn accept" onClick={() => handleAcceptBatch(notif)}>✓ قبول</button>
+                            <button className="dd-notif-btn decline" onClick={() => handleDeclineBatch(notif.notificationId)}>✕ رفض</button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="dd-notif-panel-empty">لا توجد إشعارات</p>
+                  )}
+                </div>
+              )}
+            </div>
             <div className="dd-header-avatar" style={{ '--dd-avatar-bg': avatarColor(name ?? 'م') } as React.CSSProperties}>
               {initials}
             </div>
@@ -511,6 +656,7 @@ export default function DriverDashboard() {
       {showChangePassword && (
         <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
       )}
+
     </div>
   );
 }

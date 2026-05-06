@@ -20,12 +20,36 @@ interface BatchRow {
   couriers: { name: string } | null;
 }
 
+interface ShipmentDetail {
+  id: string;
+  status: string;
+  pickup_zone: string;
+  dropoff_zone: string;
+  direction: 'ab' | 'bc';
+  order_details: {
+    order_id: number;
+    qty: number;
+    unit_price: number;
+    products: { title: string } | null;
+    shops: { name: string } | null;
+  } | null;
+}
+
 const STATUS_LABELS: Record<BatchStatus, string> = {
   pending_assignment: 'بانتظار السائق',
   assigned: 'تم التعيين',
   in_transit: 'في الطريق',
   completed: 'مكتمل',
   cancelled: 'ملغي',
+};
+
+const SHIPMENT_STATUS_LABELS: Record<string, string> = {
+  available:          'متاحة',
+  delayed:            'متأخرة',
+  claimed:            'محجوزة',
+  in_transit:         'في الطريق',
+  delivered:          'تم التوصيل',
+  cancelled:          'ملغية',
 };
 
 const STATUS_STYLE: Record<BatchStatus, { bg: string; text: string; border: string }> = {
@@ -58,6 +82,8 @@ export default function BatchMonitorPage() {
   const [cycling, setCycling]   = useState(false);
   const [cycleMsg, setCycleMsg] = useState('');
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [shipmentDetails, setShipmentDetails] = useState<Record<string, ShipmentDetail[]>>({});
+  const [loadingDetails, setLoadingDetails]   = useState<Set<string>>(new Set());
 
   const loadBatches = useCallback(async () => {
     setLoading(true);
@@ -80,6 +106,39 @@ export default function BatchMonitorPage() {
     return () => clearInterval(id);
   }, [autoRefresh, loadBatches]);
 
+  const loadShipmentDetails = useCallback(async (batch: BatchRow) => {
+    const allIds = [...batch.ab_shipment_ids, ...batch.bc_shipment_ids];
+    if (allIds.length === 0) return;
+
+    setLoadingDetails(prev => new Set(prev).add(batch.id));
+
+    const { data } = await supabase
+      .from('shipments')
+      .select(`
+        id, status, pickup_zone, dropoff_zone,
+        order_details!order_detail_id(
+          order_id, qty, unit_price,
+          products!product_id(title),
+          shops!shop_id(name)
+        )
+      `)
+      .in('id', allIds);
+
+    if (data) {
+      const withDirection: ShipmentDetail[] = (data as any[]).map(s => ({
+        ...s,
+        direction: batch.ab_shipment_ids.includes(s.id) ? 'ab' : 'bc',
+      }));
+      setShipmentDetails(prev => ({ ...prev, [batch.id]: withDirection }));
+    }
+
+    setLoadingDetails(prev => {
+      const next = new Set(prev);
+      next.delete(batch.id);
+      return next;
+    });
+  }, []);
+
   const triggerCycle = async () => {
     setCycling(true);
     setCycleMsg('');
@@ -95,11 +154,20 @@ export default function BatchMonitorPage() {
     setTimeout(() => setCycleMsg(''), 5000);
   };
 
-  const toggle = (id: string) => setExpanded(prev => {
-    const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
-    return next;
-  });
+  const toggle = (batch: BatchRow) => {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(batch.id)) {
+        next.delete(batch.id);
+      } else {
+        next.add(batch.id);
+        if (!shipmentDetails[batch.id]) {
+          loadShipmentDetails(batch);
+        }
+      }
+      return next;
+    });
+  };
 
   const counts = Object.fromEntries(
     ALL_STATUSES.map(s => [s, batches.filter(b => b.status === s).length])
@@ -198,7 +266,7 @@ export default function BatchMonitorPage() {
               style={{ background: '#fff', border: `1.5px solid ${isOpen ? col.border : '#E2E8F0'}`, borderRadius: 10, overflow: 'hidden', transition: 'border-color 0.15s' }}>
 
               {/* Card header */}
-              <div onClick={() => toggle(batch.id)}
+              <div onClick={() => toggle(batch)}
                 style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', cursor: 'pointer', userSelect: 'none', flexWrap: 'wrap' }}>
 
                 <span style={{ background: col.bg, color: col.text, border: `1px solid ${col.border}`, borderRadius: 6, padding: '2px 10px', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 }}>
@@ -233,8 +301,7 @@ export default function BatchMonitorPage() {
               {/* Expanded details */}
               {isOpen && (
                 <div style={{ borderTop: `1px solid ${col.border}`, padding: '14px 16px', background: col.bg }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 14 }}>
-                    <Detail label="معرّف الدفعة" value={batch.id} mono />
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 16 }}>
                     <Detail label="تاريخ الإنشاء" value={new Date(batch.created_at).toLocaleString('ar-EG')} />
                     <Detail label="شحنات أ→ب" value={`${batch.ab_shipment_ids.length} شحنة`} />
                     <Detail label="شحنات ب→ج" value={`${batch.bc_shipment_ids.length} شحنة`} />
@@ -246,12 +313,11 @@ export default function BatchMonitorPage() {
                       <Detail label="دقائق للمنطقة التالية" value={`${batch.estimated_minutes_to_next_zone} د`} />
                     )}
                   </div>
-                  {batch.ab_shipment_ids.length > 0 && (
-                    <IdPillGroup label="شحنات المنطقة أ→ب" ids={batch.ab_shipment_ids} />
-                  )}
-                  {batch.bc_shipment_ids.length > 0 && (
-                    <IdPillGroup label="شحنات المنطقة ب→ج" ids={batch.bc_shipment_ids} />
-                  )}
+
+                  <ShipmentsTable
+                    shipments={shipmentDetails[batch.id] ?? []}
+                    loading={loadingDetails.has(batch.id)}
+                  />
                 </div>
               )}
             </div>
@@ -275,16 +341,63 @@ function Chip({ icon, label, color }: { icon: string; label: string; color?: 'bl
   );
 }
 
-function IdPillGroup({ label, ids }: { label: string; ids: string[] }) {
+const thStyle: React.CSSProperties = {
+  padding: '7px 10px',
+  textAlign: 'right',
+  color: '#64748B',
+  fontWeight: 700,
+  fontSize: 11,
+  borderBottom: '1.5px solid #E2E8F0',
+  whiteSpace: 'nowrap',
+  background: '#F8FAFC',
+};
+
+const tdStyle: React.CSSProperties = {
+  padding: '7px 10px',
+  color: '#0F2B4E',
+  fontSize: 12,
+  verticalAlign: 'middle',
+  textAlign: 'right',
+  borderBottom: '1px solid #F1F5F9',
+};
+
+function ShipmentsTable({ shipments, loading }: { shipments: ShipmentDetail[]; loading: boolean }) {
+  if (loading) {
+    return (
+      <div style={{ color: '#94A3B8', fontSize: 12, padding: '10px 0', textAlign: 'center' }}>
+        جاري تحميل تفاصيل الشحنات...
+      </div>
+    );
+  }
+  if (!shipments.length) return null;
+
   return (
-    <div style={{ marginBottom: 10 }}>
-      <div style={{ fontSize: 10, color: '#64748B', fontWeight: 700, marginBottom: 5 }}>{label}</div>
-      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-        {ids.map(id => (
-          <span key={id} style={{ fontFamily: 'monospace', fontSize: 10, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 4, padding: '2px 6px', color: '#475569' }}>
-            {id.slice(0, 8)}…
-          </span>
-        ))}
+    <div>
+      <div style={{ fontSize: 11, color: '#64748B', fontWeight: 700, marginBottom: 8 }}>تفاصيل الشحنات</div>
+      <div style={{ overflowX: 'auto', borderRadius: 8, border: '1.5px solid #E2E8F0', background: '#fff' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: '35%' }} />
+            <col style={{ width: '35%' }} />
+            <col style={{ width: '30%' }} />
+          </colgroup>
+          <thead>
+            <tr>
+              <th style={thStyle}>من</th>
+              <th style={thStyle}>إلى</th>
+              <th style={thStyle}>حالة الشحنة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shipments.map(s => (
+              <tr key={s.id} style={{ background: '#fff' }}>
+                <td style={tdStyle}>{s.pickup_zone}</td>
+                <td style={tdStyle}>{s.dropoff_zone}</td>
+                <td style={tdStyle}>{SHIPMENT_STATUS_LABELS[s.status] ?? s.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

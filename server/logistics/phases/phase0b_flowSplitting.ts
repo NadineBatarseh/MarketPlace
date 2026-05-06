@@ -1,34 +1,15 @@
 import { supabase } from '../../supabase';
 import { C } from '../constants';
-import { computeUrgencyScore, computeBatchRawUrgency, roadDistance, estimateDurationMinutes, isDeadlineOverride } from '../formulas';
+import { computeUrgencyScore, computeBatchRawUrgency, roadDistance, estimateDurationMinutes, haversineDistance } from '../formulas';
 import { CandidateBatch, DemandFlow, Shipment } from '../types';
 
-// ── Step 1: Hard deadline override (D2) ──────────────────────────────────────
-// Force-release any delayed shipment whose deadline is within
-// URGENCY_OVERRIDE_WINDOW hours, so it bypasses the MIN_BATCH_THRESHOLD check.
-export async function applyDeadlineOverride(): Promise<void> {
-  const cutoff = new Date(
-    Date.now() + C.URGENCY_OVERRIDE_WINDOW_HOURS * 3_600_000
-  ).toISOString();
-
-  const { error } = await supabase
-    .from('shipments')
-    .update({ status: 'available', delayed_reason: null, delayed_until: null })
-    .eq('status', 'delayed')
-    .lt('deadline', cutoff);
-
-  if (error) {
-    console.error('[Phase 0b] applyDeadlineOverride error:', error.message);
-  }
-}
-
-// ── Step 2: Fetch and sort shipments for a flow (D3) ─────────────────────────
+// ── Step 1: Fetch and sort shipments for a flow (D3) ─────────────────────────
 // urgency_score_i = (NOW - created_at_i) / (deadline_i - created_at_i)
 // sorted DESC so most urgent shipments enter the first batch
 async function fetchAndSortShipments(flow: DemandFlow): Promise<Shipment[]> {
   const { data, error } = await supabase
     .from('shipments')
-    .select('*')
+    .select('*, order_details(qty, products(capacity_units))')
     .in('status', ['available', 'delayed'])
     .eq('pickup_zone', flow.origin)
     .eq('dropoff_zone', flow.destination);
@@ -39,11 +20,16 @@ async function fetchAndSortShipments(flow: DemandFlow): Promise<Shipment[]> {
   }
 
   const now = new Date();
-  return (data as Shipment[]).sort((a, b) => {
-    const uA = computeUrgencyScore(new Date(a.created_at), new Date(a.deadline), now);
-    const uB = computeUrgencyScore(new Date(b.created_at), new Date(b.deadline), now);
-    return uB - uA;
-  });
+  return (data as any[])
+    .map(row => ({
+      ...row,
+      volume: (row.order_details?.qty ?? 0) * (row.order_details?.products?.capacity_units ?? 0),
+    }))
+    .sort((a: Shipment, b: Shipment) => {
+      const uA = computeUrgencyScore(new Date(a.created_at), new Date(a.deadline), now);
+      const uB = computeUrgencyScore(new Date(b.created_at), new Date(b.deadline), now);
+      return uB - uA;
+    }) as Shipment[];
 }
 
 // ── Step 3: Greedy bin packing (D4) ──────────────────────────────────────────
@@ -62,70 +48,76 @@ function packIntoBatches(
   );
   const travelDuration = estimateDurationMinutes(travelKm);
 
-  let currentIds: string[] = [];
-  let currentVolume = 0;
-  let currentStops = 0;
-  let urgencyScores: number[] = [];
-  let hasOverride = false;
+  // Urgency-seeded nearest-neighbour clustering:
+  // Each batch is seeded with the most urgent remaining shipment, then filled
+  // with pickups geographically nearest to the running cluster centroid.
+  // This keeps each driver's pickup stops compact while still prioritising
+  // time-critical orders.
+  const unassigned = [...shipments]; // urgency-sorted, highest first
 
-  const flushBatch = () => {
-    if (currentIds.length === 0) return;
+  while (unassigned.length > 0) {
+    const seed = unassigned.shift()!;
+
+    const clusterIds: string[] = [seed.id];
+    let clusterVolume = seed.volume;
+    let clusterStops = 1;
+    const clusterUrgencies: number[] = [
+      computeUrgencyScore(new Date(seed.created_at), new Date(seed.deadline), now),
+    ];
+    let latSum = seed.pickup_lat;
+    let lngSum = seed.pickup_lng;
+
+    while (unassigned.length > 0) {
+      if (clusterStops + 1 > C.MAX_STOPS) break;
+
+      const centLat = latSum / clusterStops;
+      const centLng = lngSum / clusterStops;
+
+      let bestIdx = -1;
+      let bestDist = Infinity;
+
+      for (let i = 0; i < unassigned.length; i++) {
+        const s = unassigned[i];
+        if (clusterVolume + s.volume > C.MAX_VOLUME) continue;
+        const dist = haversineDistance(centLat, centLng, s.pickup_lat, s.pickup_lng);
+        if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+      }
+
+      if (bestIdx === -1) break;
+
+      const next = unassigned.splice(bestIdx, 1)[0];
+      clusterIds.push(next.id);
+      clusterVolume += next.volume;
+      clusterStops += 1;
+      clusterUrgencies.push(
+        computeUrgencyScore(new Date(next.created_at), new Date(next.deadline), now),
+      );
+      latSum += next.pickup_lat;
+      lngSum += next.pickup_lng;
+    }
+
     batches.push({
-      shipment_ids: [...currentIds],
+      shipment_ids: clusterIds,
       origin: flow.origin,
       destination: flow.destination,
       origin_lat: flow.origin_lat,
       origin_lng: flow.origin_lng,
       destination_lat: flow.destination_lat,
       destination_lng: flow.destination_lng,
-      total_volume: currentVolume,
-      shipment_count: currentIds.length,
-      raw_urgency: computeBatchRawUrgency(urgencyScores),
+      total_volume: clusterVolume,
+      shipment_count: clusterIds.length,
+      raw_urgency: computeBatchRawUrgency(clusterUrgencies),
       travel_duration_minutes: travelDuration,
-      has_deadline_override: hasOverride,
     });
-    currentIds = [];
-    currentVolume = 0;
-    currentStops = 0;
-    urgencyScores = [];
-    hasOverride = false;
-  };
-
-  for (const shipment of shipments) {
-    // D4 — close batch if adding this shipment would exceed any constraint
-    if (
-      currentVolume + shipment.volume > C.MAX_VOLUME ||
-      currentStops + 1 > C.MAX_STOPS
-    ) {
-      flushBatch();
-    }
-
-    const uScore = computeUrgencyScore(
-      new Date(shipment.created_at),
-      new Date(shipment.deadline),
-      now
-    );
-
-    if (isDeadlineOverride(new Date(shipment.deadline), now)) {
-      hasOverride = true;
-    }
-
-    currentIds.push(shipment.id);
-    currentVolume += shipment.volume;
-    currentStops += 1;
-    urgencyScores.push(uScore);
   }
 
-  flushBatch();
   return batches;
 }
 
 // ── Step 4: Handle the thin last batch (D5, D6) ───────────────────────────────
-// Phase 0b is the only gate that decides dispatch vs delay based on count.
-// A batch is dispatched if ANY of the following is true:
-//   1. shipment_count >= MIN_BATCH_THRESHOLD
-//   2. has_deadline_override — a shipment's deadline is imminent (urgency override)
-//   3. forceDispatchAfterMaxWait — the flow's avg waiting time exceeded MAX_FLOW_WAITING_MINUTES
+// A batch is dispatched if:
+//   1. shipment_count >= MIN_BATCH_THRESHOLD, OR
+//   2. forceDispatchAfterMaxWait — the flow's avg waiting time exceeded MAX_FLOW_WAITING_MINUTES
 // Otherwise shipments are marked delayed for the next cycle.
 async function handleThinBatch(
   batch: CandidateBatch,
@@ -133,7 +125,6 @@ async function handleThinBatch(
 ): Promise<CandidateBatch | null> {
   if (
     batch.shipment_count >= C.MIN_BATCH_THRESHOLD ||
-    batch.has_deadline_override ||
     forceDispatchAfterMaxWait
   ) {
     return batch;

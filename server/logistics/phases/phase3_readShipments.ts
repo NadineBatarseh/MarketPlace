@@ -12,7 +12,7 @@ export async function readBatchShipments(
 
   const { data, error } = await supabase
     .from('shipments')
-    .select('*')
+    .select('*, order_details(qty, products(capacity_units))')
     .in('id', shipmentIds)
     .in('status', ['available', 'delayed']);
 
@@ -21,7 +21,10 @@ export async function readBatchShipments(
     return [];
   }
 
-  return (data as Shipment[]) ?? [];
+  return ((data as any[]) ?? []).map(row => ({
+    ...row,
+    volume: (row.order_details?.qty ?? 0) * (row.order_details?.products?.capacity_units ?? 0),
+  })) as Shipment[];
 }
 
 // ── D15 ───────────────────────────────────────────────────────────────────────

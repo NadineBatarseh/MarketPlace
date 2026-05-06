@@ -4,12 +4,9 @@ import {
   roadDistance,
   estimateDurationMinutes,
   computeRouteCost,
-  computeBatchRawUrgency,
-  computeUrgencyScore,
-  isDeadlineOverride,
 } from '../formulas';
 import { scoreAndRankBatches } from './phase1_scoring';
-import { CandidateBatch, DemandFlow, RoutePlan, Shipment } from '../types';
+import { CandidateBatch, DemandFlow, RoutePlan } from '../types';
 
 // ── D16 — Filter Zone B→C candidates by remaining capacity ───────────────────
 // Σvolume_B→C ≤ remaining_capacity
@@ -43,7 +40,6 @@ function scoreCandidates(candidates: DemandFlow[]): CandidateBatch[] {
       shipment_count: flow.shipment_count,
       raw_urgency: 0,
       travel_duration_minutes: estimateDurationMinutes(travelKm),
-      has_deadline_override: false,
     };
   });
   return scoreAndRankBatches(asCandidateBatches);
@@ -76,25 +72,9 @@ function computeNewDispatchCost(
   );
 }
 
-// ── D21 — Emergency re-batch for rejected urgent candidates ───────────────────
-async function triggerEmergencyReBatch(flow: DemandFlow): Promise<void> {
-  const { data: shipments } = await supabase
-    .from('shipments')
-    .select('urgency_score, deadline')
-    .in('status', ['available', 'delayed'])
-    .eq('pickup_zone', flow.origin)
-    .eq('dropoff_zone', flow.destination);
-
-  if (!shipments || shipments.length === 0) return;
-
-  const now = new Date();
-  const hasUrgent = (shipments as Pick<Shipment, 'urgency_score' | 'deadline'>[]).some(
-    s =>
-      s.urgency_score > C.URGENCY_THRESHOLD ||
-      isDeadlineOverride(new Date(s.deadline), now)
-  );
-
-  if (hasUrgent) {
+// ── D21 — Emergency re-batch for rejected flows that have been waiting too long ─
+function triggerEmergencyReBatch(flow: DemandFlow): void {
+  if (flow.avg_waiting_hours * 60 >= C.MAX_FLOW_WAITING_MINUTES) {
     console.warn(
       `[Phase 4] Emergency re-batch triggered for ${flow.origin} → ${flow.destination}`
     );
@@ -143,7 +123,7 @@ export async function planFullRoute(
     const flow = allFlows.find(
       f => f.origin === rejected.origin && f.destination === rejected.destination
     );
-    if (flow) await triggerEmergencyReBatch(flow);
+    if (flow) triggerEmergencyReBatch(flow);
   }
 
   // D20 — extend only if cost_extend < cost_new
@@ -151,24 +131,30 @@ export async function planFullRoute(
     const bestFlow = allFlows.find(
       f => f.origin === best.origin && f.destination === best.destination
     );
-    if (bestFlow) await triggerEmergencyReBatch(bestFlow);
+    if (bestFlow) triggerEmergencyReBatch(bestFlow);
     return { route: [batch.origin, zoneB], bc_shipment_ids: [], bc_total_volume: 0 };
   }
 
   // Fetch the actual Zone B→C shipment IDs to claim
   const { data: bcShipments } = await supabase
     .from('shipments')
-    .select('id, volume')
+    .select('id, order_details(qty, products(capacity_units))')
     .in('status', ['available', 'delayed'])
     .eq('pickup_zone', zoneB)
     .eq('dropoff_zone', best.destination)
     .order('urgency_score', { ascending: false })
     .limit(C.MAX_STOPS);
 
-  const bcIds = (bcShipments as Pick<Shipment, 'id' | 'volume'>[] ?? []).map(s => s.id);
-  const bcVolume = (bcShipments as Pick<Shipment, 'id' | 'volume'>[] ?? []).reduce(
-    (sum, s) => sum + s.volume, 0
-  );
+  const bcMapped = (bcShipments as any[] ?? []).map(row => ({
+    id: row.id as string,
+    volume: (row.order_details?.qty ?? 0) * (row.order_details?.products?.capacity_units ?? 0),
+  }));
+  const bcIds = bcMapped.map(s => s.id);
+  const bcVolume = bcMapped.reduce((sum, s) => sum + s.volume, 0);
+
+  if (bcIds.length === 0) {
+    return { route: [batch.origin, zoneB], bc_shipment_ids: [], bc_total_volume: 0 };
+  }
 
   return {
     route: [batch.origin, zoneB, best.destination],

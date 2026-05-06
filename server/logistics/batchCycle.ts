@@ -1,15 +1,29 @@
 import { extractDemandFlows } from './phases/phase0_demandFlow';
-import { applyDeadlineOverride, splitAllFlows } from './phases/phase0b_flowSplitting';
+import { splitAllFlows } from './phases/phase0b_flowSplitting';
 import { scoreAndRankBatches } from './phases/phase1_scoring';
 import { applyLookAhead } from './phases/phase2_lookAhead';
 import { readBatchShipments, computeRemainingCapacity } from './phases/phase3_readShipments';
 import { planFullRoute } from './phases/phase4_planRoute';
 import { claimShipmentsAtomically } from './phases/phase5_claimShipments';
-import { closeBatch } from './phases/phase6_closeBatch';
 import { assignBatch } from './driverAssignment';
 import { computeReservedUntil } from './formulas';
-import { CandidateBatch } from './types';
+import { CandidateBatch, DemandFlow } from './types';
 import { loadConfigFromDB } from './constants';
+import { supabase } from '../supabase';
+
+// Releases delayed shipments whose wait period has elapsed back into the pool.
+// Runs once at the start of each cycle — the single mechanism for un-delaying.
+async function releaseDelayedShipments(): Promise<void> {
+  const { error } = await supabase
+    .from('shipments')
+    .update({ status: 'available', delayed_reason: null, delayed_until: null })
+    .eq('status', 'delayed')
+    .lte('delayed_until', new Date().toISOString());
+
+  if (error) {
+    console.error('[Batch Cycle] releaseDelayedShipments error:', error.message);
+  }
+}
 
 // Default courier home base — replace with real dispatcher location per region
 const DEFAULT_HOME = { lat: 31.9038, lng: 35.2034 }; // Ramallah centre
@@ -29,8 +43,8 @@ export async function runBatchCycle(): Promise<void> {
     return;
   }
 
-  // Phase 0b — Deadline override + flow splitting
-  await applyDeadlineOverride();
+  // Phase 0b — Release delayed shipments whose wait is over, then split flows
+  await releaseDelayedShipments();
   const candidateBatches = await splitAllFlows(flows);
   if (candidateBatches.length === 0) {
     console.log('[Batch Cycle] No dispatchable batches. Cycle complete.');
@@ -42,7 +56,7 @@ export async function runBatchCycle(): Promise<void> {
 
   // Process each batch in priority order
   for (const batch of ranked) {
-    await processSingleBatch(batch, ranked.filter(b => b !== batch));
+    await processSingleBatch(batch, ranked.filter(b => b !== batch), flows);
   }
 
   console.log('[Batch Cycle] Cycle complete.');
@@ -50,7 +64,8 @@ export async function runBatchCycle(): Promise<void> {
 
 async function processSingleBatch(
   batch: CandidateBatch,
-  otherBatches: CandidateBatch[]
+  otherBatches: CandidateBatch[],
+  flows: DemandFlow[]
 ): Promise<void> {
   // Phase 2 — Look-ahead dead-end check (may re-rank; we still process this batch)
   const allBatches = [batch, ...otherBatches];
@@ -67,8 +82,7 @@ async function processSingleBatch(
   const routePlan = await planFullRoute(
     current,
     remainingCapacity,
-    // Pass all flows as context for Zone C scoring
-    [], // flows reference — in full integration pass the flows from Phase 0
+    flows,
     DEFAULT_HOME.lat,
     DEFAULT_HOME.lng
   );
@@ -77,11 +91,19 @@ async function processSingleBatch(
   const batchId = crypto.randomUUID();
   const reservedUntil = computeReservedUntil(current.travel_duration_minutes);
 
+  // Phase 5+6 — Claim shipments and create the batch record atomically
+  const finalRoute = routePlan.bc_shipment_ids.length === 0
+    ? routePlan.route.slice(0, 2)
+    : routePlan.route;
+
   const claimed = await claimShipmentsAtomically(
     batchId,
     current.shipment_ids,
     routePlan.bc_shipment_ids,
-    reservedUntil
+    reservedUntil,
+    finalRoute,
+    current.total_volume,
+    routePlan.bc_total_volume
   );
 
   if (!claimed) {
@@ -89,18 +111,7 @@ async function processSingleBatch(
     return;
   }
 
-  // Phase 6 — Close the batch
-  const closedBatch = await closeBatch({
-    id: batchId,
-    route: routePlan.route,
-    ab_shipment_ids: current.shipment_ids,
-    bc_shipment_ids: routePlan.bc_shipment_ids,
-    total_volume: current.total_volume + routePlan.bc_total_volume,
-    reserved_until:
-      routePlan.bc_shipment_ids.length > 0 ? reservedUntil.toISOString() : null,
-  });
-
-  if (!closedBatch) return;
+  console.log(`[Phase 5] Batch ${batchId} closed — route: ${routePlan.route.join(' → ')}`);
 
   // Driver assignment — runs asynchronously, does not block the next batch
   setTimeout(() =>
@@ -108,7 +119,7 @@ async function processSingleBatch(
       batchId,
       current.origin_lat,
       current.origin_lng,
-      closedBatch.total_volume
+      current.total_volume + routePlan.bc_total_volume
     ), 0);
 }
 

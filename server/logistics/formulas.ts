@@ -71,18 +71,9 @@ export function computeAdjustedScore(score: number, uHat: number): number {
 }
 
 // ── D22 ─────────────────────────────────────────────────────────────────────
-// reserved_until = NOW + duration(A→B) + BUFFER
+// reserved_until = NOW + duration(A→B)
 export function computeReservedUntil(travelDurationMinutes: number): Date {
-  const totalMs =
-    (travelDurationMinutes + C.RESERVATION_BUFFER_MINUTES) * 60 * 1000;
-  return new Date(Date.now() + totalMs);
-}
-
-// ── D2 / D25 ────────────────────────────────────────────────────────────────
-// true if deadline is within URGENCY_OVERRIDE_WINDOW hours
-export function isDeadlineOverride(deadline: Date, now: Date = new Date()): boolean {
-  const hoursRemaining = (deadline.getTime() - now.getTime()) / 3_600_000;
-  return hoursRemaining < C.URGENCY_OVERRIDE_WINDOW_HOURS;
+  return new Date(Date.now() + travelDurationMinutes * 60 * 1000);
 }
 
 // ── D33 — Proximity factor ───────────────────────────────────────────────────

@@ -30,6 +30,7 @@ export interface Shipment {
   id: string;
   status: ShipmentStatus;
   batch_id: string | null;
+  order_detail_id: number;
   reserved_until: string | null;
   delayed_reason: DelayedReason | null;
   delayed_until: string | null;
@@ -70,7 +71,6 @@ export interface CandidateBatch {
   shipment_count: number;
   raw_urgency: number;
   travel_duration_minutes: number;
-  has_deadline_override: boolean;
   // Populated after Phase 1 normalization
   n_hat?: number;
   u_hat?: number;

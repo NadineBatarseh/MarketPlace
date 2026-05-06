@@ -9,17 +9,12 @@ export const C = {
   MIN_BATCH_THRESHOLD: 5,
 
   // ── Time windows (MAX_FLOW_WAITING_MINUTES overridable) ──────
-  URGENCY_OVERRIDE_WINDOW_HOURS: 2,
   CYCLE_INTERVAL_MINUTES: 30,
   MAX_FLOW_WAITING_MINUTES: 120,
-  RESERVATION_BUFFER_MINUTES: 30,
-  INTRA_CITY_MIN_TIME_BUFFER_MINUTES: 15,
+INTRA_CITY_MIN_TIME_BUFFER_MINUTES: 15,
 
   // ── Max distance between stops (overridable from batch_config)
   MAX_DISTANCE_KM: 50,
-
-  // ── Max days a shipment waits before its deadline (overridable from batch_config)
-  MAX_WAIT_DAYS: 3,
 
   // ── Scoring weights (must sum to 1) ─────────────────────────
   W_N: 0.35,
@@ -44,7 +39,7 @@ export const C = {
   LAMBDA: 0.1,
   MAX_SHIFT_HOURS: 10,
   DRIVERS_PER_ROUND: 3,
-  ASSIGNMENT_TIMEOUT_MS: 90_000,
+  ASSIGNMENT_TIMEOUT_MS: 300_000,
   MAX_ASSIGNMENT_ROUNDS: 3,
 
   // ── Intra-city sequencing (D31) ─────────────────────────────
@@ -52,12 +47,18 @@ export const C = {
   W_URG: 0.40,
 };
 
-// Loads the four admin-configurable fields from batch_config (id = 1)
+// Loads all admin-configurable fields from batch_config (id = 1)
 // and merges them into C. Called once at the start of each batch cycle.
 export async function loadConfigFromDB(): Promise<void> {
   const { data, error } = await supabase
     .from('batch_config')
-    .select('max_driver_capacity, max_stops_per_batch, max_allowed_wait, max_distance_km, max_wait_days')
+    .select(`
+      max_driver_capacity, max_stops_per_batch, min_batch_threshold,
+      flow_grouping_window_minutes, max_allowed_wait, max_distance_km,
+      weight_shipment_count, weight_urgency, weight_duration,
+      base_dead_end_penalty, cost_per_km, road_factor,
+      min_time_to_zone_b_for_addition
+    `)
     .eq('id', 1)
     .single();
 
@@ -66,16 +67,17 @@ export async function loadConfigFromDB(): Promise<void> {
     return;
   }
 
-  C.MAX_VOLUME               = data.max_driver_capacity;
-  C.MAX_STOPS                = data.max_stops_per_batch;
-  C.MAX_FLOW_WAITING_MINUTES = data.max_allowed_wait;
-  C.MAX_DISTANCE_KM          = data.max_distance_km;
-  C.MAX_WAIT_DAYS            = data.max_wait_days;
-
-  console.log('[Config] Loaded from DB:', {
-    MAX_VOLUME: C.MAX_VOLUME,
-    MAX_STOPS: C.MAX_STOPS,
-    MAX_FLOW_WAITING_MINUTES: C.MAX_FLOW_WAITING_MINUTES,
-    MAX_DISTANCE_KM: C.MAX_DISTANCE_KM,
-  });
+  C.MAX_VOLUME                        = data.max_driver_capacity;
+  C.MAX_STOPS                         = data.max_stops_per_batch;
+  C.MIN_BATCH_THRESHOLD               = data.min_batch_threshold;
+  C.CYCLE_INTERVAL_MINUTES            = data.flow_grouping_window_minutes;
+  C.MAX_FLOW_WAITING_MINUTES          = data.max_allowed_wait;
+  C.MAX_DISTANCE_KM                   = data.max_distance_km;
+  C.W_N                               = data.weight_shipment_count;
+  C.W_U                               = data.weight_urgency;
+  C.W_D                               = data.weight_duration;
+  C.BASE_PENALTY                      = data.base_dead_end_penalty;
+  C.COST_PER_KM                       = data.cost_per_km;
+  C.ROAD_FACTOR                       = data.road_factor;
+  C.INTRA_CITY_MIN_TIME_BUFFER_MINUTES = data.min_time_to_zone_b_for_addition;
 }

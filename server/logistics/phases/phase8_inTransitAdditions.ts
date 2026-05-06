@@ -1,6 +1,5 @@
 import supabase from '../../supabase';
 import { C } from '../constants';
-import { Shipment } from '../types';
 
 // Phase 8 — In-Transit Additions
 // Tries to add new Zone B→C shipments to an existing batch while the
@@ -50,14 +49,14 @@ async function hasCapacity(
     supabase.from('batches').select('total_volume').eq('id', batchId).single(),
     supabase
       .from('shipments')
-      .select('volume')
+      .select('order_details(qty, products(capacity_units))')
       .in('id', newShipmentIds)
       .in('status', ['available', 'delayed']),
   ]);
 
   const currentVolume = batchRes.data?.total_volume ?? C.MAX_VOLUME;
-  const addedVolume = ((shipmentsRes.data as Pick<Shipment, 'volume'>[] | null) ?? [])
-    .reduce((sum, s) => sum + s.volume, 0);
+  const addedVolume = ((shipmentsRes.data as any[] | null) ?? [])
+    .reduce((sum, s) => sum + (s.order_details?.qty ?? 0) * (s.order_details?.products?.capacity_units ?? 0), 0);
 
   return currentVolume + addedVolume <= C.MAX_VOLUME;
 }
@@ -117,10 +116,10 @@ export async function tryAddShipmentsToBatch(
 async function getVolume(ids: string[]): Promise<number> {
   const { data } = await supabase
     .from('shipments')
-    .select('volume')
+    .select('order_details(qty, products(capacity_units))')
     .in('id', ids);
-  return ((data as Pick<Shipment, 'volume'>[] | null) ?? []).reduce(
-    (sum, s) => sum + s.volume,
+  return ((data as any[] | null) ?? []).reduce(
+    (sum, s) => sum + (s.order_details?.qty ?? 0) * (s.order_details?.products?.capacity_units ?? 0),
     0
   );
 }
