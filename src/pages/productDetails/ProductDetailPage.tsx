@@ -10,6 +10,91 @@ import './ProductDetailPage.css';
 const NOT_FOUND = "المعلومة غير متوفرة";
 const safeText = (v?: string | null) => (v && v.trim() ? v : NOT_FOUND);
 
+interface ProductVariant {
+  id: string;
+  color: string | null;
+  size: string | null;
+  quantity: number | null;
+  image_url: string | null;
+}
+
+// Arabic color names — browsers can't parse Arabic, so we map them manually.
+// The map is indexed by a *normalized* form (alef variants collapsed, no diacritics)
+// so "احمر" and "أحمر" both resolve to red.
+const ARABIC_COLOR_MAP: Record<string, string> = {
+  'أحمر': '#e53935', 'أزرق': '#1e88e5', 'أخضر': '#43a047', 'أصفر': '#fdd835',
+  'أسود': '#212121', 'أبيض': '#f5f5f5', 'رمادي': '#757575', 'بنفسجي': '#8e24aa',
+  'برتقالي': '#fb8c00', 'وردي': '#e91e63', 'بني': '#6d4c41', 'بيج': '#d7ccc8',
+  'ذهبي': '#ffd600', 'فضي': '#bdbdbd', 'كحلي': '#1a237e', 'زيتي': '#558b2f',
+  'تركواز': '#00acc1',
+};
+
+// Normalize Arabic text: collapse alef variants, teh-marbuta, alef-maqsura, strip diacritics
+function normalizeArabic(s: string): string {
+  return s
+    .replace(/[أإآا]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/[ً-ٰٟ]/g, '');
+}
+
+// Pre-build a normalized lookup so we never iterate at runtime
+const ARABIC_NORMALIZED: Record<string, string> = Object.fromEntries(
+  Object.entries(ARABIC_COLOR_MAP).map(([k, v]) => [normalizeArabic(k), v])
+);
+
+// Cache canvas results — canvas element is only created once per unique name
+const _colorCache = new Map<string, string>();
+
+function parseBrowserColor(name: string): string | null {
+  if (_colorCache.has(name)) {
+    const c = _colorCache.get(name)!;
+    return c === '' ? null : c;
+  }
+  try {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    const sentinel = '#070b0d';
+    ctx.fillStyle = sentinel;
+    ctx.fillStyle = name;
+    const result = ctx.fillStyle;
+    const parsed = result !== sentinel ? result : null;
+    _colorCache.set(name, parsed ?? '');
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+const getColorCss = (colorName: string): string => {
+  const key = colorName.trim();
+  if (!key) return '#9e9e9e';
+
+  // 1. Exact Arabic map lookup
+  if (ARABIC_COLOR_MAP[key]) return ARABIC_COLOR_MAP[key];
+
+  // 2. Normalized Arabic lookup (handles missing hamza, diacritics, etc.)
+  const normAr = normalizeArabic(key);
+  if (ARABIC_NORMALIZED[normAr]) return ARABIC_NORMALIZED[normAr];
+
+  // 3. Bare hex / rgb / hsl value
+  if (/^#[0-9a-f]{3,8}$/i.test(key)) return key;
+
+  // 4. Let the browser parse any English CSS named color (royalblue, deeppink, etc.)
+  const browserResult = parseBrowserColor(key.toLowerCase());
+  if (browserResult) return browserResult;
+
+  return '#9e9e9e';
+};
+
+// Stored format: "DisplayName|#hex" (new) or plain name (legacy)
+function parseColorEntry(raw: string): { name: string; hex: string } {
+  const idx = raw.lastIndexOf('|');
+  if (idx > -1) return { name: raw.slice(0, idx), hex: raw.slice(idx + 1) };
+  return { name: raw, hex: getColorCss(raw) };
+}
+
 const ProductDetailPage: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -81,6 +166,41 @@ const ProductDetailPage: React.FC = () => {
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
+  // Variants & attributes
+  const [variants, setVariants] = useState<ProductVariant[]>([]);
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
+  const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  const [attributes, setAttributes] = useState<{ attribute_name: string; attribute_value: string | number }[]>([]);
+
+  // Derived from variants (computed each render)
+  const hasColors = variants.some(v => v.color);
+  const hasSizes = variants.some(v => v.size);
+  const uniqueColors = hasColors
+    ? [...new Set(variants.filter(v => v.color).map(v => v.color!))]
+    : [];
+  const uniqueSizes = hasSizes
+    ? [...new Set(variants.filter(v => v.size).map(v => v.size!))]
+    : [];
+  const isSizeAvailable = (size: string) => {
+    if (hasColors && !selectedColor) {
+      return variants.some(v => v.size === size && (v.quantity ?? 0) > 0);
+    }
+    return variants.some(
+      v => v.size === size && (hasColors ? v.color === selectedColor : true) && (v.quantity ?? 0) > 0
+    );
+  };
+  // When a color is selected, show only the sizes that exist for that color
+  const sizesToShow = hasColors && selectedColor
+    ? [...new Set(variants.filter(v => v.color === selectedColor && v.size).map(v => v.size!))]
+    : uniqueSizes;
+  const selectedVariant = variants.length > 0
+    ? (variants.find(v =>
+        (!hasColors || v.color === selectedColor) &&
+        (!hasSizes || v.size === selectedSize)
+      ) ?? null)
+    : null;
+  const displayPrice = product?.price ?? null;
+
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (shareRef.current && !shareRef.current.contains(e.target as Node)) {
@@ -90,6 +210,28 @@ const ProductDetailPage: React.FC = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Switch main image when a color or size variant with an image is selected
+  useEffect(() => {
+    if (!selectedColor && !selectedSize) return;
+    const match =
+      variants.find(v =>
+        (selectedColor ? v.color === selectedColor : true) &&
+        (selectedSize  ? v.size  === selectedSize  : true) &&
+        v.image_url
+      ) ??
+      (selectedColor ? variants.find(v => v.color === selectedColor && v.image_url) : null);
+
+    if (!match?.image_url) return;
+    setMainImage(match.image_url);
+    setAllImages(prev => {
+      const idx = prev.indexOf(match.image_url!);
+      if (idx >= 0) { setActiveThumb(idx); return prev; }
+      const next = [...prev, match.image_url!];
+      setActiveThumb(next.length - 1);
+      return next;
+    });
+  }, [selectedColor, selectedSize, variants]);
 
   // Check logged-in user and their role, and listen for magic-link sign-in
   useEffect(() => {
@@ -292,12 +434,21 @@ const ProductDetailPage: React.FC = () => {
   const addToCart = () => {
     if (!currentUser) { showCartMsg('يجب تسجيل الدخول أو إنشاء حساب أولاً'); return; }
     if (!product) return;
-    if (isInCart(product.id)) {
+    if (hasColors && !selectedColor) { showCartMsg('يرجى اختيار اللون أولاً'); return; }
+    if (hasSizes && !selectedSize) { showCartMsg('يرجى اختيار المقاس أولاً'); return; }
+    if (isInCart(product.id, selectedColor ? parseColorEntry(selectedColor).name : undefined, selectedSize ?? undefined)) {
       setShowCartConfirm(true);
       return;
     }
-    const price = parseFloat(String(product.price ?? '0').replace(/[^\d.]/g, '')) || 0;
-    addToCartCtx({ id: product.id, name: product.title ?? '', image: product.image_urls?.[0] ?? '', price });
+    const price = parseFloat(String(displayPrice ?? product.price ?? '0').replace(/[^\d.]/g, '')) || 0;
+    addToCartCtx({
+      id: product.id,
+      name: product.title ?? '',
+      image: product.image_urls?.[0] ?? '',
+      price,
+      color: selectedColor ? parseColorEntry(selectedColor).name : undefined,
+      size: selectedSize ?? undefined,
+    });
     showCartMsg('✓ تمت الإضافة إلى السلة');
   };
 
@@ -432,6 +583,31 @@ const ProductDetailPage: React.FC = () => {
         // 4) Discount from product column
         setDiscountValue(productData?.discount_pct ?? null);
 
+        // 5) Variants
+        const { data: variantsData, error: varErr } = await supabase
+          .from('product_variants')
+          .select('id, color, size, quantity, image_url')
+          .eq('product_id', productId);
+        if (varErr) console.error('[variants fetch error]', varErr);
+        const safeVariants: ProductVariant[] = (variantsData ?? []).map((v: any) => ({ ...v, image_url: v.image_url ?? null }));
+        setVariants(safeVariants);
+        setSelectedColor(null);
+        setSelectedSize(null);
+
+        // Merge variant images into the gallery (unique, appended after product images)
+        const variantImgUrls = safeVariants.map(v => v.image_url).filter((u): u is string => !!u);
+        if (variantImgUrls.length > 0) {
+          setAllImages(prev => [...new Set([...prev, ...variantImgUrls])]);
+        }
+
+        // 6) Attributes
+        const { data: attrsData, error: attrsErr } = await supabase
+          .from('product_attributes')
+          .select('attribute_name, attribute_value')
+          .eq('product_id', productId);
+        if (attrsErr) console.error('[attributes fetch error]', attrsErr);
+        setAttributes(attrsData ?? []);
+
       } catch (e: any) {
         setError(e?.message ?? "حدث خطأ أثناء جلب البيانات");
       } finally {
@@ -520,14 +696,14 @@ const ProductDetailPage: React.FC = () => {
 
                 <div className="price-row">
                   <span className="price-main">
-                    {discountValue !== null && product?.price != null
-                      ? (product.price * (1 - discountValue / 100)).toFixed(1)
-                      : product?.price ?? NOT_FOUND}
+                    {discountValue !== null && displayPrice != null
+                      ? (displayPrice * (1 - discountValue / 100)).toFixed(1)
+                      : displayPrice ?? NOT_FOUND}
                   </span>
-                  <span className="price-currency">ر.س</span>
+                  <span className="price-currency">₪</span>
                   {discountValue !== null && product?.price != null && (
                     <>
-                      <span className="price-old">{product.price} ر.س</span>
+                      <span className="price-old">{product.price} ₪</span>
                       <span className="price-save">{`وفر ${discountValue}%`}</span>
                     </>
                   )}
@@ -537,13 +713,72 @@ const ProductDetailPage: React.FC = () => {
                   <div className="stock-dot low"></div>
                   <span className="stock-label low">كمية</span>
                   <span className="stock-count">
-                    {typeof product?.stock_Quantity === "number"
-                      ? `– تبقى ${product.stock_Quantity} قطع`
-                      : NOT_FOUND}
+                    {selectedVariant
+                      ? `– تبقى ${selectedVariant.quantity ?? 0} قطع`
+                      : typeof product?.stock_Quantity === "number"
+                        ? `– تبقى ${product.stock_Quantity} قطع`
+                        : NOT_FOUND}
                   </span>
                 </div>
 
                 <div className="divider"></div>
+
+                {/* COLOR & SIZE VARIANTS */}
+                {variants.length > 0 && (
+                  <>
+                    {hasColors && (
+                      <div className="variants-section">
+                        <div className="section-label">
+                          اللون{selectedColor ? `: ${parseColorEntry(selectedColor).name}` : ''}
+                        </div>
+                        <div className="color-options">
+                          {uniqueColors.map(color => {
+                            const { name: cName, hex: cHex } = parseColorEntry(color);
+                            return (
+                              <button
+                                key={color}
+                                type="button"
+                                className={`color-swatch${selectedColor === color ? ' active' : ''}`}
+                                style={{ backgroundColor: cHex } as React.CSSProperties}
+                                onClick={() => { setSelectedColor(color); setSelectedSize(null); }}
+                                title={cName}
+                                aria-label={cName}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {hasSizes && (
+                      <div className="variants-section">
+                        <div className="section-label">
+                          المقاس{selectedSize ? `: ${selectedSize}` : ''}
+                        </div>
+                        <div className="size-options">
+                          {sizesToShow.map(size => {
+                            const available = isSizeAvailable(size);
+                            return (
+                              <button
+                                key={size}
+                                type="button"
+                                className={`size-chip${selectedSize === size ? ' active' : ''}${!available ? ' unavailable' : ''}`}
+                                onClick={() => available && setSelectedSize(size)}
+                                disabled={!available}
+                                title={!available ? 'نفد المخزون' : size}
+                              >
+                                {size}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {hasColors && !selectedColor && (
+                          <p className="variants-hint">اختر اللون أولاً لمعرفة المقاسات المتاحة</p>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
 
                 <div className="qty-row">
                   <div className="section-label" style={{ marginBottom: '0' }}>الكمية</div>
@@ -679,9 +914,26 @@ const ProductDetailPage: React.FC = () => {
 
               {activeTab === 'specs' && (
                 <div className="tab-content">
-                  <p style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                    المواصفات غير متوفرة حالياً
-                  </p>
+                  {attributes.length === 0 ? (
+                    <p className="specs-empty">المواصفات غير متوفرة حالياً</p>
+                  ) : (
+                    <table className="spec-table">
+                      <thead>
+                        <tr>
+                          <th>الخاصية</th>
+                          <th>القيمة</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {attributes.map((attr, i) => (
+                          <tr key={i}>
+                            <td>{attr.attribute_name}</td>
+                            <td>{String(attr.attribute_value ?? '')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               )}
 
@@ -855,7 +1107,14 @@ const ProductDetailPage: React.FC = () => {
         <CartConfirmModal
           onConfirm={() => {
             const price = parseFloat(String(product.price ?? '0').replace(/[^\d.]/g, '')) || 0;
-            addToCartCtx({ id: product.id, name: product.title ?? '', image: product.image_urls?.[0] ?? '', price });
+            addToCartCtx({
+              id: product.id,
+              name: product.title ?? '',
+              image: product.image_urls?.[0] ?? '',
+              price,
+              color: selectedColor ? parseColorEntry(selectedColor).name : undefined,
+              size: selectedSize ?? undefined,
+            });
             showCartMsg('✓ تمت إضافة قطعة أخرى إلى السلة');
             setShowCartConfirm(false);
           }}

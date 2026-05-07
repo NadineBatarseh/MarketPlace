@@ -86,7 +86,7 @@ export default function Favorite() {
             onRemove={() => setPendingRemove(item)}
           >
             <td className="pt-cell pt-cell-price">
-              {item.price.toFixed(2)} ر.س
+              {item.price.toFixed(2)} ₪
             </td>
 
             <td className="pt-cell pt-cell-date">

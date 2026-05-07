@@ -229,9 +229,6 @@ export default function SearchResultsPage() {
 
                         <div className="sr-card-body">
                           <h3 className="sr-card-title">{product.title}</h3>
-                          {product.description && (
-                            <p className="sr-card-desc">{product.description}</p>
-                          )}
                           <div className="sr-card-footer">
                             {product.price != null && (
                               <span className="sr-card-price">₪{product.price.toFixed(2)}</span>

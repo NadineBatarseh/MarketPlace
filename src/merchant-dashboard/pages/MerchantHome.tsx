@@ -179,7 +179,7 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
             </div>
           </div>
           <div className="mh-card-value">{stats.accountBalance.toLocaleString('ar-EG')}</div>
-          <div className="mh-card-sub">جنيه مصري</div>
+          <div className="mh-card-sub">₪</div>
         </div>
 
         <div className="mh-stat-card mh-card-pink">
@@ -205,6 +205,7 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
             className="mh-status-select"
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
+            aria-label="تصفية حسب الحالة"
           >
             <option value="all">كل الحالات</option>
             <option value="pending">تحضير</option>
@@ -253,7 +254,7 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
                           {s.label}
                         </span>
                       </td>
-                      <td className="mh-td-total">{order.total.toLocaleString('ar-EG')} ج.م</td>
+                      <td className="mh-td-total">₪{order.total.toLocaleString()}</td>
                       <td className="mh-td-date">{date}</td>
                     </tr>
                   );

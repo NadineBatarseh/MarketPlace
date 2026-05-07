@@ -268,7 +268,7 @@ export default function MerchantOrders() {
                   </div>
 
                   <div className="mo-card-right">
-                    <span className="mo-price">{order.total_price.toLocaleString('ar-EG')} جنيه</span>
+                    <span className="mo-price">{order.total_price.toLocaleString('ar-EG')} ₪</span>
                     <span className="mo-date">
                       {new Date(order.created_at).toLocaleDateString('ar-EG', {
                         day: 'numeric', month: 'short', year: 'numeric',
@@ -293,11 +293,11 @@ export default function MerchantOrders() {
                           <div className="mo-item-info">
                             <span className="mo-item-title">{item.product_title}</span>
                             <span className="mo-item-meta">
-                              الكمية: {item.qty} × {item.unit_price.toLocaleString('ar-EG')} جنيه
+                              الكمية: {item.qty} × {item.unit_price.toLocaleString('ar-EG')} ₪
                             </span>
                           </div>
                           <span className="mo-item-subtotal">
-                            {(item.qty * item.unit_price).toLocaleString('ar-EG')} جنيه
+                            {(item.qty * item.unit_price).toLocaleString('ar-EG')} ₪
                           </span>
                         </div>
                       ))}

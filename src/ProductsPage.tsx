@@ -86,7 +86,6 @@ export default function ProductsPage() {
             <div>
               <div style={{ fontWeight: 700 }}>{p.title ?? "No title"}</div>
               <div>{p.price ?? ""}</div>
-              <div style={{ fontSize: 12, opacity: 0.7 }}>{p.description ?? ""}</div>
               <div style={{ fontSize: 12 }}>Stock: {p.stock_Quantity ?? "N/A"}</div>
             </div>
           </div>

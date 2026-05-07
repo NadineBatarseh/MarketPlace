@@ -82,9 +82,6 @@ export default function ProductCard({ product, inWishlist, onToggleWishlist, onA
 
       <div className="product-body">
         <div className="product-name">{product.title}</div>
-        {product.description && (
-          <div className="product-desc">{product.description}</div>
-        )}
         {product.price !== null && (
           <div className="product-price">
             <span className="currency">₪</span> {product.price}

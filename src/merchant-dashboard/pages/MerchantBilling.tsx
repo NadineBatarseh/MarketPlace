@@ -106,7 +106,7 @@ function BillCard({ bill }: { bill: Bill }) {
           <div key={idx} className="mb-product-row">
             <span className="mb-product-name">{item.productTitle} × {item.qty}</span>
             <span className="mb-product-cost">
-              {(item.qty * item.unitPrice).toLocaleString('ar-SA')} ر.س
+              {(item.qty * item.unitPrice).toLocaleString('ar-SA')} ₪
             </span>
           </div>
         ))}
@@ -116,7 +116,7 @@ function BillCard({ bill }: { bill: Bill }) {
 
       <div className="mb-total">
         <span className="mb-total-label">الإجمالي</span>
-        <span className="mb-total-value">{Number(bill.total_price).toLocaleString('ar-SA')} ر.س</span>
+        <span className="mb-total-value">{Number(bill.total_price).toLocaleString('ar-SA')} ₪</span>
       </div>
     </div>
   );

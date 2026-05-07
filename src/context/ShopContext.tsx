@@ -13,11 +13,14 @@ import supabase from '../lib/supabase';
 // ──────────────────────────────────────────────────────────
 
 export interface CartItem {
-  id: string | number;
+  id: string;             // composite key: `${productId}__${color ?? ''}__${size ?? ''}`
+  productId: string | number;
   name: string;
   image: string;
   price: number;
   quantity: number;
+  color?: string;
+  size?: string;
 }
 
 export interface FavoriteItem {
@@ -34,6 +37,12 @@ interface AddToCartInput {
   name: string;
   image: string;
   price: number;
+  color?: string;
+  size?: string;
+}
+
+function cartItemKey(productId: string | number, color?: string, size?: string): string {
+  return `${productId}__${color ?? ''}__${size ?? ''}`;
 }
 
 interface ToggleFavoriteInput {
@@ -47,11 +56,11 @@ interface ToggleFavoriteInput {
 interface ShopContextValue {
   cartItems: CartItem[];
   addToCart: (product: AddToCartInput) => void;
-  removeFromCart: (id: string | number) => void;
-  updateCartQty: (id: string | number, qty: number) => void;
+  removeFromCart: (id: string) => void;
+  updateCartQty: (id: string, qty: number) => void;
   clearCart: () => void;
   cartCount: number;
-  isInCart: (id: string | number) => boolean;
+  isInCart: (id: string | number, color?: string, size?: string) => boolean;
 
   favoriteItems: FavoriteItem[];
   toggleFavorite: (product: ToggleFavoriteInput) => void;
@@ -104,6 +113,9 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
   // Supabase serial IDs — fetched once on login
   const cartSerialIdRef = useRef<number | null>(null);
   const favSerialIdRef  = useRef<number | null>(null);
+
+  // Tracks whether the user was logged in on the previous render cycle
+  const prevLoggedInRef = useRef(userId !== undefined);
 
   // ── Lazy helpers: ensure the DB row exists and return its serial ID ──
 
@@ -164,7 +176,12 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
   useEffect(() => {
     if (!userId) {
       cartSerialIdRef.current = null;
-      setCartItems(loadStorage<CartItem[]>(cartKey, []));
+      if (prevLoggedInRef.current) {
+        localStorage.removeItem('sq_cart_guest');
+        setCartItems([]);
+      } else {
+        setCartItems(loadStorage<CartItem[]>(cartKey, []));
+      }
       return;
     }
 
@@ -174,18 +191,21 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
 
       const { data: items, error } = await supabase
         .from('cart_items')
-        .select('product_id, quantity, products(id, title, image_urls, price)')
+        .select('product_id, quantity, color, size, products(id, title, image_urls, price)')
         .eq('cartSerial_id', serialId);
 
       if (error) { console.error('[ShopContext] load cart_items failed:', error); return; }
       if (!items) return;
 
       setCartItems((items as any[]).map((item) => ({
-        id: item.product_id,
+        id: cartItemKey(item.product_id, item.color ?? undefined, item.size ?? undefined),
+        productId: item.product_id,
         name: item.products?.title ?? 'منتج',
         image: item.products?.image_urls?.[0] ?? '',
         price: parseFloat(String(item.products?.price ?? '0').replace(/[^\d.]/g, '')) || 0,
         quantity: item.quantity ?? 1,
+        color: item.color ?? undefined,
+        size: item.size ?? undefined,
       })));
     }
 
@@ -197,7 +217,12 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
   useEffect(() => {
     if (!userId) {
       favSerialIdRef.current = null;
-      setFavoriteItems(loadStorage<FavoriteItem[]>(favKey, []));
+      if (prevLoggedInRef.current) {
+        localStorage.removeItem('sq_fav_guest');
+        setFavoriteItems([]);
+      } else {
+        setFavoriteItems(loadStorage<FavoriteItem[]>(favKey, []));
+      }
       return;
     }
 
@@ -226,32 +251,45 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
     load();
   }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Runs after both load effects so they can read the pre-transition value
+  useEffect(() => {
+    prevLoggedInRef.current = !!userId;
+  }, [userId]);
+
   // ── Persist to localStorage for guests only ────────────
 
   useEffect(() => {
     if (!userId) localStorage.setItem(cartKey, JSON.stringify(cartItems));
-  }, [cartItems, cartKey, userId]);
+  }, [cartItems]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!userId) localStorage.setItem(favKey, JSON.stringify(favoriteItems));
-  }, [favoriteItems, favKey, userId]);
+  }, [favoriteItems]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Cart actions ──────────────────────────────────────
 
   const addToCart = useCallback((product: AddToCartInput) => {
-    const existing = cartItemsRef.current.find((item) => item.id === product.id);
+    const key = cartItemKey(product.id, product.color, product.size);
+    const existing = cartItemsRef.current.find((item) => item.id === key);
 
-    // Update local state immediately
     setCartItems((prev) => {
-      if (prev.find((item) => item.id === product.id)) {
+      if (prev.find((item) => item.id === key)) {
         return prev.map((item) =>
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+          item.id === key ? { ...item, quantity: item.quantity + 1 } : item
         );
       }
-      return [...prev, { ...product, quantity: 1 }];
+      return [...prev, {
+        id: key,
+        productId: product.id,
+        name: product.name,
+        image: product.image,
+        price: product.price,
+        quantity: 1,
+        color: product.color,
+        size: product.size,
+      }];
     });
 
-    // Sync to Supabase in background
     if (userId) {
       ensureCartRow().then((serialId) => {
         if (serialId === null) return;
@@ -265,42 +303,44 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
         } else {
           supabase
             .from('cart_items')
-            .insert({ cartSerial_id: serialId, product_id: String(product.id), quantity: 1 })
+            .insert({ cartSerial_id: serialId, product_id: String(product.id), quantity: 1, color: product.color ?? null, size: product.size ?? null })
             .then(({ error }) => { if (error) console.error('[ShopContext] cart insert failed:', error); });
         }
       });
     }
   }, [userId, ensureCartRow]);
 
-  const removeFromCart = useCallback((id: string | number) => {
+  const removeFromCart = useCallback((id: string) => {
+    const target = cartItemsRef.current.find((i) => i.id === id);
     setCartItems((prev) => prev.filter((item) => item.id !== id));
 
-    if (userId) {
+    if (userId && target) {
       ensureCartRow().then((serialId) => {
         if (serialId === null) return;
         supabase
           .from('cart_items')
           .delete()
           .eq('cartSerial_id', serialId)
-          .eq('product_id', String(id))
+          .eq('product_id', String(target.productId))
           .then(({ error }) => { if (error) console.error('[ShopContext] cart delete failed:', error); });
       });
     }
   }, [userId, ensureCartRow]);
 
-  const updateCartQty = useCallback((id: string | number, qty: number) => {
+  const updateCartQty = useCallback((id: string, qty: number) => {
+    const target = cartItemsRef.current.find((i) => i.id === id);
     setCartItems((prev) =>
       prev.map((item) => (item.id === id ? { ...item, quantity: qty } : item))
     );
 
-    if (userId) {
+    if (userId && target) {
       ensureCartRow().then((serialId) => {
         if (serialId === null) return;
         supabase
           .from('cart_items')
           .update({ quantity: qty })
           .eq('cartSerial_id', serialId)
-          .eq('product_id', String(id))
+          .eq('product_id', String(target.productId))
           .then(({ error }) => { if (error) console.error('[ShopContext] cart qty update failed:', error); });
       });
     }
@@ -322,7 +362,8 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
   }, [userId, ensureCartRow]);
 
   const isInCart = useCallback(
-    (id: string | number) => cartItems.some((item) => item.id === id),
+    (id: string | number, color?: string, size?: string) =>
+      cartItems.some((item) => item.id === cartItemKey(id, color, size)),
     [cartItems]
   );
 

@@ -57,23 +57,23 @@ export default function Cart() {
 
       <div className="pt-summary-row">
         <span>المجموع الجزئي</span>
-        <span>{subtotal.toFixed(2)} ر.س</span>
+        <span>{subtotal.toFixed(2)} ₪</span>
       </div>
 
       <div className="pt-summary-row">
         <span>رسوم الشحن</span>
-        <span>{SHIPPING_COST} ر.س</span>
+        <span>{SHIPPING_COST} ₪</span>
       </div>
 
       <div className="pt-summary-row">
         <span>الضريبة (10%)</span>
-        <span>{tax.toFixed(2)} ر.س</span>
+        <span>{tax.toFixed(2)} ₪</span>
       </div>
 
       {couponDiscount > 0 && (
         <div className="pt-summary-row pt-summary-discount">
           <span>خصم الكوبون ({appliedCoupon})</span>
-          <span>−{couponDiscount} ر.س</span>
+          <span>−{couponDiscount} ₪</span>
         </div>
       )}
 
@@ -81,7 +81,7 @@ export default function Cart() {
 
       <div className="pt-summary-row pt-summary-total">
         <span>الإجمالي</span>
-        <span>{total.toFixed(2)} ر.س</span>
+        <span>{total.toFixed(2)} ₪</span>
       </div>
 
       <button type="button" className="pt-btn-checkout" onClick={() => navigate('/checkout')}>
@@ -150,10 +150,12 @@ export default function Cart() {
             key={item.id}
             image={item.image}
             name={item.name}
+            color={item.color}
+            size={item.size}
             onRemove={() => setPendingRemove(item)}
           >
             <td className="pt-cell pt-cell-price">
-              {item.price.toFixed(2)} ر.س
+              {item.price.toFixed(2)} ₪
             </td>
 
             <td className="pt-cell pt-cell-qty">
@@ -164,7 +166,7 @@ export default function Cart() {
             </td>
 
             <td className="pt-cell pt-cell-subtotal">
-              <strong>{(item.price * item.quantity).toFixed(2)} ر.س</strong>
+              <strong>{(item.price * item.quantity).toFixed(2)} ₪</strong>
             </td>
           </ProductRow>
         ))}

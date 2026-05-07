@@ -207,7 +207,7 @@ export default function CheckoutPage() {
                   <li key={item.id} className="co-item">
                     <div className="co-item-info">
                       <span className="co-item-name">{item.name}</span>
-                      <span className="co-item-price">{(item.price * item.quantity).toLocaleString('ar-SA')} ر.س</span>
+                      <span className="co-item-price">{(item.price * item.quantity).toLocaleString('ar-SA')} ₪</span>
                       <div className="co-qty">
                         <button type="button" onClick={() => updateCartQty(item.id, item.quantity - 1)}
                           disabled={item.quantity <= 1}>−</button>
@@ -233,20 +233,20 @@ export default function CheckoutPage() {
             <div className="co-totals">
               <div className="co-total-row">
                 <span className="co-total-label">المجموع الفرعي</span>
-                <span className="co-total-val">{subtotal.toLocaleString('ar-SA')} ر.س</span>
+                <span className="co-total-val">{subtotal.toLocaleString('ar-SA')} ₪</span>
               </div>
               <div className="co-total-row">
                 <span className="co-total-label">تكلفة التوصيل</span>
-                <span className="co-total-val">{DELIVERY_COST.toLocaleString('ar-SA')} ر.س</span>
+                <span className="co-total-val">{DELIVERY_COST.toLocaleString('ar-SA')} ₪</span>
               </div>
               <div className="co-total-row">
                 <span className="co-total-label">الخصم</span>
-                <span className="co-total-val co-discount">— ر.س</span>
+                <span className="co-total-val co-discount">— ₪</span>
               </div>
               <div className="co-divider" />
               <div className="co-total-row co-grand">
                 <span className="co-total-label">الإجمالي</span>
-                <span className="co-total-val">{total.toLocaleString('ar-SA')} ر.س</span>
+                <span className="co-total-val">{total.toLocaleString('ar-SA')} ₪</span>
               </div>
             </div>
           </div>
