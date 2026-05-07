@@ -1,8 +1,33 @@
 import { useState, useEffect, useRef } from 'react';
+import LogisticsSettingsPage from '../../pages/admin/logistics/LogisticsSettingsPage';
+import BatchMonitorPage from '../../pages/admin/BatchMonitorPage';
 import emailjs from '@emailjs/browser';
 import supabase from '../../lib/supabase';
 import ChangePasswordModal from '../../components/ChangePasswordModal';
 import './AdminDashboard.css';
+
+// ── Sidebar item component (mirrors MerchantDashboard pattern) ─────────────
+function SidebarItem({
+  icon,
+  label,
+  active,
+  badge,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active: boolean;
+  badge?: number;
+  onClick: () => void;
+}) {
+  return (
+    <div className={`ad-sidebar-item${active ? ' ad-active' : ''}`} onClick={onClick}>
+      <span className="ad-sidebar-item-icon">{icon}</span>
+      <span className="ad-sidebar-item-label">{label}</span>
+      {badge != null && badge > 0 && <span className="ad-sidebar-badge">{badge}</span>}
+    </div>
+  );
+}
 
 interface MerchantApp {
   id: string;
@@ -44,13 +69,14 @@ interface HubWorkerApp {
 }
 
 type FilterTab = 'pending' | 'approved' | 'rejected';
-type Section = 'merchant' | 'delivery' | 'hubworker' | 'batches';
+type Section = 'merchant' | 'delivery' | 'hubworker' | 'batches' | 'logistics';
 
 interface BatchConfigForm {
   max_driver_capacity: number;
   max_stops_per_batch: number;
   max_allowed_wait: number;
   max_distance_km: number;
+  max_wait_days: number;
 }
 
 interface BatchShop {
@@ -121,8 +147,14 @@ type RejectModalState<T> = {
 export default function AdminDashboard() {
   const [activeSection, setActiveSection] = useState<Section>('merchant');
   const contentRef = useRef<HTMLElement>(null);
+  const avatarRef  = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<FilterTab>('pending');
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showAvatarMenu, setShowAvatarMenu] = useState(false);
+
+  const today = new Date().toLocaleDateString('ar-EG', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  });
 
   // Merchant state
   const [apps, setApps] = useState<MerchantApp[]>([]);
@@ -180,9 +212,9 @@ export default function AdminDashboard() {
   // Batch config state
   // draftConfig holds raw string values for the inputs so the user can type freely.
   // batchConfig / savedConfig hold parsed numbers for comparison and saving.
-  const defaultConfig: BatchConfigForm = { max_driver_capacity: 20, max_stops_per_batch: 6, max_allowed_wait: 60, max_distance_km: 5 };
+  const defaultConfig: BatchConfigForm = { max_driver_capacity: 20, max_stops_per_batch: 6, max_allowed_wait: 60, max_distance_km: 5, max_wait_days: 3 };
   const [savedConfig, setSavedConfig]     = useState<BatchConfigForm>(defaultConfig);
-  const [draftConfig, setDraftConfig]     = useState({ max_driver_capacity: '20', max_stops_per_batch: '6', max_allowed_wait: '60', max_distance_km: '5' });
+  const [draftConfig, setDraftConfig]     = useState({ max_driver_capacity: '20', max_stops_per_batch: '6', max_allowed_wait: '60', max_distance_km: '5', max_wait_days: '3' });
   const [configLoading, setConfigLoading] = useState(false);
   const [configSaving, setConfigSaving]   = useState(false);
   const [configError, setConfigError]     = useState('');
@@ -194,13 +226,15 @@ export default function AdminDashboard() {
     max_stops_per_batch: parseFloat(draftConfig.max_stops_per_batch) || savedConfig.max_stops_per_batch,
     max_allowed_wait:    parseFloat(draftConfig.max_allowed_wait)    || savedConfig.max_allowed_wait,
     max_distance_km:     parseFloat(draftConfig.max_distance_km)     || savedConfig.max_distance_km,
+    max_wait_days:       parseFloat(draftConfig.max_wait_days)       || savedConfig.max_wait_days,
   };
 
   const configChanged =
     parsedConfig.max_driver_capacity !== savedConfig.max_driver_capacity ||
     parsedConfig.max_stops_per_batch !== savedConfig.max_stops_per_batch ||
     parsedConfig.max_allowed_wait    !== savedConfig.max_allowed_wait    ||
-    parsedConfig.max_distance_km     !== savedConfig.max_distance_km;
+    parsedConfig.max_distance_km     !== savedConfig.max_distance_km     ||
+    parsedConfig.max_wait_days       !== savedConfig.max_wait_days;
 
   const toggleBatch = (idx: number) => setExpandedBatches(prev => {
     const next = new Set(prev); next.has(idx) ? next.delete(idx) : next.add(idx); return next;
@@ -213,6 +247,17 @@ export default function AdminDashboard() {
   useEffect(() => { loadDeliveryApps(); }, []);
   useEffect(() => { loadHubApps(); }, []);
   useEffect(() => { contentRef.current?.scrollTo({ top: 0 }); }, [activeSection]);
+
+  useEffect(() => {
+    if (!showAvatarMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (avatarRef.current && !avatarRef.current.contains(e.target as Node)) {
+        setShowAvatarMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showAvatarMenu]);
 
   // ── Batches loader ────────────────────────────────────────────────────────────
 
@@ -258,7 +303,7 @@ export default function AdminDashboard() {
     setConfigError('');
     const { data, error } = await supabase
       .from('batch_config')
-      .select('max_driver_capacity, max_stops_per_batch, max_allowed_wait, max_distance_km')
+      .select('max_driver_capacity, max_stops_per_batch, max_allowed_wait, max_distance_km, max_wait_days')
       .single();
     if (error) setConfigError('تعذّر تحميل الإعدادات: ' + error.message);
     else if (data) {
@@ -269,6 +314,7 @@ export default function AdminDashboard() {
         max_stops_per_batch: String(d.max_stops_per_batch),
         max_allowed_wait:    String(d.max_allowed_wait),
         max_distance_km:     String(d.max_distance_km),
+        max_wait_days:       String(d.max_wait_days),
       });
     }
     setConfigLoading(false);
@@ -285,6 +331,7 @@ export default function AdminDashboard() {
         max_stops_per_batch: parsedConfig.max_stops_per_batch,
         max_allowed_wait:    parsedConfig.max_allowed_wait,
         max_distance_km:     parsedConfig.max_distance_km,
+        max_wait_days:       parsedConfig.max_wait_days,
       })
       .eq('id', 1);
     if (error) setConfigError('فشل الحفظ: ' + error.message);
@@ -670,70 +717,178 @@ export default function AdminDashboard() {
   const filteredDelivery = deliveryApps.filter(a => a.status === activeTab);
   const filteredHub = hubApps.filter(a => a.status === activeTab);
 
-  const loading = activeSection === 'merchant' ? appsLoading : activeSection === 'delivery' ? deliveryLoading : hubLoading;
-  const loadError = activeSection === 'merchant' ? appsError : activeSection === 'delivery' ? deliveryError : hubError;
+  const loading = activeSection === 'merchant' ? appsLoading : activeSection === 'delivery' ? deliveryLoading : activeSection === 'hubworker' ? hubLoading : false;
+  const loadError = activeSection === 'merchant' ? appsError : activeSection === 'delivery' ? deliveryError : activeSection === 'hubworker' ? hubError : '';
   const currentApps = activeSection === 'merchant' ? filteredMerchants : activeSection === 'delivery' ? filteredDelivery : filteredHub;
   const allCurrentApps = activeSection === 'merchant' ? apps : activeSection === 'delivery' ? deliveryApps : hubApps;
 
   return (
     <div className="ad-root">
 
-      {/* ── Topbar ── */}
+      {/* ── Topbar (mirrors MerchantDashboard) ── */}
       <header className="ad-topbar">
-        <div className="ad-topbar-logo">سوق <span>لينك</span></div>
-        <div className="ad-topbar-center">
-          <h1 className="ad-topbar-title">لوحة تحكم الإدارة</h1>
+        <div className="ad-topbar-brand">
+          <img src="/logo.png" alt="سوق لينك" className="ad-topbar-logo" />
+          <div className="ad-topbar-brand-text">سوق <span>لينك</span></div>
         </div>
+
         <div className="ad-topbar-actions">
-          <button
-            type="button"
-            className="ad-topbar-btn"
-            onClick={() => setShowChangePassword(true)}
-          >
-            🔑 تغيير كلمة المرور
+          {/* Bell */}
+          <button type="button" className="ad-topbar-bell" aria-label="الإشعارات">
+            <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
           </button>
-          <button
-            type="button"
-            className="ad-topbar-btn ad-topbar-btn--logout"
-            onClick={async () => { await supabase.auth.signOut(); window.location.href = '/login'; }}
-          >
-            تسجيل الخروج
-          </button>
+
+          {/* Avatar dropdown */}
+          <div className="ad-avatar-wrapper" ref={avatarRef}>
+            <div
+              className={`ad-topbar-avatar${showAvatarMenu ? ' ad-avatar-active' : ''}`}
+              title="المشرف"
+              onClick={() => setShowAvatarMenu(v => !v)}
+            >
+              أ
+            </div>
+            {showAvatarMenu && (
+              <div className="ad-avatar-menu">
+                <div className="ad-avatar-menu-header">
+                  <div className="ad-avatar-menu-name">المشرف</div>
+                  <div className="ad-avatar-menu-email">SOUQ LINK Admin</div>
+                </div>
+                <button
+                  type="button"
+                  className="ad-avatar-menu-item"
+                  onClick={() => { setShowChangePassword(true); setShowAvatarMenu(false); }}
+                >
+                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                  تغيير كلمة المرور
+                </button>
+                <button
+                  type="button"
+                  className="ad-avatar-menu-item ad-avatar-menu-logout"
+                  onClick={async () => { setShowAvatarMenu(false); await supabase.auth.signOut(); window.location.href = '/login'; }}
+                >
+                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                  </svg>
+                  تسجيل الخروج
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
       {/* ── Body: sidebar + content ── */}
       <div className="ad-body">
 
-        {/* Sidebar */}
+        {/* Sidebar (mirrors MerchantDashboard) */}
         <aside className="ad-sidebar">
-          {[
-            { key: 'merchant'  as Section, icon: '🏪', label: 'طلبات التجار',        count: apps.filter(a => a.status === 'pending').length },
-            { key: 'delivery'  as Section, icon: '🚚', label: 'طلبات المناديب',       count: deliveryApps.filter(a => a.status === 'pending').length },
-            { key: 'hubworker' as Section, icon: '📦', label: 'عمال المستودع',        count: hubApps.filter(a => a.status === 'pending').length },
-          ].map(item => (
-            <div
-              key={item.key}
-              className={`ad-sidebar-item${activeSection === item.key ? ' ad-sidebar-item--active' : ''}`}
-              onClick={() => setActiveSection(item.key)}
-            >
-              <span className="ad-sidebar-icon">{item.icon}</span>
-              {item.label}
-              {item.count > 0 && <span className="ad-sidebar-badge">{item.count}</span>}
-            </div>
-          ))}
 
-          <div className="ad-sidebar-divider" />
-
-          <div
-            className={`ad-sidebar-item${activeSection === 'batches' ? ' ad-sidebar-item--active' : ''}`}
-            onClick={() => { setActiveSection('batches'); loadBatches(); loadConfig(); }}
-          >
-            <span className="ad-sidebar-icon">🗂</span>
-            تجميعات الاستلام
-            {batches.length > 0 && <span className="ad-sidebar-badge">{batches.length}</span>}
+          {/* Greeting */}
+          <div className="ad-sidebar-greeting">
+            <div className="ad-sidebar-greeting-name">لوحة تحكم <strong>الإدارة</strong></div>
+            <div className="ad-sidebar-greeting-date">{today}</div>
           </div>
 
+          {/* Navigation */}
+          <nav className="ad-sidebar-nav">
+            <SidebarItem
+              icon={
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                  <polyline points="9 22 9 12 15 12 15 22" />
+                </svg>
+              }
+              label="طلبات التجار"
+              active={activeSection === 'merchant'}
+              badge={apps.filter(a => a.status === 'pending').length}
+              onClick={() => setActiveSection('merchant')}
+            />
+
+            <SidebarItem
+              icon={
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <rect x="1" y="3" width="15" height="13" rx="2" />
+                  <path d="M16 8l4 2v5h-4V8z" />
+                  <circle cx="5.5" cy="18.5" r="2.5" />
+                  <circle cx="18.5" cy="18.5" r="2.5" />
+                </svg>
+              }
+              label="طلبات المناديب"
+              active={activeSection === 'delivery'}
+              badge={deliveryApps.filter(a => a.status === 'pending').length}
+              onClick={() => setActiveSection('delivery')}
+            />
+
+            <SidebarItem
+              icon={
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                </svg>
+              }
+              label="عمال المستودع"
+              active={activeSection === 'hubworker'}
+              badge={hubApps.filter(a => a.status === 'pending').length}
+              onClick={() => setActiveSection('hubworker')}
+            />
+
+            <div className="ad-sidebar-divider" />
+
+            <SidebarItem
+              icon={
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
+                  <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
+                </svg>
+              }
+              label="تجميعات الاستلام"
+              active={activeSection === 'batches'}
+              badge={batches.length || undefined}
+              onClick={() => setActiveSection('batches')}
+            />
+
+            <SidebarItem
+              icon={
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+              }
+              label="إعدادات التوزيع"
+              active={activeSection === 'logistics'}
+              onClick={() => setActiveSection('logistics')}
+            />
+          </nav>
+
+          {/* Sidebar footer */}
+          <div className="ad-sidebar-footer">
+            <div className="ad-sidebar-user">
+              <div className="ad-sidebar-user-avatar">أ</div>
+              <div className="ad-sidebar-user-info">
+                <div className="ad-sidebar-user-name">المشرف</div>
+                <div className="ad-sidebar-user-role">SOUQ LINK Admin</div>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="ad-sidebar-logout"
+              onClick={async () => { await supabase.auth.signOut(); window.location.href = '/login'; }}
+            >
+              <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+              تسجيل الخروج
+            </button>
+          </div>
         </aside>
 
         {/* Main content */}
@@ -741,7 +896,7 @@ export default function AdminDashboard() {
           {loadError && <div className="ad-error">{loadError}</div>}
 
           {/* Filter tabs — only for application sections */}
-          {activeSection !== 'batches' && (
+          {activeSection !== 'batches' && activeSection !== 'logistics' && (
             <div className="ad-tabs">
               {(['pending', 'approved', 'rejected'] as FilterTab[]).map(tab => {
                 const count = allCurrentApps.filter(a => a.status === tab).length;
@@ -760,7 +915,7 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {activeSection !== 'batches' && (loading ? (
+          {activeSection !== 'batches' && activeSection !== 'logistics' && (loading ? (
             <div className="ad-loading">جاري تحميل الطلبات...</div>
           ) : currentApps.length === 0 ? (
             <div className="ad-empty">لا توجد طلبات في هذا القسم</div>
@@ -959,8 +1114,18 @@ export default function AdminDashboard() {
         </div>
           ))}
 
+          {/* ── Logistics settings section ── */}
+          {activeSection === 'logistics' && (
+            <LogisticsSettingsPage embedded />
+          )}
+
           {/* ── Batches section ── */}
           {activeSection === 'batches' && (
+            <BatchMonitorPage />
+          )}
+
+          {/* ── Batches section (legacy inline — kept for reference) ── */}
+          {false && (
             <div className="ad-batches-layout">
 
               {/* Left: batch list */}
@@ -1195,6 +1360,26 @@ export default function AdminDashboard() {
                             onChange={e => { setConfigSuccess(false); setDraftConfig(p => ({ ...p, max_distance_km: e.target.value })); }}
                           />
                           <span className="ad-config-unit">كم</span>
+                        </div>
+                      </div>
+
+                      {/* Max wait days */}
+                      <div className="ad-config-field">
+                        <div className="ad-config-label-row">
+                          <span className="ad-config-label-text">أقصى أيام انتظار الشحنة</span>
+                          <button className="ad-config-info-btn" onClick={e => { e.stopPropagation(); setActiveTooltip(t => t === 'wait_days' ? null : 'wait_days'); }}>!</button>
+                          {activeTooltip === 'wait_days' && (
+                            <div className="ad-config-tooltip">الحد الأقصى لعدد الأيام التي يُسمح فيها للشحنة بالانتظار قبل الاستلام — يُحسب الموعد النهائي تلقائياً عند إنشاء الشحنة</div>
+                          )}
+                        </div>
+                        <div className="ad-config-input-row">
+                          <input type="number" min={1} max={30} className="ad-config-input"
+                            title="أقصى أيام انتظار الشحنة"
+                            placeholder="أدخل عدد الأيام"
+                            value={draftConfig.max_wait_days}
+                            onChange={e => { setConfigSuccess(false); setDraftConfig(p => ({ ...p, max_wait_days: e.target.value })); }}
+                          />
+                          <span className="ad-config-unit">يوم</span>
                         </div>
                       </div>
 
