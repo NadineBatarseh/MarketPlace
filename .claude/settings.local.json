@@ -15,7 +15,8 @@
       "Bash(find c:UsershpDesktopSOUQLINK -type f \\\\\\(-name *.ts -o -name *.js \\\\\\) ! -path */node_modules/* ! -path */.git/*)",
       "Bash(xargs grep:*)",
       "Bash(find c:UsershpDesktopSOUQLINK -type f -name *.ts ! -path */node_modules/* ! -path */.git/*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(Get-ChildItem -Name)"
     ]
   }
 }
