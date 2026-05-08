@@ -75,7 +75,7 @@ export default function Topbar({
     if (merchant) merchantLogout();
     else if (customer) customerLogout();
     setDropdownOpen(false);
-    navigate('/store');
+    navigate('/home');
   };
 
   const dashboardPath =
@@ -89,7 +89,7 @@ export default function Topbar({
     <>
       <header className="topbar">
         {/* Logo */}
-        <a href="#" className="logo" onClick={(e) => { e.preventDefault(); navigate('/store'); }}>
+        <a href="#" className="logo" onClick={(e) => { e.preventDefault(); navigate('/home'); }}>
           <img src="/logo.png" alt="Souq Link" className="logo-img" />
           <div className="logo-text">
             <div className="ar">سوق لينك</div>
@@ -100,14 +100,14 @@ export default function Topbar({
         {/* Nav links */}
         <nav className="topbar-nav-links">
           <span
-            className={`topbar-nav-link${pathname === '/store' || pathname === '/' ? ' active' : ''}`}
-            onClick={() => navigate('/store')}
+            className={`topbar-nav-link${pathname === '/home' || pathname === '/' ? ' active' : ''}`}
+            onClick={() => navigate('/home')}
           >الصفحة الرئيسية</span>
           <span
             className={`topbar-nav-link${pathname === '/stores-list' ? ' active' : ''}`}
             onClick={() => navigate('/stores-list')}
           >المتاجر</span>
-          <span className="topbar-nav-link">الأقسام</span>
+          <span className="topbar-nav-link">الفئات</span>
           <span className="topbar-nav-link">العروض</span>
         </nav>
 
@@ -131,8 +131,8 @@ export default function Topbar({
         <nav className="nav-actions">
           {/* Home */}
           <div
-            className={`nav-action${pathname === '/store' ? ' nav-action--active' : ''}`}
-            onClick={() => navigate('/store')}
+            className={`nav-action${pathname === '/home' ? ' nav-action--active' : ''}`}
+            onClick={() => navigate('/home')}
             title="الرئيسية"
           >
             <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
@@ -189,6 +189,9 @@ export default function Topbar({
               <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
               </svg>
+              {customer && displayName && (
+                <span className="nav-action-username">{displayName.split(' ')[0]}</span>
+              )}
             </button>
 
             {/* Guest dropdown */}

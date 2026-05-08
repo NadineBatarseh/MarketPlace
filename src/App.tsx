@@ -13,7 +13,6 @@ import MetaConnectPage from './pages/MetaConnectPage';
 
 
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
-import { useSharedAuth } from "./context/AuthContext";
 import "./App.css";
 import StorePage from "./pages/singleStore/storePage";
 import ProductsPage from "./ProductsPage";
@@ -40,20 +39,6 @@ import AdminDashboard from "./merchant-dashboard/pages/AdminDashboard";
 import { useMerchantAuth } from './merchant-dashboard/context/MerchantAuthContext';
 import { useCustomerAuth } from './context/CustomerAuthContext';
 
-const ROLE_HOME: Record<string, string> = {
-  customer: '/store',
-  merchant: '/merchant-dashboard',
-  delivery: '/driver-dashboard',
-  hubworker: '/hub',
-  admin: '/admin-dashboard',
-};
-
-function RoleHomeRedirect() {
-  const { rawUser, role, isLoading } = useSharedAuth();
-  if (isLoading) return null;
-  if (!rawUser || role === 'customer') return <Navigate to="/store" replace />;
-  return <Navigate to={ROLE_HOME[role ?? ''] ?? '/store'} replace />;
-}
 
 function StoreWrapper() {
   const { shopId } = useParams<{ shopId: string }>();
@@ -82,8 +67,8 @@ export default function App() {
           <BrowserRouter>
             <ChatBot />
             <Routes>
-              {/* Landing → role-aware redirect */}
-              <Route path="/" element={<RoleHomeRedirect />} />
+              {/* Landing → redirect to /home */}
+              <Route path="/" element={<Navigate to="/home" replace />} />
 
               {/* Auth pages — always public */}
               <Route path="/login" element={<Login />} />
@@ -98,7 +83,8 @@ export default function App() {
               <Route path="/meta-connect" element={<MetaConnectPage />} />
 
               {/* Customer or guest browsing — other roles redirected to their home */}
-              <Route path="/store" element={<RoleGuard allowedRoles={['customer']} allowGuests><HomePage /></RoleGuard>} />
+              <Route path="/home" element={<RoleGuard allowedRoles={['customer']} allowGuests><HomePage /></RoleGuard>} />
+              <Route path="/store" element={<Navigate to="/home" replace />} />
               <Route path="/stores-list" element={<RoleGuard allowedRoles={['customer']} allowGuests><StoreListPage /></RoleGuard>} />
               <Route path="/store/:shopId" element={<RoleGuard allowedRoles={['customer']} allowGuests><StoreWrapper /></RoleGuard>} />
               <Route path="/stores/:shopId" element={<RoleGuard allowedRoles={['customer']} allowGuests><StorePageWrapper /></RoleGuard>} />

@@ -98,7 +98,7 @@ export default function BulkUploadPage() {
         onClick={() => excelRef.current?.click()}
       >
         <input ref={excelRef} type="file" accept=".xlsx,.xls"
-          style={{ display: 'none' }} onChange={handleExcelChange} aria-hidden="true" />
+          style={{ display: 'none' }} onChange={handleExcelChange} aria-hidden="true" title="اختر ملف Excel" />
         {excelFile ? (
           <p style={{ margin: 0, color: '#4f2d91', fontWeight: 600 }}>
             {excelFile.name}{' '}
@@ -121,7 +121,7 @@ export default function BulkUploadPage() {
         onClick={() => imagesRef.current?.click()}
       >
         <input ref={imagesRef} type="file" accept="image/*" multiple
-          style={{ display: 'none' }} onChange={handleImagesChange} aria-hidden="true" />
+          style={{ display: 'none' }} onChange={handleImagesChange} aria-hidden="true" title="اختر صور المنتجات" />
         {imageFiles.length > 0 ? (
           <div style={{ textAlign: 'right' }}>
             <p style={{ margin: '0 0 0.4rem', color: '#4f2d91', fontWeight: 600 }}>

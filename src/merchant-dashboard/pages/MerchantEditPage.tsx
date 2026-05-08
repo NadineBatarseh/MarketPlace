@@ -786,6 +786,7 @@ function EditProductModal({ product, onSave, onClose }: {
               aria-label="حجم المنتج للتوصيل"
               value={capacityUnits}
               onChange={e => setCapacityUnits(Number(e.target.value))}
+              title="حجم المنتج للتوصيل"
             >
               {[1, 2, 3, 4, 5].map(v => (
                 <option key={v} value={v}>{v} — {CAPACITY_LABELS[v]}</option>
