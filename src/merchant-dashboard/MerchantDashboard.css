@@ -518,6 +518,7 @@
   justify-content: space-between;
   padding: 1rem 1.25rem;
   cursor: pointer;
+  -webkit-user-select: none;
   user-select: none;
   transition: background 0.12s;
   gap: 1rem;
@@ -2445,6 +2446,7 @@
   background: #f8f7f5;
   border-right: 1.5px solid #e5e7eb;
   flex-shrink: 0;
+  -webkit-user-select: none;
   user-select: none;
 }
 .mep-whatsapp-split .mep-whatsapp-local {

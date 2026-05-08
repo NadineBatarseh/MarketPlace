@@ -231,6 +231,7 @@ export default function DraftProductsPage() {
                     className={card.titleError ? 'dp-input-error' : ''}
                     onChange={(e) => updateCard(product.id, { title: e.target.value, titleError: false })}
                     disabled={isBusy}
+                    title="اسم المنتج"
                   />
                   {card.titleError && <span className="dp-field-error">اسم المنتج مطلوب</span>}
                 </div>
@@ -242,6 +243,7 @@ export default function DraftProductsPage() {
                     value={card.description}
                     onChange={(e) => updateCard(product.id, { description: e.target.value })}
                     disabled={isBusy}
+                    title="الوصف"
                   />
                 </div>
 

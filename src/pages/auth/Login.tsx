@@ -65,7 +65,7 @@ export default function Login() {
     } else if (role === 'delivery') {
       navigate('/driver-dashboard');
     } else {
-      navigate('/store');
+      navigate('/home');
     }
   };
 

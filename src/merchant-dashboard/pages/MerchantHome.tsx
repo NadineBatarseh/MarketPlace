@@ -205,6 +205,7 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
             className="mh-status-select"
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
+            title="تصفية حسب الحالة"
           >
             <option value="all">كل الحالات</option>
             <option value="pending">تحضير</option>

@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { useSharedAuth } from '../context/AuthContext';
 
 const ROLE_HOME: Record<string, string> = {
-  customer: '/store',
+  customer: '/home',
   merchant: '/merchant-dashboard',
   delivery: '/driver-dashboard',
   hubworker: '/hub',
@@ -28,7 +28,7 @@ export default function RoleGuard({ children, allowedRoles, allowGuests = false 
   }
 
   if (!role || !allowedRoles.includes(role)) {
-    const home = ROLE_HOME[role ?? ''] ?? '/store';
+    const home = ROLE_HOME[role ?? ''] ?? '/home';
     return <Navigate to={home} replace />;
   }
 

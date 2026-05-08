@@ -52,7 +52,7 @@
 
 /* ── Hero ──────────────────────────────────────────────── */
 .hp-hero {
-  background: url('/hero-bg.jpg') center center / cover no-repeat;
+  background: url('/heroPhoto5.jpg') center center / cover no-repeat;
   border-radius: 0;
   height: 300px;
   position: relative;
@@ -64,7 +64,7 @@
 .hp-hero__overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to left, rgba(245,235,224,0.82) 40%, rgba(245,235,224,0.1) 100%);
+  background: linear-gradient(to left, rgba(245,235,224,0.3) 40%, rgba(245,235,224,0.1) 100%);
   z-index: 0;
 }
 
@@ -87,7 +87,7 @@
 .hp-hero__inner {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 24px;
   padding: 28px 40px;
   min-height: 210px;
@@ -97,7 +97,11 @@
 
 /* RIGHT: main text (RTL start) */
 .hp-hero__content {
-  flex: 1;
+  flex: 0 0 auto;
+  max-width: 45%;
+  text-align: right;
+  margin-left: auto;
+  margin-right: 8%;
   animation: hpFade .45s ease both;
 }
 @keyframes hpFade {
@@ -373,8 +377,8 @@
   width: 60px; height: 60px;
   border-radius: 50%;
   overflow: hidden;
-  background: #f0f2f0;
-  border: 2px solid #e5e7eb;
+  background: #e8f0eb;
+  border: 2px solid #c8ddd0;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
   transition: border-color .18s, box-shadow .18s;
@@ -402,60 +406,65 @@
 /* ── Store grid ─────────────────────────────────────────── */
 .hp-store-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 14px;
+  grid-template-columns: repeat(9, 1fr);
+  gap: 8px;
+  max-width: 1080px;
 }
 
-/* Store card — vertical */
+/* Store card — square elegant */
 .hp-store-card {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  gap: 5px;
   background: #fff;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #e8f0eb;
   border-radius: 12px;
-  padding: 20px 12px 16px;
+  aspect-ratio: 1 / 1;
+  padding: 8px;
   cursor: pointer;
   text-align: center;
-  transition: border-color .18s, box-shadow .18s, transform .2s;
+  box-shadow: 0 1px 4px rgba(0,0,0,.05);
+  transition: border-color .2s, box-shadow .2s, transform .2s;
 }
 .hp-store-card:hover {
   border-color: #136540;
-  box-shadow: 0 4px 18px rgba(19,101,64,.11);
-  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(19,101,64,.13);
+  transform: translateY(-4px);
 }
 .hp-store-card--sk {
   background: #f7f8f7;
-  border-color: #f7f8f7;
+  border-color: #f0f2f0;
   cursor: default;
-  align-items: center;
+  box-shadow: none;
 }
-.hp-store-card--sk:hover { transform: none; box-shadow: none; border-color: #f7f8f7; }
+.hp-store-card--sk:hover { transform: none; box-shadow: none; border-color: #f0f2f0; }
 
 .hp-store-card__logo {
-  width: 80px; height: 80px;
+  width: 52px; height: 52px;
   border-radius: 50%;
   overflow: hidden;
   flex-shrink: 0;
   border: 2px solid #e8f5e9;
+  box-shadow: 0 2px 8px rgba(19,101,64,.1);
 }
 .hp-store-card__logo-img {
   width: 100%; height: 100%;
   object-fit: cover;
 }
 .hp-store-card__logo-ph {
-  width: 80px; height: 80px;
+  width: 52px; height: 52px;
   border-radius: 50%;
   background: linear-gradient(135deg, #136540, #1a8a56);
   color: #fff;
-  font-size: 1.6rem;
+  font-size: 1rem;
   font-weight: 800;
   display: flex; align-items: center; justify-content: center;
 }
 
 .hp-store-card__name {
-  font-size: 13px;
+  font-size: 10px;
   font-weight: 700;
   color: #136540;
   margin: 0;
@@ -471,8 +480,8 @@
   justify-content: center;
   gap: 4px;
 }
-.hp-store-card__score { font-size: 12px; font-weight: 700; color: #374151; }
-.hp-store-card__cnt { font-size: 11px; color: #9ca3af; }
+.hp-store-card__score { font-size: 11px; font-weight: 700; color: #374151; }
+.hp-store-card__cnt { font-size: 10px; color: #9ca3af; }
 
 /* Carousel arrows shared */
 .hp-carousel-arr {
@@ -517,15 +526,34 @@
   background: #f7f8f7;
   border-color: #f7f8f7;
   cursor: default;
-  min-width: 185px;
+  min-width: 130px;
 }
 .hp-prod-card--sk:hover { transform: none; box-shadow: none; }
+
+.hp-prod-card__fav {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  background: rgba(255,255,255,.85);
+  border: none;
+  border-radius: 50%;
+  width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background .15s, transform .15s;
+  backdrop-filter: blur(2px);
+}
+.hp-prod-card__fav:hover { background: #fff; transform: scale(1.15); }
+.hp-prod-card__fav--on { background: #e8f5e9; }
 
 .hp-prod-card__badges {
   position: absolute;
   top: 8px;
   right: 8px;
   z-index: 1;
+  
 }
 .hp-prod-badge {
   display: inline-block;
@@ -539,7 +567,7 @@
 .hp-prod-badge--new  { background: #136540; color: #fff; }
 
 .hp-prod-card__img-wrap {
-  height: 100px;
+  height: 155px;
   overflow: hidden;
   background: #f4f7f4;
   flex-shrink: 0;
@@ -702,14 +730,15 @@
 /* ── Footer ─────────────────────────────────────────────── */
 .hp-footer {
   background: #0d1f15;
-  padding-top: 40px;
+  padding-top: 16px;
 }
 .hp-footer__grid {
   display: grid;
   grid-template-columns: 1.6fr 1fr 1fr 1fr 1fr;
-  gap: 32px;
-  padding-bottom: 36px;
-  border-bottom: 1px solid rgba(255,255,255,.07);
+  gap: 20px;
+  padding-bottom: 12px;
+  border-bottom: none;
+  align-items: center;
 }
 .hp-footer__brand {
   display: flex;
@@ -779,6 +808,28 @@
   color: rgba(255,255,255,.6);
   letter-spacing: .3px;
 }
+
+.hp-footer__toggle-bar {
+  display: none;
+}
+.hp-footer__grid .hp-footer__toggle {
+  grid-column: 1 / -1;
+  justify-self: center;
+  margin: 0 0 4px;
+}
+.hp-footer__toggle {
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.15);
+  border-radius: 50px;
+  color: rgba(255,255,255,.7);
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: background .18s;
+}
+.hp-footer__toggle:hover { background: rgba(255,255,255,.15); }
+.hp-footer__toggle-icon { transition: transform .25s; }
+.hp-footer__toggle-icon--open { transform: rotate(180deg); }
 
 .hp-footer__bottom {
   background: #0a1810;
@@ -852,7 +903,7 @@
   .hp-hero__title { font-size: 1.3rem; }
   .hp-hero__sale { min-width: 150px; }
   .hp-cat-grid { gap: 4px 0; }
-  .hp-prod-card { min-width: 155px; }
+  .hp-prod-card { min-width: 120px; }
   .hp-store-card { min-width: 160px; }
   .hp-footer__grid { grid-template-columns: 1fr 1fr; gap: 20px; }
   .hp-footer { padding-top: 28px; }
