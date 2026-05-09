@@ -83,7 +83,7 @@ export async function atomicAssign(
 async function notifyDriver(courierId: string, batchId: string): Promise<void> {
   const { error } = await supabase
     .from('driver_notifications')
-    .insert({ courier_id: courierId, batch_id: batchId, status: 'pending' });
+    .insert({ courier_id: courierId, batch_id: batchId, is_accepted: false });
 
   if (error) {
     console.error('[Driver Assignment] notifyDriver insert error:', error.message);
@@ -92,7 +92,8 @@ async function notifyDriver(courierId: string, batchId: string): Promise<void> {
   }
 }
 
-// Simulate waiting for a driver to accept within the timeout window
+// Poll until a candidate accepts (via is_accepted flag) OR the batch is already assigned
+// (frontend may have run atomicAssign directly).
 async function waitForAcceptance(
   batchId: string,
   courierIds: string[],
@@ -102,15 +103,26 @@ async function waitForAcceptance(
   const start = Date.now();
 
   while (Date.now() - start < timeoutMs) {
-    const { data } = await supabase
-      .from('batch_acceptances')
+    const { data: notif } = await supabase
+      .from('driver_notifications')
       .select('courier_id')
       .eq('batch_id', batchId)
+      .eq('is_accepted', true)
       .in('courier_id', courierIds)
       .limit(1)
       .single();
 
-    if (data?.courier_id) return data.courier_id as string;
+    if (notif?.courier_id) return notif.courier_id as string;
+
+    // Fallback: frontend may have run the atomic assign itself
+    const { data: batch } = await supabase
+      .from('batches')
+      .select('assigned_to')
+      .eq('id', batchId)
+      .eq('status', 'assigned')
+      .single();
+
+    if (batch?.assigned_to) return batch.assigned_to as string;
 
     await sleep(pollInterval);
   }
@@ -153,12 +165,15 @@ export async function assignBatch(
     const acceptedBy = await waitForAcceptance(batchId, courierIds, C.ASSIGNMENT_TIMEOUT_MS);
 
     if (acceptedBy) {
-      // D34 — atomic assignment: only one driver can succeed
-      const assigned = await atomicAssign(batchId, acceptedBy);
-      if (assigned) {
-        console.log(`[Driver Assignment] Batch ${batchId} assigned to courier ${acceptedBy} (round ${round})`);
-        return true;
-      }
+      // D34 — atomic assignment (no-op if frontend already did it)
+      await atomicAssign(batchId, acceptedBy);
+      // Ensure all notifications are flipped regardless of who ran atomicAssign
+      await supabase
+        .from('driver_notifications')
+        .update({ is_accepted: true })
+        .eq('batch_id', batchId);
+      console.log(`[Driver Assignment] Batch ${batchId} assigned to courier ${acceptedBy} (round ${round})`);
+      return true;
     }
 
     console.warn(`[Driver Assignment] Round ${round} timed out for batch ${batchId}`);

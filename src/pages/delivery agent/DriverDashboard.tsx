@@ -13,23 +13,22 @@ interface PendingBatchNotification {
   route: string[];
   shipmentCount: number;
   totalVolume: number;
+  isAccepted: boolean;
 }
 
 interface DriverInfo {
-  driver_id: number;
-  shift_start: string | null;
-  shift_end: string | null;
-  zone: string | null;
-  is_available: boolean;
+  id: string;
+  home_base_zone: string | null;
+  status: 'available' | 'on_route' | 'offline';
 }
 
-interface OrderRow {
-  id: number;
+interface BatchRow {
+  id: string;
+  route: string[];
   status: string;
-  total_price: number | null;
-  created_at: string;
-  delivery_address: string | null;
-  customer_name: string;
+  totalVolume: number;
+  shipmentCount: number;
+  assignedAt: string | null;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -55,10 +54,6 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
 }
 
-function formatShiftTime(t: string | null): string {
-  if (!t) return '--:--';
-  return t.slice(0, 5);
-}
 
 function isToday(iso: string): boolean {
   const d = new Date(iso);
@@ -66,18 +61,13 @@ function isToday(iso: string): boolean {
   return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
 }
 
-function isYesterday(iso: string): boolean {
-  const d = new Date(iso);
-  const y = new Date();
-  y.setDate(y.getDate() - 1);
-  return d.getFullYear() === y.getFullYear() && d.getMonth() === y.getMonth() && d.getDate() === y.getDate();
-}
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
-  delivering:   { label: 'قيد التوصيل', color: '#2563eb' },
-  consolidated: { label: 'قيد الانتظار', color: '#7c3aed' },
-  completed:    { label: 'تم التسليم',  color: '#16a34a' },
-  failed:       { label: 'فاشل',        color: '#dc2626' },
+  pending_assignment: { label: 'في انتظار التخصيص', color: '#f59e0b' },
+  assigned:           { label: 'مخصصة',             color: '#2563eb' },
+  in_transit:         { label: 'قيد التوصيل',       color: '#7c3aed' },
+  completed:          { label: 'مكتملة',             color: '#16a34a' },
+  cancelled:          { label: 'ملغاة',              color: '#dc2626' },
 };
 
 // ── SidebarItem (matches MerchantDashboard pattern) ───────────────────────
@@ -109,15 +99,15 @@ export default function DriverDashboard() {
   const avatarRef = useRef<HTMLDivElement>(null);
 
   const [driverInfo, setDriverInfo]             = useState<DriverInfo | null>(null);
-  const [orders, setOrders]                     = useState<OrderRow[]>([]);
-  const [yesterdayCount, setYesterdayCount]     = useState(0);
-  const [avgDailyEarnings, setAvgDailyEarnings] = useState(0);
+  const [batches, setBatches]                   = useState<BatchRow[]>([]);
+
   const [loading, setLoading]                   = useState(true);
   const [statusFilter, setStatusFilter]         = useState('all');
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showAvatarMenu, setShowAvatarMenu]     = useState(false);
   const [pendingNotifications, setPendingNotifications] = useState<PendingBatchNotification[]>([]);
   const [showNotifPanel, setShowNotifPanel]     = useState(false);
+  const [unreadCount, setUnreadCount]           = useState(0);
 
   const initials       = getInitials(name ?? 'س');
   const displayInitial = initials.charAt(0);
@@ -159,14 +149,27 @@ export default function DriverDashboard() {
           if (!batch) return;
           setPendingNotifications((prev) => {
             if (prev.some((n) => n.notificationId === notificationId)) return prev;
+            setUnreadCount((c) => c + 1);
             return [...prev, {
               notificationId, batchId,
               route:         (batch.route as string[]) ?? [],
               shipmentCount: (batch.ab_shipment_ids as string[])?.length ?? 0,
               totalVolume:   batch.total_volume ?? 0,
+              isAccepted:    false,
             }];
           });
           setShowNotifPanel(true);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'driver_notifications', filter: `courier_id=eq.${rawUser.id}` },
+        (payload) => {
+          const notificationId = payload.new.id as string;
+          const isAccepted     = payload.new.is_accepted as boolean;
+          setPendingNotifications((prev) =>
+            prev.map((n) => n.notificationId === notificationId ? { ...n, isAccepted } : n)
+          );
         }
       )
       .subscribe();
@@ -176,7 +179,7 @@ export default function DriverDashboard() {
   async function loadPendingNotifications() {
     if (!rawUser?.id) return;
     const { data: notifs } = await supabase
-      .from('driver_notifications').select('id, batch_id').eq('courier_id', rawUser.id).eq('status', 'pending');
+      .from('driver_notifications').select('id, batch_id, is_accepted').eq('courier_id', rawUser.id);
     if (!notifs?.length) return;
     const enriched = await Promise.all(
       notifs.map(async (n) => {
@@ -188,93 +191,86 @@ export default function DriverDashboard() {
           route:          (batch?.route as string[]) ?? [],
           shipmentCount:  (batch?.ab_shipment_ids as string[])?.length ?? 0,
           totalVolume:    batch?.total_volume ?? 0,
+          isAccepted:     n.is_accepted as boolean,
         };
       })
     );
     setPendingNotifications(enriched);
+    const seenIds: string[] = JSON.parse(localStorage.getItem(`dd_seen_notifs_${rawUser.id}`) ?? '[]');
+    const seenSet = new Set(seenIds);
+    setUnreadCount(enriched.filter((n) => !seenSet.has(n.notificationId)).length);
   }
 
   async function handleAcceptBatch(notif: PendingBatchNotification) {
     if (!rawUser?.id) return;
-    await supabase.from('batch_acceptances').insert({ batch_id: notif.batchId, courier_id: rawUser.id });
-    await supabase.from('driver_notifications').update({ status: 'accepted' }).eq('id', notif.notificationId);
+
+    // Atomic assignment — same guard the backend uses: only succeeds if batch is still pending_assignment
+    const { data } = await supabase
+      .from('batches')
+      .update({ status: 'assigned', assigned_to: rawUser.id, assigned_at: new Date().toISOString() })
+      .eq('id', notif.batchId)
+      .eq('status', 'pending_assignment')
+      .select('id');
+
+    const won = Array.isArray(data) && data.length > 0;
+
+    if (won) {
+      // Flip ALL notifications for this batch so every other notified driver sees "taken"
+      await supabase
+        .from('driver_notifications')
+        .update({ is_accepted: true })
+        .eq('batch_id', notif.batchId);
+    } else {
+      // Someone else already took it — disable just this driver's button
+      await supabase
+        .from('driver_notifications')
+        .update({ is_accepted: true })
+        .eq('id', notif.notificationId);
+    }
+
     setPendingNotifications((prev) => prev.filter((n) => n.notificationId !== notif.notificationId));
   }
 
   async function handleDeclineBatch(notifId: string) {
-    await supabase.from('driver_notifications').update({ status: 'declined' }).eq('id', notifId);
+    await supabase.from('driver_notifications').delete().eq('id', notifId);
     setPendingNotifications((prev) => prev.filter((n) => n.notificationId !== notifId));
   }
 
   async function fetchAll() {
     setLoading(true);
     const { data: driverRow } = await supabase
-      .from('drivers').select('driver_id, shift_start, shift_end, zone, is_available')
-      .eq('user_id', rawUser!.id).maybeSingle();
+      .from('couriers').select('id, home_base_zone, status')
+      .eq('id', rawUser!.id).maybeSingle();
     if (driverRow) setDriverInfo(driverRow as DriverInfo);
 
     if (rawUser?.id && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition((pos) => {
-        supabase.from('drivers')
-          .update({ current_lat: pos.coords.latitude, current_lng: pos.coords.longitude })
-          .eq('user_id', rawUser.id).then(() => {});
+        supabase.from('couriers')
+          .update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } })
+          .eq('id', rawUser.id).then(() => {});
       });
     }
 
-    const driverId = driverRow?.driver_id ?? null;
-    let orderIds: number[] = [];
-
-    if (driverId) {
+    if (rawUser?.id) {
       const { data: batchRows } = await supabase
-        .from('batches').select('id, assigned_driver_id, status').eq('assigned_driver_id', driverId);
-      const batchIds = (batchRows ?? []).map((b) => b.id as number);
-      if (batchIds.length) {
-        const { data: odRows } = await supabase
-          .from('order_details').select('order_id, batch_id').in('batch_id', batchIds);
-        orderIds = [...new Set((odRows ?? []).map((r) => r.order_id as number))];
-      }
-    }
+        .from('batches')
+        .select('id, route, status, total_volume, ab_shipment_ids, bc_shipment_ids, assigned_at')
+        .eq('assigned_to', rawUser.id)
+        .order('assigned_at', { ascending: false });
 
-    let rawOrders: any[] = [];
-    if (orderIds.length) {
-      const { data } = await supabase
-        .from('orders').select('id, status, total_price, created_at, delivery_address, user_id')
-        .in('id', orderIds).order('created_at', { ascending: false }).limit(50);
-      rawOrders = data ?? [];
-    }
-
-    await hydrateOrders(rawOrders);
-
-    const yOrders = rawOrders.filter((o) => isYesterday(o.created_at) && o.status === 'completed');
-    setYesterdayCount(yOrders.length);
-
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const last30 = rawOrders.filter((o) => o.status === 'completed' && new Date(o.created_at) >= thirtyDaysAgo);
-    if (last30.length > 0) {
-      const totalEarnings30 = last30.reduce((s: number, o: any) => s + (o.total_price ?? 0), 0);
-      const daySet = new Set(last30.map((o: any) => o.created_at.slice(0, 10)));
-      setAvgDailyEarnings(totalEarnings30 / Math.max(daySet.size, 1));
+      setBatches((batchRows ?? []).map((b) => ({
+        id:           b.id as string,
+        route:        (b.route as string[]) ?? [],
+        status:       b.status as string,
+        totalVolume:  b.total_volume ?? 0,
+        shipmentCount:
+          ((b.ab_shipment_ids as string[])?.length ?? 0) +
+          ((b.bc_shipment_ids as string[])?.length ?? 0),
+        assignedAt:   b.assigned_at ?? null,
+      })));
     }
 
     setLoading(false);
-  }
-
-  async function hydrateOrders(rawOrders: any[]) {
-    if (!rawOrders.length) { setOrders([]); return; }
-    const userIds = [...new Set(rawOrders.map((o) => o.user_id).filter(Boolean))];
-    const { data: users } = userIds.length
-      ? await supabase.from('Users').select('user_id, name').in('user_id', userIds)
-      : { data: [] as any[] };
-    const nameMap = new Map((users ?? []).map((u: any) => [u.user_id, u.name as string]));
-    setOrders(rawOrders.map((o) => ({
-      id:               o.id,
-      status:           o.status,
-      total_price:      o.total_price,
-      created_at:       o.created_at,
-      delivery_address: o.delivery_address ?? null,
-      customer_name:    nameMap.get(o.user_id) ?? 'عميل',
-    })));
   }
 
   async function handleLogout() {
@@ -283,17 +279,17 @@ export default function DriverDashboard() {
   }
 
   // ── Derived stats ─────────────────────────────────────────────────────────
-  const todayOrders   = orders.filter((o) => isToday(o.created_at));
-  const delivered     = todayOrders.filter((o) => o.status === 'completed').length;
-  const inTransit     = orders.filter((o) => o.status === 'delivering').length;
-  const todayEarnings = todayOrders.filter((o) => o.status === 'completed').reduce((s, o) => s + (o.total_price ?? 0), 0);
-  const deliveryRate  = todayOrders.length ? Math.round((delivered / todayOrders.length) * 100) : 0;
+  const todayBatches    = batches.filter((b) => b.assignedAt && isToday(b.assignedAt));
+  const delivered       = batches.filter((b) => b.status === 'completed').length;
+  const inTransit       = batches.filter((b) => b.status === 'in_transit').length;
+  const todayCompleted  = todayBatches.filter((b) => b.status === 'completed').length;
+  const deliveryRate    = todayBatches.length ? Math.round((todayCompleted / todayBatches.length) * 100) : 0;
 
-  const shiftLabel  = driverInfo ? `${formatShiftTime(driverInfo.shift_start)} – ${formatShiftTime(driverInfo.shift_end)}` : '--:-- – --:--';
-  const zoneLabel   = driverInfo?.zone ?? '—';
-  const dutyLabel   = driverInfo ? (driverInfo.is_available ? 'في الخدمة' : 'خارج الخدمة') : '—';
+  const shiftLabel  = '--:-- – --:--';
+  const zoneLabel   = driverInfo?.home_base_zone ?? '—';
+  const dutyLabel   = driverInfo ? (driverInfo.status === 'available' ? 'في الخدمة' : 'خارج الخدمة') : '—';
 
-  const filteredOrders = statusFilter === 'all' ? orders : orders.filter((o) => o.status === statusFilter);
+  const filteredBatches = statusFilter === 'all' ? batches : batches.filter((b) => b.status === statusFilter);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -313,14 +309,21 @@ export default function DriverDashboard() {
               type="button"
               className="dd-topbar-bell"
               aria-label="الإشعارات"
-              onClick={() => setShowNotifPanel((v) => !v)}
+              onClick={() => {
+                setShowNotifPanel((v) => !v);
+                setUnreadCount(0);
+                if (rawUser?.id) {
+                  const ids = pendingNotifications.map((n) => n.notificationId);
+                  localStorage.setItem(`dd_seen_notifs_${rawUser.id}`, JSON.stringify(ids));
+                }
+              }}
             >
               <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
                 <path d="M13.73 21a2 2 0 0 1-3.46 0" />
               </svg>
-              {pendingNotifications.length > 0 && (
-                <span className="dd-notif-dot">{pendingNotifications.length}</span>
+              {unreadCount > 0 && (
+                <span className="dd-notif-dot">{unreadCount}</span>
               )}
             </button>
 
@@ -340,8 +343,14 @@ export default function DriverDashboard() {
                         <p className="dd-notif-panel-route">{notif.route.join(' ← ')}</p>
                         <p className="dd-notif-panel-meta">{notif.shipmentCount} شحنة · {notif.totalVolume.toFixed(0)} وحدة</p>
                         <div className="dd-notif-panel-actions">
-                          <button className="dd-notif-btn accept" onClick={() => handleAcceptBatch(notif)}>قبول</button>
-                          <button className="dd-notif-btn decline" onClick={() => handleDeclineBatch(notif.notificationId)}>رفض</button>
+                          {notif.isAccepted ? (
+                            <span className="dd-notif-taken">تم القبول من سائق آخر</span>
+                          ) : (
+                            <>
+                              <button className="dd-notif-btn accept" onClick={() => handleAcceptBatch(notif)}>قبول</button>
+                              <button className="dd-notif-btn decline" onClick={() => handleDeclineBatch(notif.notificationId)}>رفض</button>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -491,7 +500,7 @@ export default function DriverDashboard() {
               <div className="dd-sidebar-user-info">
                 <div className="dd-sidebar-user-name">{name ?? 'السائق'}</div>
                 <div className="dd-sidebar-user-role">
-                  <span className={`dd-duty-dot${driverInfo?.is_available ? '' : ' dd-duty-dot-off'}`} />
+                  <span className={`dd-duty-dot${driverInfo?.status === 'available' ? '' : ' dd-duty-dot-off'}`} />
                   {dutyLabel}
                 </div>
               </div>
@@ -541,22 +550,22 @@ export default function DriverDashboard() {
                   </svg>
                 </div>
               </div>
-              <div className="dd-card-value">{orders.filter(o => o.status === 'completed').length.toLocaleString('ar-EG')}</div>
+              <div className="dd-card-value">{delivered.toLocaleString('ar-EG')}</div>
               <div className="dd-card-sub">إجمالي المكتملة</div>
             </div>
 
             <div className="dd-stat-card">
               <div className="dd-card-top">
-                <span className="dd-card-label">أرباح اليوم</span>
+                <span className="dd-card-label">دفعات اليوم</span>
                 <div className="dd-card-icon dd-icon-amber">
                   <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <line x1="12" y1="1" x2="12" y2="23" />
-                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                    <rect x="2" y="7" width="20" height="14" rx="2" />
+                    <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" />
                   </svg>
                 </div>
               </div>
-              <div className="dd-card-value">{todayEarnings.toLocaleString('ar-EG')}</div>
-              <div className="dd-card-sub">جنيه مصري</div>
+              <div className="dd-card-value">{todayBatches.length.toLocaleString('ar-EG')}</div>
+              <div className="dd-card-sub">مخصصة اليوم</div>
             </div>
 
             <div className="dd-stat-card">
@@ -587,7 +596,7 @@ export default function DriverDashboard() {
 
           </div>
 
-          {/* ── Active Orders ── */}
+          {/* ── Assigned Batches ── */}
           <div className="dd-orders-section">
             <div className="dd-orders-header">
               <select
@@ -596,12 +605,12 @@ export default function DriverDashboard() {
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
                 <option value="all">كل الحالات</option>
-                <option value="delivering">قيد التوصيل</option>
-                <option value="consolidated">قيد الانتظار</option>
-                <option value="completed">تم التسليم</option>
-                <option value="failed">فاشل</option>
+                <option value="assigned">مخصصة</option>
+                <option value="in_transit">قيد التوصيل</option>
+                <option value="completed">مكتملة</option>
+                <option value="cancelled">ملغاة</option>
               </select>
-              <h2 className="dd-orders-title">الطلبات النشطة</h2>
+              <h2 className="dd-orders-title">الدفعات المخصصة</h2>
             </div>
 
             <div className="dd-orders-actions">
@@ -609,29 +618,31 @@ export default function DriverDashboard() {
             </div>
 
             {loading ? (
-              <div className="dd-orders-empty">جاري تحميل الطلبات...</div>
-            ) : filteredOrders.length === 0 ? (
-              <div className="dd-orders-empty">لا توجد طلبات</div>
+              <div className="dd-orders-empty">جاري تحميل الدفعات...</div>
+            ) : filteredBatches.length === 0 ? (
+              <div className="dd-orders-empty">لا توجد دفعات مخصصة</div>
             ) : (
               <div className="dd-table-wrap">
                 <table className="dd-table">
                   <thead>
                     <tr>
-                      <th>رقم الطلب</th>
-                      <th>العميل</th>
-                      <th>عنوان التوصيل</th>
+                      <th>رقم الدفعة</th>
+                      <th>المسار</th>
+                      <th>عدد الشحنات</th>
+                      <th>الحجم الكلي</th>
                       <th>الحالة</th>
-                      <th>الوقت</th>
+                      <th>وقت التخصيص</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredOrders.map((order) => {
-                      const s = STATUS_LABEL[order.status] ?? { label: order.status, color: '#6b7280' };
+                    {filteredBatches.map((batch) => {
+                      const s = STATUS_LABEL[batch.status] ?? { label: batch.status, color: '#6b7280' };
                       return (
-                        <tr key={order.id}>
-                          <td className="dd-td-id">#SL-{order.id}</td>
-                          <td>{order.customer_name}</td>
-                          <td className="dd-td-address">{order.delivery_address ?? '—'}</td>
+                        <tr key={batch.id}>
+                          <td className="dd-td-id">#{batch.id.slice(-8).toUpperCase()}</td>
+                          <td className="dd-td-address">{batch.route.join(' ← ') || '—'}</td>
+                          <td>{batch.shipmentCount}</td>
+                          <td>{batch.totalVolume.toFixed(1)}</td>
                           <td>
                             <span
                               className="dd-badge"
@@ -640,7 +651,7 @@ export default function DriverDashboard() {
                               {s.label}
                             </span>
                           </td>
-                          <td className="dd-td-time">{formatTime(order.created_at)}</td>
+                          <td className="dd-td-time">{batch.assignedAt ? formatTime(batch.assignedAt) : '—'}</td>
                         </tr>
                       );
                     })}
