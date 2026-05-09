@@ -1,10 +1,26 @@
 import type { Store, Product } from './types';
+import { supabase } from '../../lib/supabase';
 
 export async function fetchStore(shopId: string): Promise<Store> {
-  const r = await fetch(`/api/stores/${shopId}`);
-  const data = await r.json();
-  if (!data.ok) throw new Error(data.error || 'فشل في تحميل بيانات المتجر');
-  return data.store;
+  const { data: shop, error } = await supabase
+    .from('shops')
+    .select('shop_id, name, description, shopLogo, created_at, whatsapp, instagram, facebook, location')
+    .eq('shop_id', shopId)
+    .single();
+
+  if (error || !shop) throw new Error(error?.message || 'فشل في تحميل بيانات المتجر');
+
+  const { data: rating } = await supabase
+    .from('shop_ratings')
+    .select('avg_rating, review_count')
+    .eq('shop_id', shopId)
+    .maybeSingle();
+
+  return {
+    ...shop,
+    avg_rating: rating?.avg_rating ?? null,
+    review_count: rating?.review_count ?? 0,
+  };
 }
 
 export async function fetchProducts(
@@ -12,8 +28,24 @@ export async function fetchProducts(
   page: number,
   sort: string,
 ): Promise<{ products: Product[]; total: number }> {
-  const r = await fetch(`/api/stores/${shopId}/products?page=${page}&limit=12&sort=${sort}`);
-  const data = await r.json();
-  if (!data.ok) throw new Error(data.error || 'فشل في تحميل المنتجات');
-  return { products: data.products, total: data.total };
+  const limit = 12;
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+
+  let query = supabase
+    .from('products')
+    .select('id, title, description, price, image_urls, stock_Quantity', { count: 'exact' })
+    .eq('shop_id', shopId)
+    .eq('isPublish', true)
+    .range(from, to);
+
+  if (sort === 'price_asc') query = query.order('price', { ascending: true });
+  else if (sort === 'price_desc') query = query.order('price', { ascending: false });
+  else query = query.order('created_at', { ascending: false });
+
+  const { data, count, error } = await query;
+
+  if (error) throw new Error(error.message || 'فشل في تحميل المنتجات');
+
+  return { products: (data as Product[]) ?? [], total: count ?? 0 };
 }
