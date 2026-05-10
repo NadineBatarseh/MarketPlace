@@ -112,7 +112,10 @@ router.get('/callback', async (req: Request, res: Response) => {
       })
     );
     const longData: any = await longRes.json();
+    console.log('[instagram/callback] short token prefix:', shortData.access_token?.slice(0, 30));
+    console.log('[instagram/callback] long token exchange result:', JSON.stringify(longData));
     const accessToken: string = longData.access_token ?? shortData.access_token;
+    console.log('[instagram/callback] final token prefix:', accessToken?.slice(0, 30), '| is long-lived:', !!longData.access_token);
 
     // 3. Discover the Instagram Business Account linked to the merchant's Facebook pages
     let instagramAccountId: string | null = null;
@@ -147,17 +150,16 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     // 4. Save to DB
     const { error: saveError } = await supabase
-      .from('user_social_tokens')
+      .from('instagram_connections')
       .upsert(
         {
           user_id: user.id,
-          provider: 'instagram',
           access_token: accessToken,
           instagram_account_id: instagramAccountId,
           username: instagramUsername,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: 'user_id,provider' }
+        { onConflict: 'user_id' }
       );
 
     if (saveError) {
@@ -189,10 +191,9 @@ router.get('/status', async (req: Request, res: Response) => {
   if (error || !user) return res.status(401).json({ ok: false, error: 'Invalid token' });
 
   const { data } = await supabase
-    .from('user_social_tokens')
+    .from('instagram_connections')
     .select('instagram_account_id, username, created_at')
     .eq('user_id', user.id)
-    .eq('provider', 'instagram')
     .maybeSingle();
 
   return res.json({
@@ -216,10 +217,9 @@ router.delete('/disconnect', async (req: Request, res: Response) => {
   if (error || !user) return res.status(401).json({ ok: false, error: 'Invalid token' });
 
   const { error: delError } = await supabase
-    .from('user_social_tokens')
+    .from('instagram_connections')
     .delete()
-    .eq('user_id', user.id)
-    .eq('provider', 'instagram');
+    .eq('user_id', user.id);
 
   if (delError) return res.status(500).json({ ok: false, error: delError.message });
 

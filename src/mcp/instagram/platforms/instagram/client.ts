@@ -207,15 +207,22 @@ export class InstagramClient {
     }
   }
 
-  async getMedia(limit: number = 25, accountId?: string): Promise<MediaItem[]> {
+  async getMedia(
+    limit: number = 25,
+    accountId?: string,
+    after?: string
+  ): Promise<{ data: MediaItem[]; nextCursor: string | null }> {
     try {
       const targetAccountId = accountId || (await this.getAccountId());
+      const params: Record<string, unknown> = {
+        fields: 'id,caption,media_type,media_url,permalink,timestamp,like_count,comments_count,media_product_type,thumbnail_url',
+        limit,
+      };
+      if (after) params.after = after;
+
       const response = await this.request<MediaResponse>({
         url: `/${targetAccountId}/media`,
-        params: {
-          fields: 'id,caption,media_type,media_url,permalink,timestamp,like_count,comments_count,media_product_type,thumbnail_url',
-          limit,
-        },
+        params,
       });
       const media = response.data;
 
@@ -229,7 +236,8 @@ export class InstagramClient {
           })
       );
 
-      return media;
+      const nextCursor = response.paging?.cursors?.after ?? null;
+      return { data: media, nextCursor };
     } catch (error) {
       if (error instanceof InstagramApiError) throw error;
       throw this.wrapError('Failed to get media', error);
