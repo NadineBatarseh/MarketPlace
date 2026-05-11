@@ -64,7 +64,7 @@ function firstImg(urls: Product['image_urls']): string | null {
    STARS
 ═══════════════════════════════════════════════ */
 function Stars({ value, count }: { value: number | null; count: number }) {
-  if (value === null) return <span className="srp-no-rating">لا تقييم بعد</span>;
+  if (value === null) return null;
   return (
     <span className="srp-stars">
       {[1,2,3,4,5].map(i => (

@@ -27,6 +27,9 @@ export default function RoleGuard({ children, allowedRoles, allowGuests = false 
     return <Navigate to="/login" replace />;
   }
 
+  // If guests are allowed, any authenticated user is also allowed (public page)
+  if (allowGuests) return <>{children}</>;
+
   if (!role || !allowedRoles.includes(role)) {
     const home = ROLE_HOME[role ?? ''] ?? '/home';
     return <Navigate to={home} replace />;
