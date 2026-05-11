@@ -1,7 +1,9 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useMerchantAuth, MerchantShop } from '../context/MerchantAuthContext';
 import supabase from '../../lib/supabase';
 import { usePublishReadiness } from '../hooks/usePublishReadiness';
+
+interface Zone { id: string; name: string; }
 
 interface SyncResult {
   synced: number;
@@ -25,8 +27,10 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
   const shop = merchant!.shop;
   const isCreate = shop === null;
 
+  const [zones, setZones]           = useState<Zone[]>([]);
   const [name, setName]             = useState(shop?.name ?? '');
   const [location, setLocation]     = useState(shop?.location ?? '');
+  const [zoneId, setZoneId]         = useState(shop?.zone_id ?? '');
   const [description, setDescription] = useState(shop?.description ?? '');
   const _initWA = (() => {
     const d = (shop?.whatsapp ?? '').replace(/\D/g, '');
@@ -57,6 +61,27 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
   const [metaSyncing, setMetaSyncing]       = useState(false);
   const [metaSyncResult, setMetaSyncResult] = useState<SyncResult | null>(null);
   const [metaSyncError, setMetaSyncError]   = useState('');
+
+  // Load zones and (on create) pre-populate location from the approved application
+  useEffect(() => {
+    supabase.from('zones').select('id, name').order('name').then(({ data }) => {
+      if (data) setZones(data);
+    });
+
+    if (isCreate && merchant) {
+      supabase
+        .from('merchant_applications')
+        .select('city, zone_id')
+        .eq('platform_email', merchant.email)
+        .eq('status', 'approved')
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data?.city) setLocation(data.city);
+          if (data?.zone_id) setZoneId(data.zone_id);
+        });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Returns orange class when field is incomplete and highlight mode is on
   const inc = (missing: boolean) =>
@@ -159,6 +184,7 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
     const payload = {
       name: name.trim(),
       location: location.trim() || null,
+      zone_id: zoneId || null,
       description: description.trim() || null,
       shopLogo: logoUrl,
       whatsapp: whatsappFull,
@@ -192,6 +218,7 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
         name: data.name,
         shopLogo: data.shopLogo ?? null,
         location: data.location ?? null,
+        zone_id: data.zone_id ?? null,
         description: data.description ?? null,
         whatsapp: data.whatsapp ?? null,
         facebook: data.facebook ?? null,
@@ -233,6 +260,7 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
       ...shop!,
       name: savedRow.name ?? name.trim(),
       location: savedRow.location ?? (location.trim() || null),
+      zone_id: savedRow.zone_id ?? (zoneId || null),
       description: savedRow.description ?? (description.trim() || null),
       shopLogo: savedRow.shopLogo ?? logoUrl,
       Type_of_store: savedRow.Type_of_store ?? shop!.Type_of_store,
@@ -336,12 +364,20 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
 
           <div className={`mep-field${inc(locationMissing)}`}>
             <label>المنطقة / المدينة <Req /></label>
-            <input
-              type="text"
-              value={location}
-              onChange={e => setLocation(e.target.value)}
-              placeholder="مثال: الرياض، حي النزهة"
-            />
+            <select
+              value={zoneId}
+              onChange={e => {
+                const selected = zones.find(z => z.id === e.target.value);
+                setZoneId(e.target.value);
+                setLocation(selected?.name ?? '');
+              }}
+              className="mep-location-select"
+            >
+              <option value="">اختر المنطقة</option>
+              {zones.map(z => (
+                <option key={z.id} value={z.id}>{z.name}</option>
+              ))}
+            </select>
           </div>
 
           <div className={`mep-field${inc(descMissing)}`}>
