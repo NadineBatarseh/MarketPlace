@@ -705,19 +705,25 @@ app.get("/api/stores/:id/products", async (req: Request, res: Response) => {
 
   // Map sort option to Supabase order args
   const sortMap: Record<string, { column: string; ascending: boolean }> = {
-    default: { column: "updated_at", ascending: false },
-    newest: { column: "created_at", ascending: false },
-    price_asc: { column: "price", ascending: true },
-    price_desc: { column: "price", ascending: false },
-    rating: { column: "rating", ascending: false },
+    default:      { column: "updated_at", ascending: false },
+    newest:       { column: "created_at", ascending: false },
+    price_asc:    { column: "price",      ascending: true  },
+    price_desc:   { column: "price",      ascending: false },
+    rating:       { column: "avg_rating", ascending: false },
+    best_selling: { column: "total_sold", ascending: false },
   };
   const { column: orderCol, ascending } = sortMap[sort] ?? sortMap["default"];
+
+  const table =
+    sort === "rating"       ? "products_with_avg_rating" :
+    sort === "best_selling" ? "products_with_sales"      :
+    "products";
 
   // Fetch products + total count in parallel
   const [{ data: products, error: prodErr }, { count, error: countErr }] =
     await Promise.all([
       supabase
-        .from("products")
+        .from(table)
         .select("id, title, description, price, image_urls, stock_Quantity")
         .eq("shop_id", shop.shop_id)
         .eq("isPublish", true)
@@ -775,7 +781,11 @@ app.get("/api/stores", async (_req: Request, res: Response) => {
     review_count: ratingsMap.get(s.shop_id)?.review_count ?? 0,
   }));
 
-  return res.json({ ok: true, stores: mapped });
+  const top11 = mapped
+    .sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0))
+    .slice(0, 11);
+
+  return res.json({ ok: true, stores: top11 });
 });
 
 /* ---------- ACTIVATE ACCOUNT ---------- */

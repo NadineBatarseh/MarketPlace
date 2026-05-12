@@ -3,7 +3,7 @@ import type { Product } from '../types';
 import ProductCard from './ProductCard';
 
 const SORT_OPTIONS = [
-  { label: 'الأكثر مبيعاً', value: 'default' },
+  { label: 'الأكثر مبيعاً', value: 'best_selling' },
   { label: 'الأحدث', value: 'newest' },
   { label: 'السعر: من الأقل للأعلى', value: 'price_asc' },
   { label: 'السعر: من الأعلى للأقل', value: 'price_desc' },
@@ -13,43 +13,110 @@ const SORT_OPTIONS = [
 interface Props {
   products: Product[];
   total: number;
+  totalPages: number;
+  page: number;
   loading: boolean;
   sort: string;
   viewMode: 'grid' | 'list';
   wishlist: Set<string>;
   onSortChange: (sort: string) => void;
-  onLoadMore: () => void;
+  onPageChange: (page: number) => void;
   onViewModeChange: (mode: 'grid' | 'list') => void;
   onToggleWishlist: (e: MouseEvent, id: string) => void;
   onAddToCart: (e: MouseEvent, product: Product) => void;
 }
 
-export default function ProductsSection({
-  products, total, loading, sort, viewMode, wishlist,
-  onSortChange, onLoadMore, onViewModeChange, onToggleWishlist, onAddToCart,
-}: Props) {
-  const hasMore = !loading && products.length < total;
+function Pagination({ page, totalPages, onPageChange }: {
+  page: number;
+  totalPages: number;
+  onPageChange: (p: number) => void;
+}) {
+  if (totalPages <= 1) return null;
 
+  const pages: (number | '…')[] = [];
+
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i);
+  } else {
+    pages.push(1);
+    if (page > 3) pages.push('…');
+    const start = Math.max(2, page - 1);
+    const end = Math.min(totalPages - 1, page + 1);
+    for (let i = start; i <= end; i++) pages.push(i);
+    if (page < totalPages - 2) pages.push('…');
+    pages.push(totalPages);
+  }
+
+  return (
+    <div className="pagination">
+      <button
+        type="button"
+        className="page-btn page-btn--nav"
+        onClick={() => onPageChange(page - 1)}
+        disabled={page === 1}
+        aria-label="الصفحة السابقة"
+        title="الصفحة السابقة"
+      >
+        ‹
+      </button>
+
+      {pages.map((p, i) =>
+        p === '…' ? (
+          <span key={`ellipsis-${i}`} className="page-ellipsis">…</span>
+        ) : (
+          <button
+            type="button"
+            key={p}
+            className={`page-btn${p === page ? ' active' : ''}`}
+            onClick={() => onPageChange(p)}
+            aria-label={`صفحة ${p}`}
+            aria-current={p === page ? 'page' : undefined}
+          >
+            {p}
+          </button>
+        )
+      )}
+
+      <button
+        type="button"
+        className="page-btn page-btn--nav"
+        onClick={() => onPageChange(page + 1)}
+        disabled={page === totalPages}
+        aria-label="الصفحة التالية"
+        title="الصفحة التالية"
+      >
+        ›
+      </button>
+    </div>
+  );
+}
+
+export default function ProductsSection({
+  products, total, totalPages, page, loading, sort, viewMode, wishlist,
+  onSortChange, onPageChange, onViewModeChange, onToggleWishlist, onAddToCart,
+}: Props) {
   return (
     <main className="products-section">
       <div className="products-toolbar">
         <div className="label">عرض {products.length} من {total} منتج</div>
         <div className="toolbar-right">
-          
-<select
-  title="ترتيب المنتجات"
-  className="sort-select"
-  value={sort}
- onChange={e => onSortChange(e.target.value)}
->
+          <select
+            title="ترتيب المنتجات"
+            aria-label="ترتيب المنتجات"
+            className="sort-select"
+            value={sort}
+            onChange={e => onSortChange(e.target.value)}
+          >
             {SORT_OPTIONS.map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
           <div className="view-toggle">
             <button
+              type="button"
               className={`view-btn${viewMode === 'grid' ? ' active' : ''}`}
               title="شبكة"
+              aria-label="عرض شبكة"
               onClick={() => onViewModeChange('grid')}
             >
               <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
@@ -57,8 +124,10 @@ export default function ProductsSection({
               </svg>
             </button>
             <button
+              type="button"
               className={`view-btn${viewMode === 'list' ? ' active' : ''}`}
               title="قائمة"
+              aria-label="عرض قائمة"
               onClick={() => onViewModeChange('list')}
             >
               <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
@@ -70,15 +139,11 @@ export default function ProductsSection({
       </div>
 
       {loading && products.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--muted)', fontFamily: 'Tajawal, sans-serif' }}>
-          جاري تحميل المنتجات...
-        </div>
+        <div className="products-empty">جاري تحميل المنتجات...</div>
       ) : products.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--muted)', fontFamily: 'Tajawal, sans-serif' }}>
-          لا توجد منتجات
-        </div>
+        <div className="products-empty">لا توجد منتجات</div>
       ) : (
-        <div className="products-grid">
+        <div className={`products-grid${viewMode === 'list' ? ' products-grid--list' : ''}`}>
           {products.map(product => (
             <ProductCard
               key={product.id}
@@ -91,17 +156,7 @@ export default function ProductsSection({
         </div>
       )}
 
-      {hasMore && (
-        <div style={{ textAlign: 'center', marginTop: '24px' }}>
-          <button
-            className="btn btn-outline"
-            onClick={onLoadMore}
-            disabled={loading}
-          >
-            {loading ? 'جاري التحميل...' : 'تحميل المزيد'}
-          </button>
-        </div>
-      )}
+      <Pagination page={page} totalPages={totalPages} onPageChange={onPageChange} />
     </main>
   );
 }

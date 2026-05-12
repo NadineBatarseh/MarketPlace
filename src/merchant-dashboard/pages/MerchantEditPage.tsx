@@ -16,7 +16,21 @@ interface DBProduct {
   image_urls: string[] | null;
   stock_Quantity: number;
   capacity_units: number | null;
+  category_id?: string | null;
 }
+
+interface CategoryFilterDef {
+  id: string;
+  category_id: string;
+  filter_key: string;
+  filter_label_ar: string;
+  filter_type: 'select' | 'multiselect' | 'color' | 'boolean';
+  options: string[] | null;
+  is_required: boolean;
+  display_order: number;
+}
+
+type FilterValuesMap = Record<string, string[]>;
 
 const CAPACITY_LABELS: Record<number, string> = {
   1: 'صغير جداً',
@@ -557,6 +571,85 @@ function AttributesEditor({ attributes, onChange }: {
   );
 }
 
+// ── CategoryFiltersSection ─────────────────────────────────────────────────────
+function CategoryFiltersSection({
+  filters,
+  values,
+  onChange,
+}: {
+  filters: CategoryFilterDef[];
+  values: FilterValuesMap;
+  onChange: (v: FilterValuesMap) => void;
+}) {
+  const setVal = (id: string, vals: string[]) => onChange({ ...values, [id]: vals });
+
+  const visibleFilters = filters.filter(f => f.filter_type !== 'color');
+  if (visibleFilters.length === 0) return null;
+
+  return (
+    <div className="cat-filters-section">
+      <div className="cat-filters-title">خصائص الفئة</div>
+      {visibleFilters.map(f => (
+        <div key={f.id} className="cat-filter-field">
+          <label className="cat-filter-label">
+            {f.filter_label_ar}
+            {f.is_required && <span className="cat-filter-required"> *</span>}
+          </label>
+
+          {f.filter_type === 'select' && f.options && (
+            <select
+              className="cat-filter-select"
+              title={f.filter_label_ar}
+              aria-label={f.filter_label_ar}
+              value={values[f.id]?.[0] ?? ''}
+              onChange={e => setVal(f.id, e.target.value ? [e.target.value] : [])}
+            >
+              <option value="">— اختر —</option>
+              {f.options.map(opt => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          )}
+
+          {f.filter_type === 'multiselect' && f.options && (
+            <div className="cat-filter-checkboxes">
+              {f.options.map(opt => {
+                const checked = (values[f.id] ?? []).includes(opt);
+                return (
+                  <label key={opt} className="cat-filter-checkbox-item">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={e => {
+                        const cur = values[f.id] ?? [];
+                        setVal(f.id, e.target.checked
+                          ? [...cur, opt]
+                          : cur.filter(v => v !== opt));
+                      }}
+                    />
+                    {opt}
+                  </label>
+                );
+              })}
+            </div>
+          )}
+
+          {f.filter_type === 'boolean' && (
+            <label className="cat-filter-bool">
+              <input
+                type="checkbox"
+                checked={values[f.id]?.[0] === 'true'}
+                onChange={e => setVal(f.id, [String(e.target.checked)])}
+              />
+              <span>نعم</span>
+            </label>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── EditProductModal ───────────────────────────────────────────────────────────
 function EditProductModal({ product, onSave, onClose }: {
   product: DBProduct;
@@ -578,6 +671,61 @@ function EditProductModal({ product, onSave, onClose }: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const imgInputRef = useRef<HTMLInputElement>(null);
+  const [categoryId, setCategoryId] = useState<string>('');
+  const [catFilters, setCatFilters] = useState<CategoryFilterDef[]>([]);
+  const [filterValues, setFilterValues] = useState<FilterValuesMap>({});
+  const [catFiltersLoading, setCatFiltersLoading] = useState(false);
+  const [catFiltersError, setCatFiltersError] = useState('');
+
+  // Auto-resolve shop's category from Type_of_store → categories.label
+  useEffect(() => {
+    supabase.from('shops').select('Type_of_store').eq('shop_id', product.shop_id).single()
+      .then(async ({ data: shopData }) => {
+        if (!shopData?.Type_of_store) return;
+        const { data: catData } = await supabase
+          .from('categories').select('id').eq('label', shopData.Type_of_store).single();
+        if (catData?.id) setCategoryId(catData.id as string);
+      });
+  }, [product.shop_id]);
+
+  useEffect(() => {
+    supabase.from('product_filter_values')
+      .select('filter_id, value')
+      .eq('product_id', product.id)
+      .then(({ data }) => {
+        if (!data || data.length === 0) return;
+        const map: FilterValuesMap = {};
+        data.forEach((row: { filter_id: string; value: string }) => {
+          if (!map[row.filter_id]) map[row.filter_id] = [];
+          map[row.filter_id].push(row.value);
+        });
+        setFilterValues(map);
+      });
+  }, [product.id]);
+
+  useEffect(() => {
+    if (!categoryId) {
+      setCatFilters([]);
+      setCatFiltersError('');
+      return;
+    }
+    setCatFiltersLoading(true);
+    setCatFiltersError('');
+    supabase
+      .from('category_filter_definitions')
+      .select('*')
+      .eq('category_id', categoryId)
+      .order('display_order', { ascending: true })
+      .then(({ data, error: fetchError }) => {
+        setCatFiltersLoading(false);
+        if (fetchError) {
+          setCatFiltersError(fetchError.message);
+          setCatFilters([]);
+          return;
+        }
+        setCatFilters((data ?? []) as CategoryFilterDef[]);
+      });
+  }, [categoryId]);
 
   useEffect(() => {
     supabase
@@ -671,6 +819,7 @@ function EditProductModal({ product, onSave, onClose }: {
         stock_Quantity: parseInt(form.quantity) || 0,
         image_urls: finalUrls.length > 0 ? finalUrls : null,
         capacity_units: capacityUnits,
+        category_id: categoryId || null,
       })
       .eq('id', product.id);
 
@@ -710,6 +859,23 @@ function EditProductModal({ product, onSave, onClose }: {
       }
     }
 
+    const { error: delFilterErr } = await supabase.from('product_filter_values').delete().eq('product_id', product.id);
+    if (delFilterErr) console.error('[EditModal] delete filter values error:', delFilterErr.message);
+
+    const filterRows: { product_id: string; filter_id: string; value: string }[] = [];
+    Object.entries(filterValues).forEach(([fid, vals]) => {
+      vals.forEach(v => { if (v) filterRows.push({ product_id: product.id, filter_id: fid, value: v }); });
+    });
+    console.log('[EditModal] filterRows to save:', filterRows);
+    if (filterRows.length > 0) {
+      const { error: filterInsertErr } = await supabase.from('product_filter_values').insert(filterRows);
+      if (filterInsertErr) {
+        setError('تعذّر حفظ خصائص الفئة: ' + filterInsertErr.message);
+        setSaving(false);
+        return;
+      }
+    }
+
     previewUrls.forEach(url => URL.revokeObjectURL(url));
     onSave({
       ...product,
@@ -719,6 +885,7 @@ function EditProductModal({ product, onSave, onClose }: {
       stock_Quantity: parseInt(form.quantity) || 0,
       image_urls: finalUrls.length > 0 ? finalUrls : null,
       capacity_units: capacityUnits,
+      category_id: categoryId || null,
     });
     onClose();
   };
@@ -795,6 +962,20 @@ function EditProductModal({ product, onSave, onClose }: {
             <span className="cap-hint">يُستخدم لحساب سعة الشاحنة عند التوصيل</span>
           </div>
 
+          {catFiltersLoading && (
+            <div className="cat-filters-loading">جاري تحميل خصائص الفئة...</div>
+          )}
+          {catFiltersError && (
+            <div className="cat-filters-fetch-error">⚠ خطأ في تحميل خصائص الفئة: {catFiltersError}</div>
+          )}
+          {catFilters.length > 0 && (
+            <CategoryFiltersSection
+              filters={catFilters}
+              values={filterValues}
+              onChange={setFilterValues}
+            />
+          )}
+
           <VariantMatrixEditor matrix={matrix} onChange={setMatrix} />
 
           <AttributesEditor attributes={attributes} onChange={setAttributes} />
@@ -825,6 +1006,49 @@ function AddProductModal({ shopId, onAdd, onClose }: {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const imgInputRef = useRef<HTMLInputElement>(null);
+  const [categoryId, setCategoryId] = useState<string>('');
+  const [catFilters, setCatFilters] = useState<CategoryFilterDef[]>([]);
+  const [filterValues, setFilterValues] = useState<FilterValuesMap>({});
+  const [catFiltersLoading, setCatFiltersLoading] = useState(false);
+  const [catFiltersError, setCatFiltersError] = useState('');
+
+  // Auto-resolve shop's category from Type_of_store → categories.label
+  useEffect(() => {
+    supabase.from('shops').select('Type_of_store').eq('shop_id', shopId).single()
+      .then(async ({ data: shopData }) => {
+        if (!shopData?.Type_of_store) return;
+        const { data: catData } = await supabase
+          .from('categories').select('id').eq('label', shopData.Type_of_store).single();
+        if (catData?.id) setCategoryId(catData.id as string);
+      });
+  }, [shopId]);
+
+  useEffect(() => {
+    if (!categoryId) {
+      setCatFilters([]);
+      setFilterValues({});
+      setCatFiltersError('');
+      return;
+    }
+    setCatFiltersLoading(true);
+    setCatFiltersError('');
+    supabase
+      .from('category_filter_definitions')
+      .select('*')
+      .eq('category_id', categoryId)
+      .order('display_order', { ascending: true })
+      .then(({ data, error: fetchError }) => {
+        setCatFiltersLoading(false);
+        if (fetchError) {
+          setCatFilters([]);
+          setFilterValues({});
+          setCatFiltersError(fetchError.message);
+          return;
+        }
+        setCatFilters((data ?? []) as CategoryFilterDef[]);
+        setFilterValues({});
+      });
+  }, [categoryId]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -859,6 +1083,7 @@ function AddProductModal({ shopId, onAdd, onClose }: {
         price: parseFloat(form.price) || 0,
         image_urls: null,
         stock_Quantity: parseInt(form.quantity) || 0,
+        category_id: categoryId || null,
       })
       .select()
       .single();
@@ -908,6 +1133,20 @@ function AddProductModal({ shopId, onAdd, onClose }: {
     if (attributes.length > 0) {
       const attrRows = attributes.map(a => ({ product_id: productId, attribute_name: a.attribute_name, attribute_value: a.attribute_value }));
       await supabase.from('product_attributes').insert(attrRows);
+    }
+
+    const filterRows: { product_id: string; filter_id: string; value: string }[] = [];
+    Object.entries(filterValues).forEach(([fid, vals]) => {
+      vals.forEach(v => { if (v) filterRows.push({ product_id: productId, filter_id: fid, value: v }); });
+    });
+    console.log('[AddModal] filterRows to save:', filterRows);
+    if (filterRows.length > 0) {
+      const { error: filterInsertErr } = await supabase.from('product_filter_values').insert(filterRows);
+      if (filterInsertErr) {
+        setError('تعذّر حفظ خصائص الفئة: ' + filterInsertErr.message);
+        setSaving(false);
+        return;
+      }
     }
 
     let capacity_units: number | null = null;
@@ -979,6 +1218,20 @@ function AddProductModal({ shopId, onAdd, onClose }: {
             <input type="number" min="0" placeholder="20" value={form.quantity}
               onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} />
           </div>
+
+          {catFiltersLoading && (
+            <div className="cat-filters-loading">جاري تحميل خصائص الفئة...</div>
+          )}
+          {catFiltersError && (
+            <div className="cat-filters-fetch-error">⚠ خطأ في تحميل خصائص الفئة: {catFiltersError}</div>
+          )}
+          {catFilters.length > 0 && (
+            <CategoryFiltersSection
+              filters={catFilters}
+              values={filterValues}
+              onChange={setFilterValues}
+            />
+          )}
 
           <VariantMatrixEditor matrix={matrix} onChange={setMatrix} />
 
