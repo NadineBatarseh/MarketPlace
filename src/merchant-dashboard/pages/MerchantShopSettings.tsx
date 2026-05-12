@@ -365,6 +365,7 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
           <div className={`mep-field${inc(locationMissing)}`}>
             <label>المنطقة / المدينة <Req /></label>
             <select
+              title="المنطقة / المدينة"
               value={zoneId}
               onChange={e => {
                 const selected = zones.find(z => z.id === e.target.value);
@@ -410,6 +411,7 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
             <label>واتساب</label>
             <div className="mep-whatsapp-split" dir="ltr">
               <select
+                title="رمز الدولة"
                 value={whatsappCode}
                 onChange={e => setWhatsappCode(e.target.value)}
                 className="mep-whatsapp-code"

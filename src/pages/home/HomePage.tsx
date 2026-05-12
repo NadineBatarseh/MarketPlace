@@ -92,7 +92,7 @@ function HeroSection() {
 function CategoryCard({ cat }: { cat: Category }) {
   const navigate = useNavigate();
   return (
-    <button className="hp-cat-card" onClick={() => navigate(`/search?category=${cat.id}`)}>
+    <button className="hp-cat-card" onClick={() => navigate(`/category/${cat.id}`)}>
       <div className="hp-cat-card__img-wrap">
         <img src={cat.image_url} alt={cat.label} className="hp-cat-card__img" loading="lazy" />
       </div>

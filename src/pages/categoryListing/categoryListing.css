@@ -1,0 +1,74 @@
+/* ── Category hero: override store-hero background ── */
+.store-hero {
+  background-image: url('/storepage-photo.jpg');
+}
+
+/* ── Category hero: title & subtitle overrides ── */
+.cat-hero-section .sh-name {
+  font-size: 34px;
+}
+
+.cat-hero-section .sh-desc {
+  max-width: none;
+  white-space: nowrap;
+}
+
+/* ── Store filter buttons ── */
+.cat-store-actions {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.cat-store-btn {
+  flex: 1;
+  padding: 5px 8px;
+  border-radius: 8px;
+  font-family: var(--font-main);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: var(--color-primary);
+  color: #fff;
+  border: 1.5px solid var(--color-primary);
+}
+
+.cat-store-btn:hover {
+  background: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
+}
+
+.cat-store-btn--outline {
+  background: #fff;
+  color: var(--color-primary-dark);
+}
+
+.cat-store-btn--outline:hover {
+  background: var(--color-primary-light, #f0faf4);
+}
+
+/* ── Store count badge ── */
+.cat-store-count {
+  font-size: 11px;
+  color: var(--color-muted, #9ca3af);
+  font-weight: 400;
+  margin-right: 4px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .cat-listing-hero {
+    margin: 12px 12px 0;
+    min-height: 160px;
+    border-radius: 12px;
+  }
+
+  .clh-title {
+    font-size: 28px;
+  }
+
+  .clh-subtitle {
+    font-size: 13px;
+  }
+}
