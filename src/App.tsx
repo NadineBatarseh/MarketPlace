@@ -36,9 +36,14 @@ import MerchantDashboard from "./merchant-dashboard/MerchantDashboard";
 // @ts-ignore
 import ChatBot from "./components/chatbot/ChatBot";
 import AdminDashboard from "./merchant-dashboard/pages/AdminDashboard";
+import Footer from "./components/Footer";
 import { useMerchantAuth } from './merchant-dashboard/context/MerchantAuthContext';
 import { useCustomerAuth } from './context/CustomerAuthContext';
 
+
+function CustomerLayout({ children }: { children: React.ReactNode }) {
+  return <>{children}<Footer /></>;
+}
 
 function StoreWrapper() {
   const { shopId } = useParams<{ shopId: string }>();
@@ -83,21 +88,21 @@ export default function App() {
               <Route path="/meta-connect" element={<MetaConnectPage />} />
 
               {/* Customer or guest browsing — other roles redirected to their home */}
-              <Route path="/home" element={<RoleGuard allowedRoles={['customer']} allowGuests><HomePage /></RoleGuard>} />
+              <Route path="/home" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><HomePage /></CustomerLayout></RoleGuard>} />
               <Route path="/store" element={<Navigate to="/home" replace />} />
-              <Route path="/stores-list" element={<RoleGuard allowedRoles={['customer']} allowGuests><StoreListPage /></RoleGuard>} />
-              <Route path="/store/:shopId" element={<RoleGuard allowedRoles={['customer']} allowGuests><StoreWrapper /></RoleGuard>} />
-              <Route path="/stores/:shopId" element={<RoleGuard allowedRoles={['customer']} allowGuests><StorePageWrapper /></RoleGuard>} />
-              <Route path="/product/:id" element={<RoleGuard allowedRoles={['customer']} allowGuests><ProductDetailPage /></RoleGuard>} />
-              <Route path="/product" element={<RoleGuard allowedRoles={['customer']} allowGuests><ProductDetailPage /></RoleGuard>} />
-              <Route path="/search" element={<RoleGuard allowedRoles={['customer']} allowGuests><SearchResultsPage /></RoleGuard>} />
+              <Route path="/stores-list" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><StoreListPage /></CustomerLayout></RoleGuard>} />
+              <Route path="/store/:shopId" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><StoreWrapper /></CustomerLayout></RoleGuard>} />
+              <Route path="/stores/:shopId" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><StorePageWrapper /></CustomerLayout></RoleGuard>} />
+              <Route path="/product/:id" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><ProductDetailPage /></CustomerLayout></RoleGuard>} />
+              <Route path="/product" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><ProductDetailPage /></CustomerLayout></RoleGuard>} />
+              <Route path="/search" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><SearchResultsPage /></CustomerLayout></RoleGuard>} />
 
               {/* Customer only */}
-              <Route path="/cart" element={<RoleGuard allowedRoles={['customer']} allowGuests><Cart /></RoleGuard>} />
-              <Route path="/checkout" element={<RoleGuard allowedRoles={['customer']} allowGuests><CheckoutPage /></RoleGuard>} />
-              <Route path="/favorites" element={<RoleGuard allowedRoles={['customer']} allowGuests><Favorite /></RoleGuard>} />
-              <Route path="/orders" element={<RoleGuard allowedRoles={['customer']} allowGuests><OrderHistoryPage /></RoleGuard>} />
-              <Route path="/orders/:orderId" element={<RoleGuard allowedRoles={['customer']} allowGuests><OrderTrackingPage /></RoleGuard>} />
+              <Route path="/cart" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><Cart /></CustomerLayout></RoleGuard>} />
+              <Route path="/checkout" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><CheckoutPage /></CustomerLayout></RoleGuard>} />
+              <Route path="/favorites" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><Favorite /></CustomerLayout></RoleGuard>} />
+              <Route path="/orders" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><OrderHistoryPage /></CustomerLayout></RoleGuard>} />
+              <Route path="/orders/:orderId" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><OrderTrackingPage /></CustomerLayout></RoleGuard>} />
 
               {/* Merchant only */}
               <Route path="/merchant-dashboard" element={<RoleGuard allowedRoles={['merchant']}><MerchantDashboard /></RoleGuard>} />

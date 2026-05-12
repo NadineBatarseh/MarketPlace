@@ -2,13 +2,17 @@ import { useState, useEffect } from 'react';
 import type { Product } from '../types';
 import { fetchProducts } from '../api';
 
+const PAGE_SIZE = 12;
+
 interface UseProductsResult {
   products: Product[];
   total: number;
+  totalPages: number;
+  page: number;
   loading: boolean;
   sort: string;
+  setPage: (page: number) => void;
   handleSortChange: (newSort: string) => void;
-  handleLoadMore: () => void;
 }
 
 export function useProducts(shopId: string): UseProductsResult {
@@ -24,7 +28,7 @@ export function useProducts(shopId: string): UseProductsResult {
     fetchProducts(shopId, page, sort)
       .then(({ products: fetched, total: t }) => {
         if (!cancelled) {
-          setProducts(prev => page === 1 ? fetched : [...prev, ...fetched]);
+          setProducts(fetched);
           setTotal(t);
         }
       })
@@ -36,12 +40,9 @@ export function useProducts(shopId: string): UseProductsResult {
   function handleSortChange(newSort: string) {
     setSort(newSort);
     setPage(1);
-    setProducts([]);
   }
 
-  function handleLoadMore() {
-    setPage(p => p + 1);
-  }
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  return { products, total, loading, sort, handleSortChange, handleLoadMore };
+  return { products, total, totalPages, page, loading, sort, setPage, handleSortChange };
 }
