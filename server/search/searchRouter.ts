@@ -105,12 +105,14 @@ router.get('/', async (req: Request, res: Response) => {
     return res.json({ ok: true, products: [], total: 0, page: 1, limit: 20, query: '', terms: [] });
   }
 
-  const shopId   = req.query.shop_id  as string | undefined;
-  const minPrice = parseFloat(req.query.min_price as string);
-  const maxPrice = parseFloat(req.query.max_price as string);
-  const page     = Math.max(1,  parseInt(req.query.page  as string) || 1);
-  const limit    = Math.min(50, parseInt(req.query.limit as string) || 20);
-  const offset   = (page - 1) * limit;
+  const shopId     = req.query.shop_id  as string | undefined;
+  const minPrice   = parseFloat(req.query.min_price as string);
+  const maxPrice   = parseFloat(req.query.max_price as string);
+  const page       = Math.max(1,  parseInt(req.query.page  as string) || 1);
+  const limit      = Math.min(50, parseInt(req.query.limit as string) || 20);
+  const offset     = (page - 1) * limit;
+  const citiesRaw  = req.query.cities as string | undefined;
+  const cities     = citiesRaw ? citiesRaw.split(',').map(c => c.trim()).filter(Boolean) : [];
 
   // 1 & 2. Expand query with synonyms + optional LLM preprocessing for sentences
   let llmTerms: string[] = [];
@@ -141,13 +143,25 @@ router.get('/', async (req: Request, res: Response) => {
   //   Using type:'websearch' would call websearch_to_tsquery, which ignores :*.
   let dbQuery = supabase
     .from('products')
-    .select('id, shop_id, title, description, price, image_urls, stock_Quantity', { count: 'exact' })
+    .select('id, shop_id, title, description, price, image_urls, stock_Quantity, shops(name, location)', { count: 'exact' })
     .textSearch('search_vector', ftsQuery, { config: 'simple' })
     .eq('isPublish', true);
 
   if (shopId)           dbQuery = dbQuery.eq('shop_id', shopId);
   if (!isNaN(minPrice)) dbQuery = dbQuery.gte('price', minPrice);
   if (!isNaN(maxPrice)) dbQuery = dbQuery.lte('price', maxPrice);
+
+  if (cities.length > 0) {
+    const { data: matchingShops } = await supabase
+      .from('shops')
+      .select('shop_id')
+      .in('location', cities);
+
+    if (!matchingShops || matchingShops.length === 0) {
+      return res.json({ ok: true, products: [], total: 0, page, limit, query: rawQuery, terms });
+    }
+    dbQuery = dbQuery.in('shop_id', matchingShops.map(s => s.shop_id));
+  }
 
   // Fetch a wider window to allow JS-side relevance ranking, then paginate
   const fetchCap = Math.min(300, offset + limit * 4);

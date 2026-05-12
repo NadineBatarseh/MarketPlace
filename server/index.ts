@@ -164,27 +164,42 @@ app.post("/api/chat", async (req: Request, res: Response) => {
   let merchant_shop_id: string | undefined;
   let merchant_instagram_token: string | undefined;
   let merchant_instagram_account_id: string | undefined;
+  let merchant_user_id: string | undefined;
 
   if (role === "merchant" && sb_auth_token) {
     try {
-      const { data: { user } } = await supabase.auth.getUser(sb_auth_token);
+      const { data: { user }, error: authError } = await supabase.auth.getUser(sb_auth_token);
+      console.log(`[chat] getUser → user=${user?.id ?? "null"} error=${authError?.message ?? "none"}`);
       if (user) {
+        merchant_user_id = user.id;
         const [shopResult, igResult] = await Promise.allSettled([
           supabase.from("shops").select("shop_id").eq("owner_id", user.id).maybeSingle(),
-          supabase.from("user_social_tokens")
+          supabase.from("instagram_connections")
             .select("access_token, instagram_account_id")
             .eq("user_id", user.id)
-            .eq("provider", "instagram")
             .maybeSingle(),
         ]);
 
         if (shopResult.status === "fulfilled") merchant_shop_id = shopResult.value.data?.shop_id;
-        if (igResult.status === "fulfilled" && igResult.value.data) {
-          merchant_instagram_token = igResult.value.data.access_token;
-          merchant_instagram_account_id = igResult.value.data.instagram_account_id ?? undefined;
+        console.log(`[chat] shop_id=${merchant_shop_id ?? "null"}`);
+
+        if (igResult.status === "fulfilled") {
+          const igData = igResult.value.data;
+          const igError = igResult.value.error;
+          console.log(`[chat] ig token=${igData?.access_token ? "found" : "null"} account_id=${igData?.instagram_account_id ?? "null"} error=${(igError as any)?.message ?? "none"}`);
+          if (igData) {
+            merchant_instagram_token = igData.access_token;
+            merchant_instagram_account_id = igData.instagram_account_id ?? undefined;
+          }
+        } else {
+          console.log(`[chat] ig query rejected:`, igResult.reason);
         }
       }
-    } catch { }
+    } catch (e: any) {
+      console.error(`[chat] merchant token fetch threw:`, e.message);
+    }
+  } else {
+    console.log(`[chat] skipping merchant token fetch — role=${role} sb_auth_token=${sb_auth_token ? "present" : "missing"}`);
   }
 
   const systemPrompt = role === "merchant"
@@ -415,6 +430,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
                     ...input,
                     _instagram_access_token: merchant_instagram_token,
                     _instagram_account_id: merchant_instagram_account_id,
+                    _user_id: merchant_user_id,
                   }
                   : input;
 
@@ -427,6 +443,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
                     ...(block.input as Record<string, any>),
                     _instagram_access_token: merchant_instagram_token,
                     _instagram_account_id: merchant_instagram_account_id,
+                    _user_id: merchant_user_id,
                   }
                   : block.input as Record<string, any>;
 
@@ -515,6 +532,66 @@ app.get("/api/debug/instagram-token", async (_req: Request, res: Response) => {
     return res.json({ ok: true, pagesFound: pages.length, pages: pages.map((p: any) => ({ id: p.id, name: p.name })), tokenPrefix: token.slice(0, 20) + "..." });
   } catch (err: any) {
     return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post("/api/debug/test-instagram-import", async (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ ok: false, error: "Missing Authorization header" });
+
+  const sb_auth_token = authHeader.replace("Bearer ", "");
+  const { data: { user }, error: authError } = await supabase.auth.getUser(sb_auth_token);
+  if (authError || !user) return res.status(401).json({ ok: false, error: authError?.message ?? "Invalid token" });
+
+  const [shopResult, igResult] = await Promise.allSettled([
+    supabase.from("shops").select("shop_id").eq("owner_id", user.id).maybeSingle(),
+    supabase.from("user_social_tokens")
+      .select("access_token, instagram_account_id")
+      .eq("user_id", user.id)
+      .eq("provider", "instagram")
+      .maybeSingle(),
+  ]);
+
+  const shop_id = shopResult.status === "fulfilled" ? shopResult.value.data?.shop_id : null;
+  const igData = igResult.status === "fulfilled" ? igResult.value.data : null;
+  const igError = igResult.status === "fulfilled" ? igResult.value.error : null;
+
+  if (!igData?.access_token) {
+    return res.json({
+      ok: false,
+      step: "token_fetch",
+      user_id: user.id,
+      shop_id,
+      ig_token: null,
+      ig_account_id: null,
+      ig_query_error: (igError as any)?.message ?? null,
+      message: "No Instagram token found in user_social_tokens for this user",
+    });
+  }
+
+  try {
+    const rawResult = await callTool("instagram_import_products", {
+      shop_id: shop_id ?? "missing",
+      _instagram_access_token: igData.access_token,
+      _instagram_account_id: igData.instagram_account_id ?? undefined,
+    });
+    return res.json({
+      ok: true,
+      step: "tool_called",
+      user_id: user.id,
+      shop_id,
+      ig_account_id: igData.instagram_account_id,
+      raw_result: JSON.parse(rawResult),
+    });
+  } catch (err: any) {
+    return res.json({
+      ok: false,
+      step: "tool_error",
+      user_id: user.id,
+      shop_id,
+      ig_account_id: igData.instagram_account_id,
+      error: err.message,
+    });
   }
 });
 
@@ -726,7 +803,7 @@ app.post("/api/activate", async (req: Request, res: Response) => {
 
   const { data: merchantApp } = await supabase
     .from("merchant_applications")
-    .select("name_of_owner, name_of_store, email, phone_number, \"Type_of_store\", description, city")
+    .select("name_of_owner, name_of_store, email, phone_number, \"Type_of_store\", description, city, zone_id")
     .eq("platform_email", platformEmail.trim())
     .eq("status", "approved")
     .maybeSingle();
@@ -832,6 +909,7 @@ app.post("/api/activate", async (req: Request, res: Response) => {
       Type_of_store: merchantApp.Type_of_store ?? null,
       description: merchantApp.description ?? null,
       location: merchantApp.city ?? null,
+      zone_id: merchantApp.zone_id ?? null,
     });
     if (shopError) {
       console.error("[/api/activate] shop creation failed:", shopError.message);

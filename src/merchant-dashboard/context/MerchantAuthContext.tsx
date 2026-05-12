@@ -7,6 +7,7 @@ export interface MerchantShop {
   name: string;
   shopLogo: string | null;
   location: string | null;
+  zone_id: string | null;
   description: string | null;
   whatsapp: string | null;
   facebook: string | null;
@@ -50,6 +51,7 @@ async function fetchMerchantShop(userId: string): Promise<MerchantShop | null> {
     name: data.name,
     shopLogo: data.shopLogo ?? null,
     location: data.location ?? null,
+    zone_id: data.zone_id ?? null,
     description: data.description ?? null,
     whatsapp: data.whatsapp ?? null,
     facebook: data.facebook ?? null,

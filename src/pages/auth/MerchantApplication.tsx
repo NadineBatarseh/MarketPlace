@@ -1,7 +1,17 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import supabase from '../../lib/supabase';
 import './Auth.css';
+
+interface Category {
+  id: string;
+  label: string;
+}
+
+interface Zone {
+  id: string;
+  name: string;
+}
 
 export default function MerchantApplication() {
   const [form, setForm] = useState({
@@ -10,6 +20,7 @@ export default function MerchantApplication() {
     email: '',
     phone_number: '',
     city: '',
+    zone_id: '',
     type_of_store: '',
     description: '',
   });
@@ -18,7 +29,53 @@ export default function MerchantApplication() {
   const [error, setError] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [zones, setZones] = useState<Zone[]>([]);
+  const [storeTypeOpen, setStoreTypeOpen] = useState(false);
+  const [cityOpen, setCityOpen] = useState(false);
   const imgInputRef = useRef<HTMLInputElement>(null);
+  const storeTypeRef = useRef<HTMLDivElement>(null);
+  const cityRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    supabase
+      .from('categories')
+      .select('id, label')
+      .order('sort_order')
+      .then(({ data }) => {
+        if (data) setCategories(data);
+      });
+
+    supabase
+      .from('zones')
+      .select('id, name')
+      .order('name')
+      .then(({ data }) => {
+        if (data) setZones(data);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (!storeTypeOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (storeTypeRef.current && !storeTypeRef.current.contains(e.target as Node)) {
+        setStoreTypeOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [storeTypeOpen]);
+
+  useEffect(() => {
+    if (!cityOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (cityRef.current && !cityRef.current.contains(e.target as Node)) {
+        setCityOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [cityOpen]);
 
   const set = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setForm(f => ({ ...f, [field]: e.target.value }));
@@ -71,6 +128,7 @@ export default function MerchantApplication() {
       email: form.email,
       phone_number: form.phone_number,
       city: form.city,
+      zone_id: form.zone_id || null,
       Type_of_store: form.type_of_store,
       description: form.description,
       pictures: uploadedUrls.length > 0 ? uploadedUrls : null,
@@ -140,29 +198,66 @@ export default function MerchantApplication() {
             </div>
             <div className="auth-field">
               <label>المدينة</label>
-              <input placeholder="مثال: الرياض" value={form.city} onChange={set('city')} required />
+              <div className="auth-custom-select" ref={cityRef}>
+                <button
+                  type="button"
+                  className={`auth-custom-select-trigger${!form.city ? ' auth-custom-select-placeholder' : ''}`}
+                  onClick={() => setCityOpen(o => !o)}
+                >
+                  {form.city || 'اختر المدينة'}
+                  <span className="auth-custom-select-arrow">{cityOpen ? '▲' : '▼'}</span>
+                </button>
+                {cityOpen && (
+                  <ul className="auth-custom-select-list">
+                    {zones.map(zone => (
+                      <li
+                        key={zone.id}
+                        className={`auth-custom-select-option${form.city === zone.name ? ' selected' : ''}`}
+                        onMouseDown={() => {
+                          setForm(f => ({ ...f, city: zone.name, zone_id: zone.id }));
+                          setCityOpen(false);
+                        }}
+                      >
+                        {zone.name}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <input type="hidden" value={form.city} required />
             </div>
           </div>
 
           <div className="auth-field">
             <label>نوع المتجر</label>
-            <select value={form.type_of_store} onChange={set('type_of_store')} required title="نوع المتجر">
-              <option value="">اختر النوع</option>
-              <option value="ملابس رجالية">ملابس رجالية</option>
-              <option value="ملابس نسائية">ملابس نسائية</option>
-              <option value="ملابس أطفال">ملابس أطفال</option>
-              <option value="ملابس رياضية">ملابس رياضية</option>
-              <option value="عبايات وأزياء محتشمة">عبايات وأزياء محتشمة</option>
-              <option value="ملابس سهرة وزفاف">ملابس سهرة وزفاف</option>
-              <option value="ملابس داخلية">ملابس داخلية</option>
-              <option value="أحذية">أحذية</option>
-              <option value="حقائب وشنط">حقائب وشنط</option>
-              <option value="إكسسوارات">إكسسوارات</option>
-              <option value="مجوهرات وأساور">مجوهرات وأساور</option>
-              <option value="ساعات">ساعات</option>
-              <option value="نظارات">نظارات</option>
-              <option value="متجر أزياء متكامل">متجر أزياء متكامل</option>
-            </select>
+            <div className="auth-custom-select" ref={storeTypeRef}>
+              <button
+                type="button"
+                className={`auth-custom-select-trigger${!form.type_of_store ? ' auth-custom-select-placeholder' : ''}`}
+                onClick={() => setStoreTypeOpen(o => !o)}
+              >
+                {form.type_of_store || 'اختر النوع'}
+                <span className="auth-custom-select-arrow">{storeTypeOpen ? '▲' : '▼'}</span>
+              </button>
+              {storeTypeOpen && (
+                <ul className="auth-custom-select-list">
+                  {categories.map(cat => (
+                    <li
+                      key={cat.id}
+                      className={`auth-custom-select-option${form.type_of_store === cat.label ? ' selected' : ''}`}
+                      onMouseDown={() => {
+                        setForm(f => ({ ...f, type_of_store: cat.label }));
+                        setStoreTypeOpen(false);
+                      }}
+                    >
+                      {cat.label}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            {/* hidden input to keep form validation */}
+            <input type="hidden" value={form.type_of_store} required />
           </div>
 
           <div className="auth-field">

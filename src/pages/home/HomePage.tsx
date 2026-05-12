@@ -354,10 +354,26 @@ export default function HomePage() {
         setLoadingCats(false);
       });
 
-    fetch('/api/stores').then(r => r.json())
-      .then(d => { if (d.ok) setStores(d.stores); })
-      .catch(() => {})
-      .finally(() => setLoadingStores(false));
+    (async () => {
+      const { data: shops } = await supabase
+        .from('shops')
+        .select('shop_id, name, shopLogo, location')
+        .order('created_at', { ascending: false });
+
+      const { data: ratings } = await supabase
+        .from('shop_ratings')
+        .select('shop_id, avg_rating, review_count');
+
+      if (shops) {
+        const ratingsMap = new Map((ratings ?? []).map(r => [r.shop_id, r]));
+        setStores(shops.map(s => ({
+          ...s,
+          avg_rating: ratingsMap.get(s.shop_id)?.avg_rating ?? null,
+          review_count: ratingsMap.get(s.shop_id)?.review_count ?? 0,
+        })));
+      }
+      setLoadingStores(false);
+    })();
 
     supabase.from('products_with_avg_rating').select('id,title,price,image_urls,discount_pct,shop_id')
       .eq('isPublish', true).order('avg_rating', { ascending: false, nullsFirst: false }).limit(20)

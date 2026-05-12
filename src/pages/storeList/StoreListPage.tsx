@@ -4,6 +4,7 @@ import Topbar from '../../components/Topbar';
 import StoreNav from '../../components/StoreNav';
 import './StoreListPage.css';
 import SearchInput from '../../components/SearchInput';
+import { supabase } from '../../lib/supabase';
 
 interface StoreItem {
   shop_id: string;
@@ -33,14 +34,43 @@ export default function StoreListPage() {
   };
 
   useEffect(() => {
-    fetch('/api/stores')
-      .then(r => r.json())
-      .then(data => {
-        if (data.ok) setStores(data.stores);
-        else setError(data.error);
-      })
-      .catch(() => setError('فشل في تحميل المتاجر'))
-      .finally(() => setLoading(false));
+    async function fetchStores() {
+      const { data: shops, error: shopsErr } = await supabase
+        .from('shops')
+        .select('shop_id, name, shopLogo, location')
+        .order('created_at', { ascending: false });
+
+      if (shopsErr) {
+        setError(shopsErr.message);
+        setLoading(false);
+        return;
+      }
+
+      const { data: ratings } = await supabase
+        .from('shop_ratings')
+        .select('shop_id, avg_rating, review_count');
+
+      const ratingsMap = new Map(
+        (ratings ?? []).map(r => [r.shop_id, r])
+      );
+
+      const merged: StoreItem[] = (shops ?? []).map(s => ({
+        shop_id: s.shop_id,
+        name: s.name,
+        shopLogo: s.shopLogo,
+        location: s.location,
+        avg_rating: ratingsMap.get(s.shop_id)?.avg_rating ?? null,
+        review_count: ratingsMap.get(s.shop_id)?.review_count ?? 0,
+      }));
+
+      setStores(merged);
+      setLoading(false);
+    }
+
+    fetchStores().catch(() => {
+      setError('فشل في تحميل المتاجر');
+      setLoading(false);
+    });
   }, []);
 
   return (

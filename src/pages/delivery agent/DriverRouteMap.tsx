@@ -1,282 +1,504 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import supabase from '../../lib/supabase';
 import { useSharedAuth } from '../../context/AuthContext';
-import RouteMap, { type MapStop } from './components/RouteMap';
 import ChangePasswordModal from '../../components/ChangePasswordModal';
 import './DriverDashboard.css';
+
+interface DeliveryStop {
+  shipmentId: string;
+  zone: string;
+  shopName: string;
+  lat: number;
+  lng: number;
+}
 
 function getInitials(name: string): string {
   return name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('');
 }
 
-const AVATAR_COLORS = ['#6366f1','#8b5cf6','#ec4899','#f97316','#14b8a6','#0ea5e9','#84cc16','#f59e0b'];
-function avatarColor(name: string): string {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
-  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+function getGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'صباح الخير';
+  if (h < 17) return 'مساء الخير';
+  return 'مساء النور';
 }
 
-interface DeliveryStop {
-  orderId: number;
-  customerName: string;
-  address: string | null;
-  lat: number;
-  lng: number;
-  status: string;
+function formatDate(): string {
+  return new Date().toLocaleDateString('ar-EG', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  });
+}
+
+function buildGoogleMapsUrl(
+  ordered: DeliveryStop[],
+  driverLoc: { lat: number; lng: number }
+): string {
+  const origin      = `${driverLoc.lat},${driverLoc.lng}`;
+  const destination = `${ordered[ordered.length - 1].lat},${ordered[ordered.length - 1].lng}`;
+  const waypoints   = ordered.slice(0, -1).map((s) => `${s.lat},${s.lng}`).join('|');
+
+  const url = new URL('https://www.google.com/maps/dir/');
+  url.searchParams.set('api', '1');
+  url.searchParams.set('origin', origin);
+  url.searchParams.set('destination', destination);
+  if (waypoints) url.searchParams.set('waypoints', waypoints);
+  url.searchParams.set('travelmode', 'driving');
+  return url.toString();
 }
 
 export default function DriverRouteMap() {
   const { name, rawUser } = useSharedAuth();
-  const navigate = useNavigate();
+  const navigate          = useNavigate();
+  const mapRef            = useRef<HTMLDivElement>(null);
 
-  const [stops, setStops]         = useState<MapStop[]>([]);
-  const [details, setDetails]     = useState<DeliveryStop[]>([]);
-  const [driverLoc, setDriverLoc] = useState<{ lat: number; lng: number } | null>(null);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState<string | null>(null);
+  const [stops, setStops]                   = useState<DeliveryStop[]>([]);
+  const [orderedStops, setOrderedStops]     = useState<DeliveryStop[]>([]);
+  const [driverLoc, setDriverLoc]           = useState<{ lat: number; lng: number } | null>(null);
+  const [loading, setLoading]               = useState(true);
+  const [routeBuilding, setRouteBuilding]   = useState(false);
+  const [error, setError]                   = useState<string | null>(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showAvatarMenu, setShowAvatarMenu] = useState(false);
 
-  const initials = getInitials(name ?? 'م');
+  const apiKey         = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
+  const initials       = getInitials(name ?? 'م');
+  const displayInitial = initials.charAt(0);
+  const greeting       = getGreeting();
+  const today          = formatDate();
 
+  // ── Load Google Maps JS API once ─────────────────────────────────────────────
+  useEffect(() => {
+    if (!apiKey || (window as any).google?.maps) return;
+    const id = 'gmap-script';
+    if (document.getElementById(id)) return;
+    const s  = document.createElement('script');
+    s.id     = id;
+    s.src    = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
+    document.head.appendChild(s);
+  }, [apiKey]);
+
+  // ── Fetch stops + locate driver on mount ─────────────────────────────────────
   useEffect(() => {
     if (!rawUser) return;
     fetchStops();
     locateDriver();
   }, [rawUser?.id]);
 
+  // ── Build route once stops + location are both ready ─────────────────────────
+  useEffect(() => {
+    if (!stops.length || !driverLoc || !apiKey) return;
+    const wait = () => {
+      if (!(window as any).google?.maps) { setTimeout(wait, 400); return; }
+      buildOptimizedRoute();
+    };
+    wait();
+  }, [stops, driverLoc]);
+
+  // ── Data fetching ─────────────────────────────────────────────────────────────
+
   async function fetchStops() {
     setLoading(true);
     setError(null);
 
-    // 1. Get driver_id
-    const { data: driverRow } = await supabase
-      .from('drivers')
-      .select('driver_id')
-      .eq('user_id', rawUser!.id)
-      .maybeSingle();
-
-    const driverId = driverRow?.driver_id ?? null;
-    if (!driverId) { setLoading(false); setError('لم يتم العثور على بيانات السائق'); return; }
-
-    // 2. Get batch IDs
-    const { data: batchRows } = await supabase
+    // Correct schema: batches.assigned_to = courier's user id
+    const { data: batchRows, error: batchErr } = await supabase
       .from('batches')
-      .select('id')
-      .eq('assigned_driver_id', driverId);
+      .select('ab_shipment_ids, bc_shipment_ids')
+      .eq('assigned_to', rawUser!.id)
+      .in('status', ['assigned', 'in_transit']);
 
-    const batchIds = (batchRows ?? []).map((b) => b.id as number);
-    if (!batchIds.length) { setLoading(false); return; }
+    if (batchErr) { setError('خطأ في تحميل الدفعات'); setLoading(false); return; }
+    if (!batchRows?.length) { setLoading(false); return; }
 
-    // 3. Get order IDs from order_details
-    const { data: odRows } = await supabase
-      .from('order_details')
-      .select('order_id')
-      .in('batch_id', batchIds);
+    const allIds: string[] = [];
+    for (const b of batchRows) {
+      allIds.push(...((b.ab_shipment_ids as string[]) ?? []));
+      allIds.push(...((b.bc_shipment_ids as string[]) ?? []));
+    }
+    if (!allIds.length) { setLoading(false); return; }
 
-    const orderIds = [...new Set((odRows ?? []).map((r) => r.order_id as number))];
-    if (!orderIds.length) { setLoading(false); return; }
+    // Fetch delivery coordinates + shop name via order_details → shops join
+    const { data: shipments, error: shipErr } = await supabase
+      .from('shipments')
+      .select('id, dropoff_zone, dropoff_lat, dropoff_lng, order_details(shops(name))')
+      .in('id', allIds)
+      .not('dropoff_lat', 'is', null)
+      .not('dropoff_lng', 'is', null);
 
-    // 4. Fetch orders with coordinates (no status filter — show all assigned)
-    const { data: orders, error: ordErr } = await supabase
-      .from('orders')
-      .select('id, status, delivery_lat, delivery_lng, delivery_address, user_id')
-      .in('id', orderIds);
+    if (shipErr) { setError('خطأ في تحميل الشحنات'); setLoading(false); return; }
 
-    console.log('[RouteMap] orders:', orders, ordErr);
+    console.log('[DriverRouteMap] raw shipments:', JSON.stringify(shipments?.[0], null, 2));
 
-    if (!orders?.length) { setLoading(false); return; }
-
-    // 5. Hydrate customer names
-    const userIds = [...new Set(orders.map((o) => o.user_id).filter(Boolean))];
-    const { data: users } = userIds.length
-      ? await supabase.from('Users').select('user_id, name').in('user_id', userIds)
-      : { data: [] as any[] };
-    const nameMap = new Map((users ?? []).map((u: any) => [u.user_id, u.name as string]));
-
-    // 6. Build stops — only orders that have coordinates
-    const validOrders = orders.filter((o) => o.delivery_lat && o.delivery_lng);
-    console.log('[RouteMap] validOrders (with coords):', validOrders);
-    console.log('[RouteMap] orders missing coords:', orders.filter((o) => !o.delivery_lat || !o.delivery_lng).map(o => ({ id: o.id, status: o.status, lat: o.delivery_lat, lng: o.delivery_lng })));
-
-    const deliveryStops: DeliveryStop[] = validOrders.map((o) => ({
-      orderId:      o.id,
-      customerName: nameMap.get(o.user_id) ?? 'عميل',
-      address:      o.delivery_address ?? null,
-      lat:          o.delivery_lat,
-      lng:          o.delivery_lng,
-      status:       o.status,
-    }));
-
-    setDetails(deliveryStops);
+    setStops(
+      (shipments ?? []).map((s: any) => ({
+        shipmentId: s.id             as string,
+        zone:       s.dropoff_zone   as string,
+        shopName:   (s.order_details?.shops?.name as string) ?? '—',
+        lat:        s.dropoff_lat    as number,
+        lng:        s.dropoff_lng    as number,
+      }))
+    );
     setLoading(false);
   }
 
   function locateDriver() {
     navigator.geolocation.getCurrentPosition(
       (pos) => setDriverLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => {} // silently ignore if denied
+      ()    => setError('تعذّر تحديد موقعك — يرجى السماح بالوصول إلى الموقع الجغرافي')
     );
   }
 
-  // Build MapStop array whenever details or driverLoc changes
-  useEffect(() => {
-    const mapStops: MapStop[] = [];
+  // ── Google Maps: optimized route ──────────────────────────────────────────────
 
-    if (driverLoc) {
-      mapStops.push({ lat: driverLoc.lat, lng: driverLoc.lng, label: 'موقعك الحالي', type: 'driver' });
-    }
+  function buildOptimizedRoute() {
+    if (!mapRef.current || !driverLoc || !stops.length) return;
+    setRouteBuilding(true);
 
-    details.forEach((d) => {
-      mapStops.push({
-        lat:   d.lat,
-        lng:   d.lng,
-        label: `#SL-${d.orderId} — ${d.customerName}${d.address ? ' — ' + d.address : ''}`,
-        type:  'customer',
-      });
+    const G   = (window as any).google.maps;
+    const map = new G.Map(mapRef.current, {
+      zoom:              13,
+      center:            { lat: driverLoc.lat, lng: driverLoc.lng },
+      mapTypeControl:    false,
+      streetViewControl: false,
+      fullscreenControl: true,
+      zoomControl:       true,
     });
 
-    setStops(mapStops);
-  }, [details, driverLoc]);
+    const directionsService  = new G.DirectionsService();
+    const directionsRenderer = new G.DirectionsRenderer({
+      map,
+      suppressMarkers: false,
+      polylineOptions: { strokeColor: '#2563eb', strokeWeight: 5 },
+    });
+
+    const origin = new G.LatLng(driverLoc.lat, driverLoc.lng);
+
+    // Single stop — simple origin → destination
+    if (stops.length === 1) {
+      directionsService.route(
+        { origin, destination: new G.LatLng(stops[0].lat, stops[0].lng), travelMode: G.TravelMode.DRIVING },
+        (result: any, status: string) => {
+          if (status === 'OK') { directionsRenderer.setDirections(result); setOrderedStops(stops); }
+          else setError('تعذّر حساب المسار — تحقق من اتصالك بالإنترنت');
+          setRouteBuilding(false);
+        }
+      );
+      return;
+    }
+
+    // Multiple stops — last stop is fixed destination; all others are optimizable waypoints
+    const destination = new G.LatLng(stops[stops.length - 1].lat, stops[stops.length - 1].lng);
+    const waypoints   = stops.slice(0, -1).map((s) => ({
+      location: new G.LatLng(s.lat, s.lng),
+      stopover: true,
+    }));
+
+    directionsService.route(
+      {
+        origin,
+        destination,
+        waypoints,
+        optimizeWaypoints: true, // Google TSP solver picks the shortest real-road order
+        travelMode: G.TravelMode.DRIVING,
+      },
+      (result: any, status: string) => {
+        if (status === 'OK') {
+          directionsRenderer.setDirections(result);
+          // waypoint_order holds the optimized indices for the waypoints array
+          const order: number[] = result.routes[0].waypoint_order;
+          setOrderedStops([
+            ...order.map((i) => stops[i]),
+            stops[stops.length - 1], // destination is always last
+          ]);
+        } else {
+          setOrderedStops(stops); // fallback: original order
+          setError('تعذّر تحسين المسار — يتم عرض الترتيب الافتراضي');
+        }
+        setRouteBuilding(false);
+      }
+    );
+  }
 
   async function handleLogout() {
     await supabase.auth.signOut();
     navigate('/login');
   }
 
-  function statusLabel(s: string) {
-    if (s === 'delivering')   return { text: 'قيد التوصيل', cls: 'in-transit' };
-    if (s === 'consolidated') return { text: 'قيد الانتظار', cls: 'pending' };
-    return { text: s, cls: 'pending' };
-  }
+  // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
     <div className="dd-root">
 
-      {/* Sidebar */}
-      <aside className="dd-sidebar">
-        <div className="dd-sidebar-logo">
-          <div className="dd-sidebar-logo-icon">س</div>
-          <div className="dd-sidebar-logo-text">
-            <span>سوق لينك</span>
-            <span>توصيل</span>
-          </div>
+      {/* Topbar */}
+      <header className="dd-topbar">
+        <div className="dd-topbar-brand" onClick={() => navigate('/')}>
+          <img src="/logo.png" alt="سوق لينك" className="dd-topbar-logo" />
+          <div className="dd-topbar-brand-text">سوق <span>لينك</span></div>
         </div>
 
-        <div className="dd-sidebar-profile">
-          <div className="dd-avatar" style={{ background: avatarColor(name ?? 'م') }}>{initials}</div>
-          <div className="dd-avatar-info">
-            <span className="dd-avatar-name">{name ?? 'السائق'}</span>
-            <span className="dd-status-dot">في الخدمة</span>
-          </div>
-        </div>
-
-        <nav className="dd-nav">
-          <span className="dd-nav-section-label">الرئيسية</span>
-          <span className="dd-nav-item" onClick={() => navigate('/driver-dashboard')} style={{ cursor: 'pointer' }}>
-            <span className="dd-nav-icon">⊞</span>لوحة التحكم
-          </span>
-          <span className="dd-nav-item" onClick={() => navigate('/deliverer')} style={{ cursor: 'pointer' }}>
-            <span className="dd-nav-icon">≡</span>طلباتي
-          </span>
-          <span className="dd-nav-item active">
-            <span className="dd-nav-icon">◎</span>خريطة المسار
-          </span>
-          <span className="dd-nav-item">
-            <span className="dd-nav-icon">▤</span>السجل
-          </span>
-          <span className="dd-nav-section-label">الأداء</span>
-          <span className="dd-nav-item">
-            <span className="dd-nav-icon">↑↓</span>الأرباح
-          </span>
-          <span className="dd-nav-item">
-            <span className="dd-nav-icon">☆</span>التقييمات
-          </span>
-        </nav>
-
-        <div className="dd-sidebar-footer">
-          <span className="dd-nav-item"><span className="dd-nav-icon">👤</span>الملف الشخصي</span>
-          <button type="button" className="dd-nav-item" onClick={() => setShowChangePassword(true)}>
-            <span className="dd-nav-icon">🔑</span>تغيير كلمة المرور
-          </button>
-          <button type="button" className="dd-nav-item" onClick={handleLogout}>
-            <span className="dd-nav-icon">⏻</span>تسجيل الخروج
-          </button>
-        </div>
-      </aside>
-
-      {/* Main */}
-      <div className="dd-main">
-        <header className="dd-header">
-          <div className="dd-header-left">
-            <h1>خريطة المسار</h1>
-            <p>{details.length} نقطة توصيل نشطة</p>
-          </div>
-          <div className="dd-header-right">
-            <button className="dd-icon-btn" onClick={() => { fetchStops(); locateDriver(); }}>↻</button>
-            <div className="dd-header-avatar" style={{ background: avatarColor(name ?? 'م') }}>{initials}</div>
-          </div>
-        </header>
-
-        <div className="dd-content">
-          {loading ? (
-            <div className="dd-loading">جاري تحميل نقاط التوصيل…</div>
-          ) : error ? (
-            <div className="dd-empty" style={{ color: '#dc2626' }}>{error}</div>
-          ) : stops.length === 0 ? (
-            <div className="dd-empty">لا توجد طلبات نشطة لعرضها على الخريطة</div>
-          ) : (
-            <>
-              {/* Map */}
-              <div className="dd-orders-card" style={{ overflow: 'hidden' }}>
-                <RouteMap stops={stops} height={420} />
-              </div>
-
-              {/* Stops list */}
-              <div className="dd-orders-card">
-                <div className="dd-orders-header">
-                  <h2 className="dd-orders-title">نقاط التوصيل</h2>
+        <div className="dd-topbar-actions">
+          <div className="dd-avatar-wrapper">
+            <div
+              className={`dd-topbar-avatar${showAvatarMenu ? ' dd-avatar-active' : ''}`}
+              title={name ?? 'السائق'}
+              onClick={() => setShowAvatarMenu((v) => !v)}
+            >
+              {displayInitial}
+            </div>
+            {showAvatarMenu && (
+              <div className="dd-avatar-menu">
+                <div className="dd-avatar-menu-header">
+                  <div className="dd-avatar-menu-name">{name ?? 'السائق'}</div>
+                  <div className="dd-avatar-menu-role">SOUQ LINK Driver</div>
                 </div>
-                <table className="dd-orders-table">
+                <button
+                  type="button"
+                  className="dd-avatar-menu-item"
+                  onClick={() => { setShowChangePassword(true); setShowAvatarMenu(false); }}
+                >
+                  تغيير كلمة المرور
+                </button>
+                <button
+                  type="button"
+                  className="dd-avatar-menu-item dd-avatar-menu-logout"
+                  onClick={() => { setShowAvatarMenu(false); handleLogout(); }}
+                >
+                  تسجيل الخروج
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* Body */}
+      <div className="dd-body">
+
+        {/* Sidebar */}
+        <aside className="dd-sidebar">
+          <div className="dd-sidebar-greeting">
+            <div className="dd-sidebar-greeting-name">{greeting}، <strong>{name ?? 'السائق'}</strong></div>
+            <div className="dd-sidebar-greeting-date">{today}</div>
+          </div>
+
+          <nav className="dd-sidebar-nav">
+            <div className="dd-sidebar-item" onClick={() => navigate('/driver-dashboard')}>
+              <span className="dd-sidebar-item-icon">
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                  <polyline points="9 22 9 12 15 12 15 22" />
+                </svg>
+              </span>
+              <span className="dd-sidebar-item-label">الرئيسية</span>
+            </div>
+
+            <div className="dd-sidebar-item" onClick={() => navigate('/deliverer')}>
+              <span className="dd-sidebar-item-icon">
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <rect x="1" y="3" width="15" height="13" rx="2" />
+                  <path d="M16 8l4 2v5h-4V8z" />
+                  <circle cx="5.5" cy="18.5" r="2.5" />
+                  <circle cx="18.5" cy="18.5" r="2.5" />
+                </svg>
+              </span>
+              <span className="dd-sidebar-item-label">طلباتي</span>
+            </div>
+
+            <div className="dd-sidebar-item" onClick={() => {}}>
+              <span className="dd-sidebar-item-icon">
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <polyline points="12 12 16 14" />
+                </svg>
+              </span>
+              <span className="dd-sidebar-item-label">وردياتي</span>
+            </div>
+
+            <div className="dd-sidebar-item" onClick={() => {}}>
+              <span className="dd-sidebar-item-icon">
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <line x1="12" y1="1" x2="12" y2="23" />
+                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                </svg>
+              </span>
+              <span className="dd-sidebar-item-label">الأرباح</span>
+            </div>
+
+            <div className="dd-sidebar-divider" />
+
+            <div className="dd-sidebar-item dd-active">
+              <span className="dd-sidebar-item-icon">
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                </svg>
+              </span>
+              <span className="dd-sidebar-item-label">خريطة المسار</span>
+            </div>
+
+            <div className="dd-sidebar-item" onClick={() => {}}>
+              <span className="dd-sidebar-item-icon">
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                </svg>
+              </span>
+              <span className="dd-sidebar-item-label">التقييمات</span>
+            </div>
+          </nav>
+
+          <div className="dd-sidebar-footer">
+            <div className="dd-sidebar-user">
+              <div className="dd-sidebar-user-avatar">{displayInitial}</div>
+              <div className="dd-sidebar-user-info">
+                <div className="dd-sidebar-user-name">{name ?? 'السائق'}</div>
+                <div className="dd-sidebar-user-role">
+                  <span className="dd-duty-dot" />
+                  في الخدمة
+                </div>
+              </div>
+            </div>
+            <button type="button" className="dd-sidebar-logout" onClick={handleLogout}>
+              <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+              تسجيل الخروج
+            </button>
+          </div>
+        </aside>
+
+        {/* Main content */}
+        <main className="dd-content">
+
+          {/* Header row */}
+          <div style={{ marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: '#1e293b' }}>خريطة المسار المحسّن</h2>
+              <p style={{ margin: '4px 0 0', fontSize: 13, color: '#64748b' }}>
+                {loading ? 'جارٍ تحميل نقاط التوصيل…' : `${stops.length} نقطة توصيل`}
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {orderedStops.length > 0 && driverLoc && (
+                <a
+                  href={buildGoogleMapsUrl(orderedStops, driverLoc)}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    background: '#16a34a', color: '#fff', borderRadius: 8,
+                    padding: '8px 16px', fontSize: 13, fontWeight: 700,
+                    textDecoration: 'none',
+                  }}
+                >
+                  <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+                  </svg>
+                  فتح كل المحطات في Google Maps
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={() => { setStops([]); setOrderedStops([]); fetchStops(); locateDriver(); }}
+                style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}
+              >
+                تحديث
+              </button>
+            </div>
+          </div>
+
+          {/* No API key warning */}
+          {!apiKey && (
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', color: '#92400e', fontSize: 13, marginBottom: 12 }}>
+              أضف <strong>VITE_GOOGLE_MAPS_API_KEY</strong> في ملف .env لعرض الخريطة
+            </div>
+          )}
+
+          {/* Error banner */}
+          {error && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: '10px 14px', color: '#dc2626', fontSize: 13, marginBottom: 12 }}>
+              {error}
+            </div>
+          )}
+
+          {/* Route building indicator */}
+          {routeBuilding && (
+            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 14px', color: '#2563eb', fontSize: 13, marginBottom: 12 }}>
+              ⏳ جارٍ حساب المسار الأمثل عبر Google Maps…
+            </div>
+          )}
+
+          {/* Map */}
+          {!loading && stops.length > 0 && (
+            <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0', marginBottom: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+              <div ref={mapRef} style={{ height: 450, width: '100%' }} />
+            </div>
+          )}
+
+          {/* Empty state */}
+          {!loading && stops.length === 0 && !error && (
+            <div className="dd-orders-empty">لا توجد شحنات نشطة لعرضها على الخريطة</div>
+          )}
+
+          {/* Optimized stop list */}
+          {orderedStops.length > 0 && (
+            <div className="dd-orders-section">
+              <div className="dd-orders-header">
+                <h2 className="dd-orders-title">ترتيب التوصيل المحسّن</h2>
+              </div>
+              <div className="dd-table-wrap">
+                <table className="dd-table">
                   <thead>
                     <tr>
-                      <th>#</th>
-                      <th>رقم الطلب</th>
-                      <th>العميل</th>
-                      <th>العنوان</th>
-                      <th>الحالة</th>
-                      <th>الخريطة</th>
+                      <th>الترتيب</th>
+                      <th>رقم الشحنة</th>
+                      <th>المتجر</th>
+                      <th>المنطقة</th>
+                      <th>الإحداثيات</th>
+                      <th>الملاحة</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {details.map((d, i) => {
-                      const badge = statusLabel(d.status);
-                      return (
-                        <tr key={d.orderId}>
-                          <td><span style={{ fontWeight: 700, color: '#f97316' }}>{i + 1}</span></td>
-                          <td><span className="dd-order-id">#SL-{d.orderId}</span></td>
-                          <td>{d.customerName}</td>
-                          <td><span className="dd-address">{d.address ?? '—'}</span></td>
-                          <td><span className={`dd-badge ${badge.cls}`}>{badge.text}</span></td>
-                          <td>
-                            <a
-                              href={`https://www.google.com/maps/dir/?api=1&destination=${d.lat},${d.lng}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={{ color: '#2563eb', fontSize: 13, textDecoration: 'none', fontWeight: 600 }}
-                            >
-                              🗺 ابدأ
-                            </a>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {orderedStops.map((stop, i) => (
+                      <tr key={stop.shipmentId}>
+                        <td>
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            width: 28, height: 28, borderRadius: '50%',
+                            background: i === 0 ? '#2563eb' : '#f1f5f9',
+                            color: i === 0 ? '#fff' : '#475569',
+                            fontWeight: 700, fontSize: 13,
+                          }}>
+                            {i + 1}
+                          </span>
+                        </td>
+                        <td className="dd-td-id">#{stop.shipmentId.slice(-8).toUpperCase()}</td>
+                        <td style={{ fontWeight: 600, color: '#1e293b' }}>{stop.shopName}</td>
+                        <td>{stop.zone}</td>
+                        <td style={{ fontSize: 12, color: '#94a3b8', direction: 'ltr' }}>
+                          {stop.lat.toFixed(4)}, {stop.lng.toFixed(4)}
+                        </td>
+                        <td>
+                          <a
+                            href={`https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}&travelmode=driving`}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{ color: '#2563eb', fontSize: 13, textDecoration: 'none', fontWeight: 600 }}
+                          >
+                            ابدأ الملاحة ↗
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
-            </>
+            </div>
           )}
-        </div>
+
+        </main>
       </div>
 
       {showChangePassword && (

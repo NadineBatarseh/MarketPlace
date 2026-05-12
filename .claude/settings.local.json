@@ -16,7 +16,10 @@
       "Bash(xargs grep:*)",
       "Bash(find c:UsershpDesktopSOUQLINK -type f -name *.ts ! -path */node_modules/* ! -path */.git/*)",
       "Bash(npx tsc:*)",
-      "Bash(Get-ChildItem -Name)"
+      "Bash(Get-ChildItem -Name)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\hp\\\\Desktop\\\\SOUQLINK\\\\src\" -Directory)",
+      "Bash(Select-Object -ExpandProperty Name)",
+      "Bash(Sort-Object)"
     ]
   }
 }

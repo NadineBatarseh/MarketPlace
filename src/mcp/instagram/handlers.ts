@@ -10,10 +10,22 @@ function getServiceRoleClient() {
   return createClient(url, key);
 }
 
+async function assertShopOwnership(shopId: string, userId: string): Promise<void> {
+  const db = getServiceRoleClient();
+  const { data } = await db
+    .from('shops')
+    .select('shop_id')
+    .eq('shop_id', shopId)
+    .eq('owner_id', userId)
+    .maybeSingle();
+  if (!data) throw new Error('Access denied: this store does not belong to your account.');
+}
+
 export async function handleInstagramTool(
   client: InstagramClient | null,
   name: string,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  userId?: string
 ): Promise<unknown> {
   if (!client) {
     throw new Error(
@@ -42,11 +54,13 @@ export async function handleInstagramTool(
         }
       );
 
-    case 'instagram_list_media':
-      return client.getMedia(
+    case 'instagram_list_media': {
+      const result = await client.getMedia(
         (args.limit as number | undefined) ?? 25,
         args.account_id as string | undefined
       );
+      return result.data;
+    }
 
     case 'instagram_get_media_details':
       return client.getMediaById(args.media_id as string);
@@ -91,7 +105,7 @@ export async function handleInstagramTool(
       if (!query) throw new Error('query is required');
 
       const fetchLimit = Math.min((args.limit as number | undefined) ?? 100, 100);
-      const posts = await client.getMedia(fetchLimit, args.account_id as string | undefined);
+      const { data: posts } = await client.getMedia(fetchLimit, args.account_id as string | undefined);
 
       const matched = posts.filter((p) => p.caption?.toLowerCase().includes(query));
 
@@ -115,6 +129,7 @@ export async function handleInstagramTool(
     case 'instagram_save_drafts': {
       const shopId = args.shop_id as string;
       if (!shopId) throw new Error('shop_id is required');
+      if (userId) await assertShopOwnership(shopId, userId);
 
       const selectedProducts = args.products as Array<{
         title: string;
@@ -169,6 +184,7 @@ export async function handleInstagramTool(
           stock_Quantity: p.stock_Quantity ?? null,
           isPublish: false,
           meta_product_id: crypto.randomUUID(),
+          instagram_post_id: p.instagram_post_id ?? null,
         };
       }));
 
@@ -185,8 +201,18 @@ export async function handleInstagramTool(
     case 'instagram_import_products': {
       const shopId = args.shop_id as string;
       if (!shopId) throw new Error('shop_id is required');
+      if (userId) await assertShopOwnership(shopId, userId);
 
       const db = getServiceRoleClient();
+
+      // Fetch store category for vision-based fallback on caption-less posts
+      const { data: shopData } = await db
+        .from('shops')
+        .select('Type_of_store')
+        .eq('shop_id', shopId)
+        .single();
+      const storeCategory = (shopData?.Type_of_store as string | undefined) ?? undefined;
+      console.log(`[instagram_import] shop_id: ${shopId} — Type_of_store: ${storeCategory ?? 'NOT SET (no category filtering will apply)'}`);
 
       async function uploadMediaToStorage(cdnUrl: string, productId: string, filename: string): Promise<string> {
         console.log(`[instagram_import] uploading ${filename} for product ${productId} — url: ${cdnUrl}`);
@@ -214,9 +240,47 @@ export async function handleInstagramTool(
         }
       }
 
-      const limit = Math.min((args.limit as number | undefined) ?? 25, 50);
-      const posts = await client.getMedia(limit, args.account_id as string | undefined);
-      const products = await extractProductsFromPosts(posts);
+      // Fetch already-imported post IDs for this shop
+      const { data: existingRows } = await db
+        .from('products')
+        .select('instagram_post_id')
+        .eq('shop_id', shopId)
+        .not('instagram_post_id', 'is', null);
+      const importedIds = new Set((existingRows ?? []).map((r: { instagram_post_id: string }) => r.instagram_post_id));
+
+      // Paginate through Instagram posts (25 per page, up to 4 pages = 100 posts max)
+      // until we find posts not yet imported, or exhaust all pages
+      const BATCH_SIZE = 25;
+      const MAX_PAGES = 4;
+      let newPosts: Awaited<ReturnType<typeof client.getMedia>>['data'] = [];
+      let totalChecked = 0;
+      let cursor: string | undefined = undefined;
+      let pagesFetched = 0;
+
+      while (pagesFetched < MAX_PAGES) {
+        const { data: batch, nextCursor } = await client.getMedia(BATCH_SIZE, args.account_id as string | undefined, cursor);
+        totalChecked += batch.length;
+
+        const newInBatch = batch.filter((p) => !importedIds.has(p.id));
+        if (newInBatch.length > 0) {
+          newPosts = newInBatch;
+          break;
+        }
+
+        if (!nextCursor || batch.length === 0) break;
+        cursor = nextCursor;
+        pagesFetched++;
+      }
+
+      if (newPosts.length === 0) {
+        return {
+          success: true,
+          count: 0,
+          message: `تم فحص آخر ${totalChecked} منشور على حسابك في انستقرام — جميعها تم استيرادها مسبقاً. لا توجد منشورات جديدة لم يتم استيرادها بعد.`,
+        };
+      }
+
+      const products = await extractProductsFromPosts(newPosts, storeCategory);
 
       if (products.length === 0) {
         return { success: true, count: 0, message: 'لم يتم العثور على منتجات في آخر المنشورات.' };
@@ -241,6 +305,7 @@ export async function handleInstagramTool(
           stock_Quantity: p.stock_Quantity ?? null,
           isPublish: false,
           meta_product_id: crypto.randomUUID(),
+          instagram_post_id: p.instagram_post_id ?? null,
         };
       }));
 
