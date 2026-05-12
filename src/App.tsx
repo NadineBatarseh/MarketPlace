@@ -1,4 +1,5 @@
 import HomePage from './pages/home/HomePage';
+import CategoryListingPage from './pages/categoryListing/CategoryListingPage';
 import StoreListPage from './pages/storeList/StoreListPage';
 import SearchResultsPage from './pages/search/SearchResultsPage';
 import DeliveryAgentPage from './pages/delivery agent/DeliveryAgentPage';
@@ -96,6 +97,7 @@ export default function App() {
               <Route path="/product/:id" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><ProductDetailPage /></CustomerLayout></RoleGuard>} />
               <Route path="/product" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><ProductDetailPage /></CustomerLayout></RoleGuard>} />
               <Route path="/search" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><SearchResultsPage /></CustomerLayout></RoleGuard>} />
+              <Route path="/category/:categoryId" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><CategoryListingPage /></CustomerLayout></RoleGuard>} />
 
               {/* Customer only */}
               <Route path="/cart" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><Cart /></CustomerLayout></RoleGuard>} />
