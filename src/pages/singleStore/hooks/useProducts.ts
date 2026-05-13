@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { Product } from '../types';
 import { fetchProducts } from '../api';
+import { supabase } from '../../../lib/supabase';
 
 const PAGE_SIZE = 12;
 
@@ -25,16 +26,29 @@ export function useProducts(shopId: string): UseProductsResult {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetchProducts(shopId, page, sort)
-      .then(({ products: fetched, total: t }) => {
-        if (!cancelled) {
-          setProducts(fetched);
-          setTotal(t);
-        }
+
+    function load() {
+      fetchProducts(shopId, page, sort)
+        .then(({ products: fetched, total: t }) => {
+          if (!cancelled) { setProducts(fetched); setTotal(t); }
+        })
+        .catch(() => {})
+        .finally(() => { if (!cancelled) setLoading(false); });
+    }
+
+    load();
+
+    const channel = supabase
+      .channel(`products-${shopId}-${page}-${sort}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products', filter: `shop_id=eq.${shopId}` }, () => {
+        load();
       })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
   }, [shopId, page, sort]);
 
   function handleSortChange(newSort: string) {

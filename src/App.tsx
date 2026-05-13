@@ -14,6 +14,7 @@ import MetaConnectPage from './pages/MetaConnectPage';
 
 
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
+import TopLoadingBar from "./components/TopLoadingBar";
 import "./App.css";
 import StorePage from "./pages/singleStore/storePage";
 import ProductsPage from "./ProductsPage";
@@ -40,6 +41,7 @@ import AdminDashboard from "./merchant-dashboard/pages/AdminDashboard";
 import Footer from "./components/Footer";
 import { useMerchantAuth } from './merchant-dashboard/context/MerchantAuthContext';
 import { useCustomerAuth } from './context/CustomerAuthContext';
+import { useSharedAuth } from './context/AuthContext';
 
 
 function CustomerLayout({ children }: { children: React.ReactNode }) {
@@ -64,6 +66,17 @@ function StorePageWrapper() {
   return <StorePage shopId={shopId!} />;
 }
 
+function RootRedirect() {
+  const { rawUser, role, isLoading } = useSharedAuth();
+  if (isLoading) return null;
+  if (!rawUser || !role || role === 'customer') return <Navigate to="/home" replace />;
+  if (role === 'merchant') return <Navigate to="/merchant-dashboard" replace />;
+  if (role === 'admin') return <Navigate to="/admin-dashboard" replace />;
+  if (role === 'delivery') return <Navigate to="/driver-dashboard" replace />;
+  if (role === 'hubworker') return <Navigate to="/hub" replace />;
+  return <Navigate to="/home" replace />;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -71,10 +84,11 @@ export default function App() {
       <CustomerAuthProvider>
         <ShopProviderWithAuth>
           <BrowserRouter>
+            <TopLoadingBar />
             <ChatBot />
             <Routes>
-              {/* Landing → redirect to /home */}
-              <Route path="/" element={<Navigate to="/home" replace />} />
+              {/* Landing → redirect to role home */}
+              <Route path="/" element={<RootRedirect />} />
 
               {/* Auth pages — always public */}
               <Route path="/login" element={<Login />} />

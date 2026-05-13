@@ -54,9 +54,9 @@ export default function DraftProductsPage() {
     setTimeout(() => setToast(''), 3000);
   };
 
-  const loadDrafts = useCallback(async () => {
+  const loadDrafts = useCallback(async (silent = false) => {
     if (!shopId) { setLoading(false); return; }
-    setLoading(true);
+    if (!silent) setLoading(true);
     setFetchError('');
 
     const { data, error } = await supabase
@@ -90,7 +90,7 @@ export default function DraftProductsPage() {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'products', filter: `shop_id=eq.${shopId}` },
-        () => { loadDrafts(); }
+        () => { loadDrafts(true); }
       )
       .subscribe();
 

@@ -249,6 +249,35 @@ export default function AdminDashboard() {
   useEffect(() => { contentRef.current?.scrollTo({ top: 0 }); }, [activeSection]);
 
   useEffect(() => {
+    const merchantSub = supabase
+      .channel('admin-merchant-apps')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'merchant_applications' }, payload => {
+        setApps(prev => [payload.new as MerchantApp, ...prev]);
+      })
+      .subscribe();
+
+    const deliverySub = supabase
+      .channel('admin-delivery-apps')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'delivery_applications' }, payload => {
+        setDeliveryApps(prev => [payload.new as DeliveryApp, ...prev]);
+      })
+      .subscribe();
+
+    const hubSub = supabase
+      .channel('admin-hub-apps')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hubworker_applications' }, payload => {
+        setHubApps(prev => [payload.new as HubWorkerApp, ...prev]);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(merchantSub);
+      supabase.removeChannel(deliverySub);
+      supabase.removeChannel(hubSub);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!showAvatarMenu) return;
     const handler = (e: MouseEvent) => {
       if (avatarRef.current && !avatarRef.current.contains(e.target as Node)) {

@@ -66,7 +66,18 @@ export function useCategoryProducts(shopIds: string[]): Result {
     }
 
     load().catch(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+
+    const channel = supabase
+      .channel(`category-products-${shopKey}-${page}-${sort}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
+        load().catch(() => {});
+      })
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
   }, [shopKey, page, sort]);
 
   function handleSortChange(newSort: string) {

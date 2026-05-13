@@ -71,6 +71,17 @@ export default function StoreListPage() {
       setError('فشل في تحميل المتاجر');
       setLoading(false);
     });
+
+    const channel = supabase
+      .channel('shops-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'shops' }, () => {
+        fetchStores().catch(() => {});
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   return (
