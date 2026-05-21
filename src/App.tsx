@@ -114,12 +114,12 @@ export default function App() {
               <Route path="/search" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><SearchResultsPage /></CustomerLayout></RoleGuard>} />
               <Route path="/category/:categoryId" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><CategoryListingPage /></CustomerLayout></RoleGuard>} />
 
-              {/* Customer only */}
-              <Route path="/cart" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><Cart /></CustomerLayout></RoleGuard>} />
-              <Route path="/checkout" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><CheckoutPage /></CustomerLayout></RoleGuard>} />
-              <Route path="/favorites" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><Favorite /></CustomerLayout></RoleGuard>} />
-              <Route path="/orders" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><OrderHistoryPage /></CustomerLayout></RoleGuard>} />
-              <Route path="/orders/:orderId" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><OrderTrackingPage /></CustomerLayout></RoleGuard>} />
+              {/* Customer only — no guests, no other roles */}
+              <Route path="/cart" element={<RoleGuard allowedRoles={['customer']}><CustomerLayout><Cart /></CustomerLayout></RoleGuard>} />
+              <Route path="/checkout" element={<RoleGuard allowedRoles={['customer']}><CustomerLayout><CheckoutPage /></CustomerLayout></RoleGuard>} />
+              <Route path="/favorites" element={<RoleGuard allowedRoles={['customer']}><CustomerLayout><Favorite /></CustomerLayout></RoleGuard>} />
+              <Route path="/orders" element={<RoleGuard allowedRoles={['customer']}><CustomerLayout><OrderHistoryPage /></CustomerLayout></RoleGuard>} />
+              <Route path="/orders/:orderId" element={<RoleGuard allowedRoles={['customer']}><CustomerLayout><OrderTrackingPage /></CustomerLayout></RoleGuard>} />
 
               {/* Merchant only */}
               <Route path="/merchant-dashboard" element={<RoleGuard allowedRoles={['merchant']}><MerchantDashboard /></RoleGuard>} />

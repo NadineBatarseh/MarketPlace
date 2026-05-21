@@ -30,8 +30,11 @@ export default function RoleGuard({ children, allowedRoles, allowGuests = false 
   // If guests are allowed, any authenticated user is also allowed (public page)
   if (allowGuests) return <>{children}</>;
 
-  if (!role || !allowedRoles.includes(role)) {
-    const home = ROLE_HOME[role ?? ''] ?? '/home';
+  // Role not yet resolved (transient state between SIGNED_IN and DB fetch) — wait
+  if (!role) return null;
+
+  if (!allowedRoles.includes(role)) {
+    const home = ROLE_HOME[role] ?? '/home';
     return <Navigate to={home} replace />;
   }
 

@@ -46,6 +46,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setRawUser(null);
       } else if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         wasLoggedIn.current = true;
+        // On a fresh login the initial empty-session already set isLoading=false.
+        // Re-arm it so RoleGuard waits for the role DB fetch to complete.
+        if (event === 'SIGNED_IN') setIsLoading(true);
         setRawUser(session.user);
       }
     });

@@ -40,7 +40,7 @@ export default function CategoryListingPage() {
   } = useCategoryProducts(selectedShopIds);
 
   const { toast, toastVisible, showToast } = useToast();
-  const { rawUser } = useSharedAuth();
+  const { rawUser, role } = useSharedAuth();
   const { addToCart: addToCartCtx, isInCart, toggleFavorite, isFavorited, favoriteItems } = useShop();
 
   const wishlist = new Set(favoriteItems.map(item => String(item.id)));
@@ -156,6 +156,7 @@ export default function CategoryListingPage() {
   function toggleWishlist(e: MouseEvent, pid: string) {
     e.stopPropagation();
     if (!rawUser) { showToast('يجب تسجيل الدخول أو إنشاء حساب أولاً'); return; }
+    if (role !== 'customer') { showToast('متاح للعملاء فقط'); return; }
     const product = displayedProducts.find(p => p.id === pid);
     if (!product) return;
     const price = typeof product.price === 'number' ? product.price : parseFloat(String(product.price ?? '0')) || 0;
@@ -166,6 +167,7 @@ export default function CategoryListingPage() {
   function addToCart(e: MouseEvent, product: Product) {
     e.stopPropagation();
     if (!rawUser) { showToast('يجب تسجيل الدخول أو إنشاء حساب أولاً'); return; }
+    if (role !== 'customer') { showToast('متاح للعملاء فقط'); return; }
     if (isInCart(product.id)) { setConfirmProduct(product); return; }
     addToCartCtx({
       id: product.id,

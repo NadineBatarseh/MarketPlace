@@ -80,7 +80,10 @@ export default function Topbar({
 
   const dashboardPath =
     merchant ? '/merchant-dashboard' :
-    customer?.role === 'admin' ? '/admin-dashboard' : null;
+    customer?.role === 'admin' ? '/admin-dashboard' :
+    customer?.role === 'delivery' ? '/driver-dashboard' : null;
+
+  const isCustomer = customer?.role === 'customer';
 
   const displayName = merchant?.displayName ?? customer?.displayName ?? null;
   const isAuthenticated = !!merchant || !!customer;
@@ -141,42 +144,48 @@ export default function Topbar({
             </svg>
           </div>
 
-          {/* Wishlist */}
-          <div
-            className={`nav-action${pathname === '/favorites' ? ' nav-action--active' : ''}`}
-            onClick={() => navigate('/favorites')}
-            title="Wishlist"
-          >
-            {favCount > 0 && <div className="badge">{favCount}</div>}
-            <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-            </svg>
-          </div>
+          {/* Wishlist — customers only */}
+          {isCustomer && (
+            <div
+              className={`nav-action${pathname === '/favorites' ? ' nav-action--active' : ''}`}
+              onClick={() => navigate('/favorites')}
+              title="Wishlist"
+            >
+              {favCount > 0 && <div className="badge">{favCount}</div>}
+              <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+              </svg>
+            </div>
+          )}
 
-          {/* Orders */}
-          <div
-            className={`nav-action${pathname === '/orders' ? ' nav-action--active' : ''}`}
-            onClick={() => navigate('/orders')}
-            title="الطلبات"
-          >
-            <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-              <path d="M18 8h1a4 4 0 0 1 0 8h-1" /><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" />
-              <line x1="6" y1="1" x2="6" y2="4" /><line x1="10" y1="1" x2="10" y2="4" /><line x1="14" y1="1" x2="14" y2="4" />
-            </svg>
-          </div>
+          {/* Orders — customers only */}
+          {isCustomer && (
+            <div
+              className={`nav-action${pathname === '/orders' ? ' nav-action--active' : ''}`}
+              onClick={() => navigate('/orders')}
+              title="الطلبات"
+            >
+              <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                <path d="M18 8h1a4 4 0 0 1 0 8h-1" /><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" />
+                <line x1="6" y1="1" x2="6" y2="4" /><line x1="10" y1="1" x2="10" y2="4" /><line x1="14" y1="1" x2="14" y2="4" />
+              </svg>
+            </div>
+          )}
 
-          {/* Cart */}
-          <div
-            className={`nav-action${pathname === '/cart' ? ' nav-action--active' : ''}`}
-            onClick={() => navigate('/cart')}
-            title="السلة"
-          >
-            {cartCount > 0 && <div className="badge">{cartCount}</div>}
-            <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-              <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
-              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-            </svg>
-          </div>
+          {/* Cart — customers only */}
+          {isCustomer && (
+            <div
+              className={`nav-action${pathname === '/cart' ? ' nav-action--active' : ''}`}
+              onClick={() => navigate('/cart')}
+              title="السلة"
+            >
+              {cartCount > 0 && <div className="badge">{cartCount}</div>}
+              <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                <circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" />
+                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+              </svg>
+            </div>
+          )}
 
           {/* Account with dropdown */}
           <div className="nav-action-dropdown" ref={dropdownRef}>
@@ -233,7 +242,9 @@ export default function Topbar({
               <div className="topbar-dropdown" dir="rtl">
                 <div className="topbar-dropdown-name-row">
                   <div className="topbar-dropdown-name">{displayName}</div>
-                  <div className="topbar-dropdown-role">{merchant ? 'تاجر' : 'عميل'}</div>
+                  <div className="topbar-dropdown-role">
+                    {merchant ? 'تاجر' : customer?.role === 'admin' ? 'مشرف' : customer?.role === 'delivery' ? 'مندوب توصيل' : 'عميل'}
+                  </div>
                 </div>
                 {dashboardPath && (
                   <button

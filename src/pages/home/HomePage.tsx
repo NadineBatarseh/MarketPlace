@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Topbar from '../../components/Topbar';
 import supabase from '../../lib/supabase';
 import { useShop } from '../../context/ShopContext';
+import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import './HomePage.css';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -193,6 +194,8 @@ function StoresSection({ stores, loading }: { stores: Store[]; loading: boolean 
 function ProductCard({ product }: { product: Product }) {
   const navigate = useNavigate();
   const { addToCart, isInCart, toggleFavorite, isFavorited } = useShop();
+  const { customer } = useCustomerAuth();
+  const isCustomer = customer?.role === 'customer';
   const img = product.image_urls?.[0] ?? '';
   const inCart = isInCart(product.id);
   const origPrice = product.discount_pct && product.price != null
@@ -201,11 +204,13 @@ function ProductCard({ product }: { product: Product }) {
 
   const onCart = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!isCustomer) { navigate('/login'); return; }
     if (!inCart) addToCart({ id: product.id, name: product.title, image: img, price: product.price ?? 0 });
   };
 
   const onFav = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!isCustomer) { navigate('/login'); return; }
     toggleFavorite({ id: product.id, name: product.title, image: img, price: product.price ?? 0 });
   };
 

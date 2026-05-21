@@ -419,6 +419,7 @@ const ProductDetailPage: React.FC = () => {
 
   const toggleFav = () => {
     if (!currentUser) { showCartMsg('يجب تسجيل الدخول أو إنشاء حساب أولاً'); return; }
+    if (userRole !== 'customer') { showCartMsg('متاح للعملاء فقط'); return; }
     if (!product) return;
     toggleFavorite({
       id: product.id,
@@ -433,6 +434,7 @@ const ProductDetailPage: React.FC = () => {
 
   const addToCart = () => {
     if (!currentUser) { showCartMsg('يجب تسجيل الدخول أو إنشاء حساب أولاً'); return; }
+    if (userRole !== 'customer') { showCartMsg('متاح للعملاء فقط'); return; }
     if (!product) return;
     if (hasColors && !selectedColor) { showCartMsg('يرجى اختيار اللون أولاً'); return; }
     if (hasSizes && !selectedSize) { showCartMsg('يرجى اختيار المقاس أولاً'); return; }
