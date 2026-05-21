@@ -5,6 +5,8 @@ import { handleBreakdown } from './phases/phase9_breakdownHandling';
 import { tryAddShipmentsToBatch } from './phases/phase8_inTransitAdditions';
 import { sequenceIntraCityTasks } from './phases/phase10_intraCitySequencing';
 import { atomicAssign } from './driverAssignment';
+import { autoAssignUnbatchedShipments } from './phases/phase0a_autoAssignUnbatched';
+import { supabase } from '../supabase';
 import { C } from './constants';
 
 export const logisticsRouter = Router();
@@ -91,6 +93,163 @@ logisticsRouter.post('/sequence', (req: Request, res: Response) => {
   }
 });
 
+// ── POST /api/logistics/start-batch ─────────────────────────────────────────
+// Driver starts an assigned batch, transitioning it to in_transit.
+// Body: { batch_id, courier_id }
+logisticsRouter.post('/start-batch', async (req: Request, res: Response) => {
+  const { batch_id, courier_id } = req.body as { batch_id: string; courier_id: string };
+
+  if (!batch_id || !courier_id) {
+    res.status(400).json({ success: false, error: 'batch_id and courier_id are required' });
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from('batches')
+    .update({ status: 'in_transit', started_at: new Date().toISOString() })
+    .eq('id', batch_id)
+    .eq('status', 'assigned')
+    .eq('assigned_to', courier_id)
+    .select('id');
+
+  if (error || !data?.length) {
+    res.status(409).json({ success: false, error: 'Batch not found, not assigned, or already started' });
+    return;
+  }
+
+  res.json({ success: true });
+});
+
+// ── POST /api/logistics/pickup-shipment ──────────────────────────────────────
+// Driver confirms pickup of a shipment from the shop.
+// Validates: batch is in_transit and belongs to this courier; shipment is batched/reserved.
+// Body: { shipment_id, courier_id }
+logisticsRouter.post('/pickup-shipment', async (req: Request, res: Response) => {
+  const { shipment_id, courier_id } = req.body as { shipment_id: string; courier_id: string };
+
+  if (!shipment_id || !courier_id) {
+    res.status(400).json({ success: false, error: 'shipment_id and courier_id are required' });
+    return;
+  }
+
+  // Fetch the shipment to get its batch
+  const { data: shipment } = await supabase
+    .from('shipments')
+    .select('id, batch_id, status')
+    .eq('id', shipment_id)
+    .maybeSingle();
+
+  if (!shipment?.batch_id) {
+    res.status(404).json({ success: false, error: 'Shipment not found or not in a batch' });
+    return;
+  }
+
+  if (shipment.status !== 'batched' && shipment.status !== 'reserved') {
+    res.status(400).json({ success: false, error: 'Shipment is not ready for pickup' });
+    return;
+  }
+
+  // Verify the batch is in_transit and belongs to this courier
+  const { data: batch } = await supabase
+    .from('batches')
+    .select('id')
+    .eq('id', shipment.batch_id)
+    .eq('assigned_to', courier_id)
+    .eq('status', 'in_transit')
+    .maybeSingle();
+
+  if (!batch) {
+    res.status(403).json({ success: false, error: 'Batch is not in transit or not yours' });
+    return;
+  }
+
+  const { data: updated } = await supabase
+    .from('shipments')
+    .update({ status: 'picked_up', picked_up_at: new Date().toISOString() })
+    .eq('id', shipment_id)
+    .in('status', ['batched', 'reserved'])
+    .select('id');
+
+  if (!updated?.length) {
+    res.status(409).json({ success: false, error: 'Pickup failed — shipment status changed' });
+    return;
+  }
+
+  res.json({ success: true });
+});
+
+// ── POST /api/logistics/deliver-shipment ─────────────────────────────────────
+// Driver confirms delivery of a shipment to the customer.
+// Validates: batch is in_transit and belongs to this courier; shipment is picked_up.
+// Auto-completes the batch when all its shipments are delivered.
+// Body: { shipment_id, courier_id }
+logisticsRouter.post('/deliver-shipment', async (req: Request, res: Response) => {
+  const { shipment_id, courier_id } = req.body as { shipment_id: string; courier_id: string };
+
+  if (!shipment_id || !courier_id) {
+    res.status(400).json({ success: false, error: 'shipment_id and courier_id are required' });
+    return;
+  }
+
+  const { data: shipment } = await supabase
+    .from('shipments')
+    .select('id, batch_id, status')
+    .eq('id', shipment_id)
+    .maybeSingle();
+
+  if (!shipment?.batch_id) {
+    res.status(404).json({ success: false, error: 'Shipment not found or not in a batch' });
+    return;
+  }
+
+  if (shipment.status !== 'picked_up') {
+    res.status(400).json({ success: false, error: 'Shipment must be picked up before delivery' });
+    return;
+  }
+
+  const { data: batch } = await supabase
+    .from('batches')
+    .select('id, ab_shipment_ids, bc_shipment_ids')
+    .eq('id', shipment.batch_id)
+    .eq('assigned_to', courier_id)
+    .eq('status', 'in_transit')
+    .maybeSingle();
+
+  if (!batch) {
+    res.status(403).json({ success: false, error: 'Batch is not in transit or not yours' });
+    return;
+  }
+
+  const { data: updated } = await supabase
+    .from('shipments')
+    .update({ status: 'delivered', delivered_at: new Date().toISOString() })
+    .eq('id', shipment_id)
+    .eq('status', 'picked_up')
+    .select('id');
+
+  if (!updated?.length) {
+    res.status(409).json({ success: false, error: 'Delivery failed — shipment status changed' });
+    return;
+  }
+
+  // Auto-complete batch if every shipment is now delivered
+  const allIds = [
+    ...((batch.ab_shipment_ids as string[]) ?? []),
+    ...((batch.bc_shipment_ids as string[]) ?? []),
+  ];
+  const { count } = await supabase
+    .from('shipments')
+    .select('id', { count: 'exact', head: true })
+    .in('id', allIds)
+    .neq('status', 'delivered');
+
+  if (count === 0) {
+    await supabase.from('batches').update({ status: 'completed' }).eq('id', batch.id);
+  }
+
+  res.json({ success: true, batch_completed: count === 0 });
+});
+
 // ── POST /api/logistics/accept ───────────────────────────────────────────────
 // Courier accepts a batch — atomic assignment (D34)
 // Body: { batch_id, courier_id }
@@ -118,10 +277,47 @@ logisticsRouter.post('/accept', async (req: Request, res: Response) => {
   }
 });
 
+// ── Real-time auto-assignment ─────────────────────────────────────────────────
+// Listens for new shipment inserts and immediately tries to slot them into an
+// existing assigned/in_transit batch. A lock prevents overlapping runs when
+// multiple shipments arrive at once.
+function startShipmentWatcher(): void {
+  let running = false;
+
+  supabase
+    .channel('shipments-insert')
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'shipments' },
+      async (payload) => {
+        const row = payload.new as { batch_id: string | null; status: string };
+
+        // Only act on unbatched, dispatchable shipments
+        if (row.batch_id !== null) return;
+        if (row.status !== 'available' && row.status !== 'delayed') return;
+
+        if (running) return; // a run is already in progress — it will pick this up
+        running = true;
+
+        try {
+          await autoAssignUnbatchedShipments();
+        } catch (err) {
+          console.error('[Shipment Watcher] autoAssign error:', err);
+        } finally {
+          running = false;
+        }
+      },
+    )
+    .subscribe((status) => {
+      console.log('[Shipment Watcher] Realtime status:', status);
+    });
+}
+
 // ── Bootstrap function ────────────────────────────────────────────────────────
 // Call this once from server/index.ts during startup
 export function bootstrapLogistics(): void {
   startBackgroundJobs();
   startBatchCycleScheduler(C.CYCLE_INTERVAL_MINUTES);
+  startShipmentWatcher();
   console.log('[Logistics] Module bootstrapped.');
 }

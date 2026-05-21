@@ -1,3 +1,4 @@
+import { autoAssignUnbatchedShipments } from './phases/phase0a_autoAssignUnbatched';
 import { extractDemandFlows } from './phases/phase0_demandFlow';
 import { splitAllFlows } from './phases/phase0b_flowSplitting';
 import { scoreAndRankBatches } from './phases/phase1_scoring';
@@ -35,6 +36,9 @@ export async function runBatchCycle(): Promise<void> {
 
   // Load admin-configurable settings before each cycle
   await loadConfigFromDB();
+
+  // Phase 0a — Slot unbatched shipments into existing assigned/in_transit batches
+  await autoAssignUnbatchedShipments();
 
   // Phase 0 — Demand flow extraction
   const flows = await extractDemandFlows();

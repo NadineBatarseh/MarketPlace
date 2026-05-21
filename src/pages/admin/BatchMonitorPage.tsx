@@ -15,7 +15,6 @@ interface BatchRow {
   assigned_to: string | null;
   assigned_at: string | null;
   needs_dispatcher: boolean;
-  courier_current_zone: string | null;
   estimated_minutes_to_next_zone: number | null;
   couriers: { name: string } | null;
 }
@@ -33,6 +32,16 @@ interface ShipmentDetail {
     products: { title: string } | null;
     shops: { name: string } | null;
   } | null;
+}
+
+interface UnbatchedShipment {
+  id: string;
+  status: string;
+  pickup_zone: string;
+  dropoff_zone: string;
+  created_at: string;
+  delayed_reason: string | null;
+  urgency_score: number;
 }
 
 const STATUS_LABELS: Record<BatchStatus, string> = {
@@ -73,11 +82,17 @@ function Detail({ label, value, mono }: { label: string; value: string; mono?: b
   );
 }
 
+interface CourierOption {
+  id: string;
+  name: string;
+  status: string;
+}
+
 export default function BatchMonitorPage() {
   const [batches, setBatches]   = useState<BatchRow[]>([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState('');
-  const [filter, setFilter]     = useState<BatchStatus | 'all'>('all');
+  const [filter, setFilter]     = useState<BatchStatus | 'all' | 'unbatched'>('all');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [cycling, setCycling]   = useState(false);
   const [cycleMsg, setCycleMsg] = useState('');
@@ -85,18 +100,49 @@ export default function BatchMonitorPage() {
   const [shipmentDetails, setShipmentDetails] = useState<Record<string, ShipmentDetail[]>>({});
   const [loadingDetails, setLoadingDetails]   = useState<Set<string>>(new Set());
 
+  // Manual dispatcher assignment
+  const [couriers, setCouriers]               = useState<CourierOption[]>([]);
+  const [selectedCourier, setSelectedCourier] = useState<Record<string, string>>({});
+  const [assigning, setAssigning]             = useState<Set<string>>(new Set());
+  const [assignMsg, setAssignMsg]             = useState<Record<string, string>>({});
+
+  // Unbatched individual shipments
+  const [unbatchedShipments, setUnbatchedShipments] = useState<UnbatchedShipment[]>([]);
+
+  // In-transit shipment additions (Phase 8)
+  interface CompatibleShipment { id: string; pickup_zone: string; dropoff_zone: string; status: string; }
+  const [compatibleShipments, setCompatibleShipments] = useState<Record<string, CompatibleShipment[]>>({});
+  const [loadingCompatible, setLoadingCompatible]     = useState<Set<string>>(new Set());
+  const [selectedShipments, setSelectedShipments]     = useState<Record<string, Set<string>>>({});
+  const [addingShipments, setAddingShipments]         = useState<Set<string>>(new Set());
+  const [addShipmentMsg, setAddShipmentMsg]           = useState<Record<string, string>>({});
+
+  const loadUnbatched = useCallback(async () => {
+    const { data } = await supabase
+      .from('shipments')
+      .select('id, status, pickup_zone, dropoff_zone, created_at, delayed_reason, urgency_score')
+      .is('batch_id', null)
+      .in('status', ['available', 'delayed'])
+      .order('created_at', { ascending: false })
+      .limit(200);
+    setUnbatchedShipments((data ?? []) as UnbatchedShipment[]);
+  }, []);
+
   const loadBatches = useCallback(async () => {
     setLoading(true);
     setError('');
-    const { data, error: err } = await supabase
-      .from('batches')
-      .select('*, couriers!assigned_to(name)')
-      .order('created_at', { ascending: false })
-      .limit(200);
+    const [{ data, error: err }] = await Promise.all([
+      supabase
+        .from('batches')
+        .select('*, couriers!assigned_to(name)')
+        .order('created_at', { ascending: false })
+        .limit(200),
+      loadUnbatched(),
+    ]);
     if (err) setError('تعذّر تحميل البيانات: ' + err.message);
     else setBatches((data ?? []) as BatchRow[]);
     setLoading(false);
-  }, []);
+  }, [loadUnbatched]);
 
   useEffect(() => { loadBatches(); }, [loadBatches]);
 
@@ -105,6 +151,27 @@ export default function BatchMonitorPage() {
     const id = setInterval(loadBatches, 15_000);
     return () => clearInterval(id);
   }, [autoRefresh, loadBatches]);
+
+  useEffect(() => {
+    supabase.from('couriers').select('id, name, status').then(({ data }) => {
+      if (data) setCouriers(data as CourierOption[]);
+    });
+  }, []);
+
+  const loadCompatibleShipments = useCallback(async (batch: BatchRow) => {
+    if (batch.status !== 'in_transit' || batch.route.length < 2) return;
+    const zoneB = batch.route[1];
+    setLoadingCompatible(prev => new Set(prev).add(batch.id));
+    const { data } = await supabase
+      .from('shipments')
+      .select('id, pickup_zone, dropoff_zone, status')
+      .eq('pickup_zone', zoneB)
+      .in('status', ['available', 'delayed'])
+      .is('batch_id', null)
+      .limit(50);
+    if (data) setCompatibleShipments(prev => ({ ...prev, [batch.id]: data as CompatibleShipment[] }));
+    setLoadingCompatible(prev => { const next = new Set(prev); next.delete(batch.id); return next; });
+  }, []);
 
   const loadShipmentDetails = useCallback(async (batch: BatchRow) => {
     const allIds = [...batch.ab_shipment_ids, ...batch.bc_shipment_ids];
@@ -139,6 +206,84 @@ export default function BatchMonitorPage() {
     });
   }, []);
 
+  const toggleShipmentSelection = (batchId: string, shipmentId: string) => {
+    setSelectedShipments(prev => {
+      const current = new Set(prev[batchId] ?? []);
+      current.has(shipmentId) ? current.delete(shipmentId) : current.add(shipmentId);
+      return { ...prev, [batchId]: current };
+    });
+  };
+
+  const addShipmentsToBatch = async (batch: BatchRow) => {
+    const selected = Array.from(selectedShipments[batch.id] ?? []);
+    if (!selected.length || batch.route.length < 2) return;
+
+    setAddingShipments(prev => new Set(prev).add(batch.id));
+    setAddShipmentMsg(prev => ({ ...prev, [batch.id]: '' }));
+
+    try {
+      const res = await fetch('/api/logistics/add-shipments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          batch_id: batch.id,
+          zone_b: batch.route[1],
+          new_shipment_ids: selected,
+          existing_reserved_until: batch.reserved_until ?? new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setAddShipmentMsg(prev => ({ ...prev, [batch.id]: `✓ تمت إضافة ${selected.length} شحنة للتجميعة` }));
+        setSelectedShipments(prev => ({ ...prev, [batch.id]: new Set() }));
+        await loadBatches();
+        await loadCompatibleShipments(batch);
+      } else {
+        setAddShipmentMsg(prev => ({ ...prev, [batch.id]: '✗ تعذّرت الإضافة — السائق وصل للمنطقة أو لا توجد سعة كافية أو وقت غير كافٍ' }));
+      }
+    } catch {
+      setAddShipmentMsg(prev => ({ ...prev, [batch.id]: '✗ تعذّر الاتصال بالخادم' }));
+    }
+
+    setAddingShipments(prev => { const next = new Set(prev); next.delete(batch.id); return next; });
+    setTimeout(() => setAddShipmentMsg(prev => { const next = { ...prev }; delete next[batch.id]; return next; }), 5000);
+  };
+
+  const manualAssign = async (batchId: string) => {
+    const courierId = selectedCourier[batchId];
+    if (!courierId) return;
+
+    setAssigning(prev => new Set(prev).add(batchId));
+    setAssignMsg(prev => ({ ...prev, [batchId]: '' }));
+
+    const { data, error: updateErr } = await supabase
+      .from('batches')
+      .update({
+        status: 'assigned',
+        assigned_to: courierId,
+        assigned_at: new Date().toISOString(),
+        needs_dispatcher: false,
+      })
+      .eq('id', batchId)
+      .eq('needs_dispatcher', true)
+      .select('id');
+
+    if (updateErr || !data?.length) {
+      setAssignMsg(prev => ({ ...prev, [batchId]: '✗ فشل التعيين، ربما تم تعيينه مسبقاً' }));
+    } else {
+      await supabase.from('driver_notifications').insert({
+        courier_id: courierId,
+        batch_id: batchId,
+        is_accepted: true,
+      });
+      setAssignMsg(prev => ({ ...prev, [batchId]: '✓ تم التعيين بنجاح' }));
+      await loadBatches();
+    }
+
+    setAssigning(prev => { const next = new Set(prev); next.delete(batchId); return next; });
+    setTimeout(() => setAssignMsg(prev => { const next = { ...prev }; delete next[batchId]; return next; }), 4000);
+  };
+
   const triggerCycle = async () => {
     setCycling(true);
     setCycleMsg('');
@@ -161,9 +306,8 @@ export default function BatchMonitorPage() {
         next.delete(batch.id);
       } else {
         next.add(batch.id);
-        if (!shipmentDetails[batch.id]) {
-          loadShipmentDetails(batch);
-        }
+        if (!shipmentDetails[batch.id]) loadShipmentDetails(batch);
+        if (!compatibleShipments[batch.id]) loadCompatibleShipments(batch);
       }
       return next;
     });
@@ -241,6 +385,19 @@ export default function BatchMonitorPage() {
             </button>
           );
         })}
+        <button onClick={() => setFilter('unbatched')}
+          style={{
+            padding: '5px 13px', borderRadius: 20, border: '1.5px solid',
+            borderColor: filter === 'unbatched' ? '#FDE68A' : '#E2E8F0',
+            background: filter === 'unbatched' ? '#FFFBEB' : '#fff',
+            color: filter === 'unbatched' ? '#92400E' : '#64748B',
+            cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: filter === 'unbatched' ? 700 : 400,
+          }}>
+          الطرود غير المجمّعة
+          <span style={{ marginRight: 5, fontFamily: 'monospace', opacity: 0.8 }}>
+            {unbatchedShipments.length}
+          </span>
+        </button>
       </div>
 
       {error && (
@@ -249,11 +406,53 @@ export default function BatchMonitorPage() {
         </div>
       )}
       {loading && <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8', fontSize: 14 }}>جاري التحميل...</div>}
-      {!loading && visible.length === 0 && (
+
+      {/* Unbatched individual shipment cards */}
+      {!loading && unbatchedShipments.length > 0 && (filter === 'all' || filter === 'unbatched') && (
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#92400E', marginBottom: 8, letterSpacing: '0.05em' }}>
+            طرود غير مجمّعة ({unbatchedShipments.length})
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {unbatchedShipments.map(s => (
+              <div key={s.id}
+                style={{ background: '#fff', border: '1.5px solid #FDE68A', borderRadius: 10, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+
+                <span style={{
+                  background: s.status === 'delayed' ? '#FEF2F2' : '#FFFBEB',
+                  color: s.status === 'delayed' ? '#DC2626' : '#92400E',
+                  border: `1px solid ${s.status === 'delayed' ? '#FCA5A5' : '#FDE68A'}`,
+                  borderRadius: 6, padding: '2px 10px', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0,
+                }}>
+                  {SHIPMENT_STATUS_LABELS[s.status] ?? s.status}
+                </span>
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                    <span style={{ background: '#F1F5F9', color: '#0F2B4E', borderRadius: 5, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>{s.pickup_zone}</span>
+                    <span style={{ color: '#94A3B8', fontSize: 11 }}>←</span>
+                    <span style={{ background: '#F1F5F9', color: '#0F2B4E', borderRadius: 5, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>{s.dropoff_zone}</span>
+                  </div>
+                  <span style={{ fontSize: 10, color: '#94A3B8', fontFamily: 'monospace' }}>#{s.id.slice(0, 8).toUpperCase()}</span>
+                </div>
+
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
+                  <Chip icon="📦" label="طرد مفرد" />
+                  {s.delayed_reason && <Chip icon="⚠" label={s.delayed_reason} color="red" />}
+                  <span style={{ fontSize: 10, color: '#94A3B8' }}>{new Date(s.created_at).toLocaleString('ar-EG')}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!loading && visible.length === 0 && unbatchedShipments.length === 0 && (
         <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8', fontSize: 14 }}>لا توجد تجميعات</div>
       )}
 
-      {/* Batch cards */}
+      {/* Batch cards — hidden when unbatched filter is active */}
+      {filter !== 'unbatched' && (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {visible.map(batch => {
           const col = STATUS_STYLE[batch.status];
@@ -308,7 +507,6 @@ export default function BatchMonitorPage() {
                     <Detail label="الحجم الكلي" value={`${batch.total_volume} وحدة`} />
                     {batch.assigned_at && <Detail label="وقت التعيين" value={new Date(batch.assigned_at).toLocaleString('ar-EG')} />}
                     {batch.reserved_until && <Detail label="محجوز حتى" value={new Date(batch.reserved_until).toLocaleString('ar-EG')} />}
-                    {batch.courier_current_zone && <Detail label="منطقة السائق الحالية" value={batch.courier_current_zone} />}
                     {batch.estimated_minutes_to_next_zone != null && (
                       <Detail label="دقائق للمنطقة التالية" value={`${batch.estimated_minutes_to_next_zone} د`} />
                     )}
@@ -318,12 +516,123 @@ export default function BatchMonitorPage() {
                     shipments={shipmentDetails[batch.id] ?? []}
                     loading={loadingDetails.has(batch.id)}
                   />
+
+                  {batch.status === 'in_transit' && batch.route.length >= 2 && (
+                    <div style={{ marginTop: 16, padding: '14px 16px', background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 6 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: '#15803D' }}>
+                          إضافة شحنات من {batch.route[1]} للتجميعة
+                        </div>
+                        {batch.estimated_minutes_to_next_zone != null && (
+                          <span style={{ fontSize: 11, color: '#15803D', background: '#DCFCE7', border: '1px solid #86EFAC', borderRadius: 5, padding: '2px 8px' }}>
+                            ⏱ {batch.estimated_minutes_to_next_zone} د حتى الوصول
+                          </span>
+                        )}
+                      </div>
+
+                      {loadingCompatible.has(batch.id) && (
+                        <div style={{ color: '#94A3B8', fontSize: 12 }}>جاري البحث عن شحنات متوافقة...</div>
+                      )}
+
+                      {!loadingCompatible.has(batch.id) && (compatibleShipments[batch.id]?.length ?? 0) === 0 && (
+                        <div style={{ color: '#94A3B8', fontSize: 12 }}>لا توجد شحنات متاحة من {batch.route[1]}</div>
+                      )}
+
+                      {!loadingCompatible.has(batch.id) && (compatibleShipments[batch.id]?.length ?? 0) > 0 && (
+                        <>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 160, overflowY: 'auto', marginBottom: 10 }}>
+                            {compatibleShipments[batch.id].map(s => (
+                              <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: '#0F2B4E' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedShipments[batch.id]?.has(s.id) ?? false}
+                                  onChange={() => toggleShipmentSelection(batch.id, s.id)}
+                                  style={{ accentColor: '#15803D' }}
+                                />
+                                <span style={{ fontFamily: 'monospace', color: '#64748B' }}>#{s.id.slice(0, 8).toUpperCase()}</span>
+                                <span>{s.pickup_zone} ← {s.dropoff_zone}</span>
+                                <span style={{ fontSize: 10, color: s.status === 'delayed' ? '#C2410C' : '#15803D' }}>
+                                  {SHIPMENT_STATUS_LABELS[s.status] ?? s.status}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                            <button
+                              disabled={!(selectedShipments[batch.id]?.size) || addingShipments.has(batch.id)}
+                              onClick={() => addShipmentsToBatch(batch)}
+                              style={{
+                                padding: '7px 18px', borderRadius: 7, border: 'none',
+                                background: (selectedShipments[batch.id]?.size) ? '#15803D' : '#CBD5E1',
+                                color: '#fff',
+                                cursor: (selectedShipments[batch.id]?.size) ? 'pointer' : 'not-allowed',
+                                fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
+                                opacity: addingShipments.has(batch.id) ? 0.7 : 1,
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {addingShipments.has(batch.id)
+                                ? '⏳ جاري...'
+                                : `أضف للتجميعة${(selectedShipments[batch.id]?.size) ? ` (${selectedShipments[batch.id].size})` : ''}`}
+                            </button>
+                            {addShipmentMsg[batch.id] && (
+                              <span style={{ fontSize: 12, color: addShipmentMsg[batch.id].startsWith('✓') ? '#15803D' : '#DC2626', fontWeight: 600 }}>
+                                {addShipmentMsg[batch.id]}
+                              </span>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {batch.needs_dispatcher && (
+                    <div style={{ marginTop: 16, padding: '14px 16px', background: '#FFF7ED', border: '1.5px solid #FDBA74', borderRadius: 8 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#C2410C', marginBottom: 10 }}>
+                        تعيين سائق يدوياً
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <select
+                          value={selectedCourier[batch.id] ?? ''}
+                          onChange={e => setSelectedCourier(prev => ({ ...prev, [batch.id]: e.target.value }))}
+                          style={{ flex: 1, minWidth: 160, padding: '7px 10px', borderRadius: 7, border: '1.5px solid #FDBA74', background: '#fff', fontSize: 13, fontFamily: 'inherit', color: '#0F2B4E', direction: 'rtl' }}
+                        >
+                          <option value="">اختر سائقاً...</option>
+                          {couriers.map(c => (
+                            <option key={c.id} value={c.id}>
+                              {c.name} {c.status !== 'available' ? `(${c.status})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          disabled={!selectedCourier[batch.id] || assigning.has(batch.id)}
+                          onClick={() => manualAssign(batch.id)}
+                          style={{
+                            padding: '7px 18px', borderRadius: 7, border: 'none',
+                            background: selectedCourier[batch.id] ? '#EA580C' : '#CBD5E1',
+                            color: '#fff', cursor: selectedCourier[batch.id] ? 'pointer' : 'not-allowed',
+                            fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
+                            opacity: assigning.has(batch.id) ? 0.7 : 1,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {assigning.has(batch.id) ? '⏳ جاري...' : 'تعيين'}
+                        </button>
+                      </div>
+                      {assignMsg[batch.id] && (
+                        <div style={{ marginTop: 8, fontSize: 12, color: assignMsg[batch.id].startsWith('✓') ? '#15803D' : '#DC2626', fontWeight: 600 }}>
+                          {assignMsg[batch.id]}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           );
         })}
       </div>
+      )}
     </div>
   );
 }

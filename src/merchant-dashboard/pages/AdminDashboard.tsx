@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import LogisticsSettingsPage from '../../pages/admin/logistics/LogisticsSettingsPage';
 import BatchMonitorPage from '../../pages/admin/BatchMonitorPage';
+import CouriersPage from '../../pages/admin/CouriersPage';
+import ShopsPage from '../../pages/admin/ShopsPage';
+import AdminSentMessages from '../../pages/admin/AdminSentMessages';
 import emailjs from '@emailjs/browser';
 import supabase from '../../lib/supabase';
 import ChangePasswordModal from '../../components/ChangePasswordModal';
@@ -69,7 +72,7 @@ interface HubWorkerApp {
 }
 
 type FilterTab = 'pending' | 'approved' | 'rejected';
-type Section = 'merchant' | 'delivery' | 'hubworker' | 'batches' | 'logistics';
+type Section = 'merchant' | 'delivery' | 'hubworker' | 'batches' | 'logistics' | 'couriers' | 'shops' | 'messages';
 
 interface BatchConfigForm {
   max_driver_capacity: number;
@@ -873,6 +876,32 @@ export default function AdminDashboard() {
             <SidebarItem
               icon={
                 <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <rect x="1" y="3" width="15" height="13" rx="2" />
+                  <path d="M16 8l4 2v5h-4V8z" />
+                  <circle cx="5.5" cy="18.5" r="2.5" />
+                  <circle cx="18.5" cy="18.5" r="2.5" />
+                </svg>
+              }
+              label="المناديب"
+              active={activeSection === 'couriers'}
+              onClick={() => setActiveSection('couriers')}
+            />
+
+            <SidebarItem
+              icon={
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                  <polyline points="9 22 9 12 15 12 15 22" />
+                </svg>
+              }
+              label="المتاجر"
+              active={activeSection === 'shops'}
+              onClick={() => setActiveSection('shops')}
+            />
+
+            <SidebarItem
+              icon={
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                   <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
                   <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
                 </svg>
@@ -893,6 +922,17 @@ export default function AdminDashboard() {
               label="إعدادات التوزيع"
               active={activeSection === 'logistics'}
               onClick={() => setActiveSection('logistics')}
+            />
+
+            <SidebarItem
+              icon={
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+              }
+              label="الرسائل المرسلة"
+              active={activeSection === 'messages'}
+              onClick={() => setActiveSection('messages')}
             />
           </nav>
 
@@ -925,7 +965,7 @@ export default function AdminDashboard() {
           {loadError && <div className="ad-error">{loadError}</div>}
 
           {/* Filter tabs — only for application sections */}
-          {activeSection !== 'batches' && activeSection !== 'logistics' && (
+          {activeSection !== 'batches' && activeSection !== 'logistics' && activeSection !== 'couriers' && activeSection !== 'shops' && activeSection !== 'messages' && (
             <div className="ad-tabs">
               {(['pending', 'approved', 'rejected'] as FilterTab[]).map(tab => {
                 const count = allCurrentApps.filter(a => a.status === tab).length;
@@ -944,7 +984,7 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {activeSection !== 'batches' && activeSection !== 'logistics' && (loading ? (
+          {activeSection !== 'batches' && activeSection !== 'logistics' && activeSection !== 'couriers' && activeSection !== 'shops' && activeSection !== 'messages' && (loading ? (
             <div className="ad-loading">جاري تحميل الطلبات...</div>
           ) : currentApps.length === 0 ? (
             <div className="ad-empty">لا توجد طلبات في هذا القسم</div>
@@ -1143,9 +1183,24 @@ export default function AdminDashboard() {
         </div>
           ))}
 
+          {/* ── Couriers section ── */}
+          {activeSection === 'couriers' && (
+            <CouriersPage />
+          )}
+
+          {/* ── Shops section ── */}
+          {activeSection === 'shops' && (
+            <ShopsPage />
+          )}
+
           {/* ── Logistics settings section ── */}
           {activeSection === 'logistics' && (
             <LogisticsSettingsPage embedded />
+          )}
+
+          {/* ── Sent messages section ── */}
+          {activeSection === 'messages' && (
+            <AdminSentMessages />
           )}
 
           {/* ── Batches section ── */}

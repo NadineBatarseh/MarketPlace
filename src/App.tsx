@@ -7,6 +7,7 @@ import HubPage from './pages/delivery agent/HubPage';
 import DelivererPage from './pages/delivery agent/DelivererPage';
 import DriverDashboard from './pages/delivery agent/DriverDashboard';
 import DriverRouteMap from './pages/delivery agent/DriverRouteMap';
+import DriverInboxPage from './pages/delivery agent/DriverInboxPage';
 import RoleGuard from './components/RoleGuard';
 import OrderHistoryPage from './pages/orderHistory/OrderHistoryPage';
 import OrderTrackingPage from './pages/orderTrackingPage/OrderTrackingPage';
@@ -129,6 +130,7 @@ export default function App() {
               {/* Delivery only */}
               <Route path="/driver-dashboard" element={<RoleGuard allowedRoles={['delivery']}><DriverDashboard /></RoleGuard>} />
               <Route path="/driver-route" element={<RoleGuard allowedRoles={['delivery']}><DriverRouteMap /></RoleGuard>} />
+              <Route path="/driver-inbox" element={<RoleGuard allowedRoles={['delivery']}><DriverInboxPage /></RoleGuard>} />
               <Route path="/delivery" element={<RoleGuard allowedRoles={['delivery']}><DeliveryAgentPage /></RoleGuard>} />
               <Route path="/c" element={<RoleGuard allowedRoles={['delivery']}><DelivererPage /></RoleGuard>} />
 

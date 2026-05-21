@@ -24,8 +24,8 @@ export interface CategoryDef {
 }
 
 export const CATEGORIES: CategoryDef[] = [
-  { key: 'batch',   label: 'إعدادات الدفعة',  icon: '▦' },
-  { key: 'flow',    label: 'إعدادات التدفق',   icon: '⟲' },
+  { key: 'batch',      label: 'إعدادات الدفعة',   icon: '▦' },
+  { key: 'flow',       label: 'إعدادات التدفق',    icon: '⟲' },
   {
     key: 'scoring',
     label: 'أوزان التقييم',
@@ -33,7 +33,8 @@ export const CATEGORIES: CategoryDef[] = [
     formula: 'Score = W_n × N̂ + W_u × Û − W_d × D̂',
     formulaVars: 'N̂ = عدد الشحنات  ·  Û = الأولوية  ·  D̂ = مدة المسار',
   },
-  { key: 'route',   label: 'إعدادات المسار',   icon: '◎' },
+  { key: 'route',      label: 'إعدادات المسار',    icon: '◎' },
+  { key: 'assignment', label: 'تعيين السائق',       icon: '🚗' },
 ];
 
 export const WEIGHT_GROUPS: Record<string, { label: string; keys: string[] }> = {
@@ -209,6 +210,43 @@ export const SETTINGS_DEFINITIONS: SettingDef[] = [
     step: 5,
     explanation: 'أدنى وقت متبقٍ للوصول للمنطقة ب حتى يُسمح بإضافة شحنات جديدة أثناء الرحلة.',
     category: 'route',
+  },
+  // ── 5. تعيين السائق ───────────────────────────────────────────────────────
+  {
+    key: 'DRIVERS_PER_ROUND',
+    label: 'سائقون لكل جولة',
+    unit: 'سائق',
+    type: 'count',
+    defaultValue: 3,
+    min: 1,
+    max: 10,
+    step: 1,
+    explanation: 'عدد السائقين الذين يُرسَل إليهم إشعار الدفعة في كل جولة تعيين.',
+    category: 'assignment',
+  },
+  {
+    key: 'MAX_ASSIGNMENT_ROUNDS',
+    label: 'أقصى عدد جولات التعيين',
+    unit: 'جولة',
+    type: 'count',
+    defaultValue: 3,
+    min: 1,
+    max: 10,
+    step: 1,
+    explanation: 'إذا رفض جميع السائقين أو انتهت المهلة في كل الجولات، تُحال الدفعة للمشرف.',
+    category: 'assignment',
+  },
+  {
+    key: 'ASSIGNMENT_TIMEOUT_SECONDS',
+    label: 'مهلة انتظار قبول السائق',
+    unit: 'ثانية',
+    type: 'count',
+    defaultValue: 300,
+    min: 30,
+    max: 1800,
+    step: 30,
+    explanation: 'المدة الزمنية التي ينتظرها النظام لقبول السائق في كل جولة قبل الانتقال للجولة التالية.',
+    category: 'assignment',
   },
 ];
 

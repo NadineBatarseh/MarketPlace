@@ -56,6 +56,9 @@ const COL_OVERRIDE: Record<string, string> = {
   W_D:                                'weight_duration',
   BASE_PENALTY:                       'base_dead_end_penalty',
   INTRA_CITY_MIN_TIME_BUFFER_MINUTES: 'min_time_to_zone_b_for_addition',
+  ASSIGNMENT_TIMEOUT_SECONDS:         'assignment_timeout_seconds',
+  DRIVERS_PER_ROUND:                  'drivers_per_round',
+  MAX_ASSIGNMENT_ROUNDS:              'max_assignment_rounds',
 };
 
 function settingToDbCol(key: string): string {

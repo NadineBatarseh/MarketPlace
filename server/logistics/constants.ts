@@ -57,7 +57,8 @@ export async function loadConfigFromDB(): Promise<void> {
       flow_grouping_window_minutes, max_allowed_wait, max_distance_km,
       weight_shipment_count, weight_urgency, weight_duration,
       base_dead_end_penalty, cost_per_km, road_factor,
-      min_time_to_zone_b_for_addition
+      min_time_to_zone_b_for_addition,
+      drivers_per_round, max_assignment_rounds, assignment_timeout_seconds
     `)
     .eq('id', 1)
     .single();
@@ -77,7 +78,10 @@ export async function loadConfigFromDB(): Promise<void> {
   C.W_U                               = data.weight_urgency;
   C.W_D                               = data.weight_duration;
   C.BASE_PENALTY                      = data.base_dead_end_penalty;
-  C.COST_PER_KM                       = data.cost_per_km;
-  C.ROAD_FACTOR                       = data.road_factor;
+  C.COST_PER_KM                        = data.cost_per_km;
+  C.ROAD_FACTOR                        = data.road_factor;
   C.INTRA_CITY_MIN_TIME_BUFFER_MINUTES = data.min_time_to_zone_b_for_addition;
+  if (data.drivers_per_round)          C.DRIVERS_PER_ROUND          = data.drivers_per_round;
+  if (data.max_assignment_rounds)      C.MAX_ASSIGNMENT_ROUNDS      = data.max_assignment_rounds;
+  if (data.assignment_timeout_seconds) C.ASSIGNMENT_TIMEOUT_MS      = data.assignment_timeout_seconds * 1000;
 }

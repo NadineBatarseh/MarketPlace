@@ -3,18 +3,11 @@ import { Link, useNavigate } from 'react-router-dom';
 import supabase from '../../lib/supabase';
 import { useSharedAuth } from '../../context/AuthContext';
 import ChangePasswordModal from '../../components/ChangePasswordModal';
+import DriverNotificationBell from './DriverNotificationBell';
+import AdminMessagesInbox from '../../components/AdminMessagesInbox';
 import './DriverDashboard.css';
 
 // ── Types ──────────────────────────────────────────────────────────────────
-
-interface PendingBatchNotification {
-  notificationId: string;
-  batchId: string;
-  route: string[];
-  shipmentCount: number;
-  totalVolume: number;
-  isAccepted: boolean;
-}
 
 interface DriverInfo {
   id: string;
@@ -29,6 +22,22 @@ interface BatchRow {
   totalVolume: number;
   shipmentCount: number;
   assignedAt: string | null;
+}
+
+interface ShipmentProgress {
+  id: string;
+  status: string;
+  pickup_zone: string;
+  dropoff_zone: string;
+  picked_up_at: string | null;
+  delivered_at: string | null;
+}
+
+interface ActiveMission {
+  batchId: string;
+  batchStatus: string;
+  route: string[];
+  shipments: ShipmentProgress[];
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -76,17 +85,27 @@ function SidebarItem({
   icon,
   label,
   active,
+  badge,
   onClick,
 }: {
   icon: React.ReactNode;
   label: string;
   active: boolean;
+  badge?: number;
   onClick: () => void;
 }) {
   return (
     <div className={`dd-sidebar-item${active ? ' dd-active' : ''}`} onClick={onClick}>
       <span className="dd-sidebar-item-icon">{icon}</span>
       <span className="dd-sidebar-item-label">{label}</span>
+      {badge != null && badge > 0 && (
+        <span style={{
+          marginRight: 'auto', background: '#2563eb', color: '#fff',
+          borderRadius: 10, padding: '1px 7px', fontSize: 11, fontWeight: 800,
+        }}>
+          {badge}
+        </span>
+      )}
     </div>
   );
 }
@@ -98,6 +117,8 @@ export default function DriverDashboard() {
   const navigate = useNavigate();
   const avatarRef = useRef<HTMLDivElement>(null);
 
+  const [currentPage, setCurrentPage]           = useState<'home' | 'inbox'>('home');
+  const [unreadMsgCount, setUnreadMsgCount]     = useState(0);
   const [driverInfo, setDriverInfo]             = useState<DriverInfo | null>(null);
   const [batches, setBatches]                   = useState<BatchRow[]>([]);
 
@@ -105,9 +126,9 @@ export default function DriverDashboard() {
   const [statusFilter, setStatusFilter]         = useState('all');
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showAvatarMenu, setShowAvatarMenu]     = useState(false);
-  const [pendingNotifications, setPendingNotifications] = useState<PendingBatchNotification[]>([]);
-  const [showNotifPanel, setShowNotifPanel]     = useState(false);
-  const [unreadCount, setUnreadCount]           = useState(0);
+
+  const [activeMissions, setActiveMissions]     = useState<ActiveMission[]>([]);
+  const [actionLoading, setActionLoading]       = useState<string | null>(null);
 
   const initials       = getInitials(name ?? 'س');
   const displayInitial = initials.charAt(0);
@@ -126,130 +147,79 @@ export default function DriverDashboard() {
     return () => document.removeEventListener('mousedown', handler);
   }, [showAvatarMenu]);
 
+  // ── Unread message count for sidebar badge ───────────────────────────────
+  useEffect(() => {
+    if (!rawUser?.id) return;
+    supabase
+      .from('admin_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('recipient_id', rawUser.id)
+      .is('read_at', null)
+      .then(({ count }) => setUnreadMsgCount(count ?? 0));
+
+    const ch = supabase
+      .channel('dd-inbox-badge-' + rawUser.id)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'admin_messages',
+        filter: `recipient_id=eq.${rawUser.id}`,
+      }, () => setUnreadMsgCount(c => c + 1))
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [rawUser?.id]);
+
   // ── Fetch on mount ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!rawUser) return;
     fetchAll();
-    loadPendingNotifications();
   }, [rawUser?.id]);
 
-  // ── Realtime batch assignment notifications ──────────────────────────────
+  // ── Continuous real-time location tracking ────────────────────────────────
   useEffect(() => {
-    if (!rawUser?.id) return;
-    const channel = supabase
-      .channel('driver-batch-notifications')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'driver_notifications', filter: `courier_id=eq.${rawUser.id}` },
-        async (payload) => {
-          const batchId        = payload.new.batch_id as string;
-          const notificationId = payload.new.id as string;
-          const { data: batch } = await supabase
-            .from('batches').select('route, total_volume, ab_shipment_ids').eq('id', batchId).single();
-          if (!batch) return;
-          setPendingNotifications((prev) => {
-            if (prev.some((n) => n.notificationId === notificationId)) return prev;
-            setUnreadCount((c) => c + 1);
-            return [...prev, {
-              notificationId, batchId,
-              route:         (batch.route as string[]) ?? [],
-              shipmentCount: (batch.ab_shipment_ids as string[])?.length ?? 0,
-              totalVolume:   batch.total_volume ?? 0,
-              isAccepted:    false,
-            }];
-          });
-          setShowNotifPanel(true);
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'driver_notifications', filter: `courier_id=eq.${rawUser.id}` },
-        (payload) => {
-          const notificationId = payload.new.id as string;
-          const isAccepted     = payload.new.is_accepted as boolean;
-          setPendingNotifications((prev) =>
-            prev.map((n) => n.notificationId === notificationId ? { ...n, isAccepted } : n)
-          );
-        }
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    if (!rawUser?.id || !navigator.geolocation) return;
+    let lastSave = 0;
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const now = Date.now();
+        if (now - lastSave < 15_000) return;
+        lastSave = now;
+        supabase.from('couriers')
+          .update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } })
+          .eq('id', rawUser.id)
+          .then(() => {});
+      },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 10_000, timeout: 20_000 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
   }, [rawUser?.id]);
 
-  async function loadPendingNotifications() {
-    if (!rawUser?.id) return;
-    const { data: notifs } = await supabase
-      .from('driver_notifications').select('id, batch_id, is_accepted').eq('courier_id', rawUser.id);
-    if (!notifs?.length) return;
-    const enriched = await Promise.all(
-      notifs.map(async (n) => {
-        const { data: batch } = await supabase
-          .from('batches').select('route, total_volume, ab_shipment_ids').eq('id', n.batch_id).single();
+  async function loadAllActiveMissions(activeBatches: { id: string; status: string; route: string[] }[]) {
+    if (!activeBatches.length) { setActiveMissions([]); return; }
+    const results = await Promise.all(
+      activeBatches.map(async (b) => {
+        const { data } = await supabase
+          .from('shipments')
+          .select('id, status, pickup_zone, dropoff_zone, picked_up_at, delivered_at')
+          .eq('batch_id', b.id);
         return {
-          notificationId: n.id as string,
-          batchId:        n.batch_id as string,
-          route:          (batch?.route as string[]) ?? [],
-          shipmentCount:  (batch?.ab_shipment_ids as string[])?.length ?? 0,
-          totalVolume:    batch?.total_volume ?? 0,
-          isAccepted:     n.is_accepted as boolean,
+          batchId:     b.id,
+          batchStatus: b.status,
+          route:       b.route,
+          shipments:   (data ?? []) as ShipmentProgress[],
         };
       })
     );
-    setPendingNotifications(enriched);
-    const seenIds: string[] = JSON.parse(localStorage.getItem(`dd_seen_notifs_${rawUser.id}`) ?? '[]');
-    const seenSet = new Set(seenIds);
-    setUnreadCount(enriched.filter((n) => !seenSet.has(n.notificationId)).length);
+    // in_transit first, then assigned
+    results.sort((a, b) => (a.batchStatus === 'in_transit' ? -1 : 1) - (b.batchStatus === 'in_transit' ? -1 : 1));
+    setActiveMissions(results);
   }
 
-  async function handleAcceptBatch(notif: PendingBatchNotification) {
-    if (!rawUser?.id) return;
-
-    // Atomic assignment — same guard the backend uses: only succeeds if batch is still pending_assignment
-    const { data } = await supabase
-      .from('batches')
-      .update({ status: 'assigned', assigned_to: rawUser.id, assigned_at: new Date().toISOString() })
-      .eq('id', notif.batchId)
-      .eq('status', 'pending_assignment')
-      .select('id');
-
-    const won = Array.isArray(data) && data.length > 0;
-
-    if (won) {
-      // Flip ALL notifications for this batch so every other notified driver sees "taken"
-      await supabase
-        .from('driver_notifications')
-        .update({ is_accepted: true })
-        .eq('batch_id', notif.batchId);
-    } else {
-      // Someone else already took it — disable just this driver's button
-      await supabase
-        .from('driver_notifications')
-        .update({ is_accepted: true })
-        .eq('id', notif.notificationId);
-    }
-
-    setPendingNotifications((prev) => prev.filter((n) => n.notificationId !== notif.notificationId));
-  }
-
-  async function handleDeclineBatch(notifId: string) {
-    await supabase.from('driver_notifications').delete().eq('id', notifId);
-    setPendingNotifications((prev) => prev.filter((n) => n.notificationId !== notifId));
-  }
-
-  async function fetchAll() {
-    setLoading(true);
+  async function fetchAll(silent = false) {
+    if (!silent) setLoading(true);
     const { data: driverRow } = await supabase
       .from('couriers').select('id, home_base_zone, status')
       .eq('id', rawUser!.id).maybeSingle();
     if (driverRow) setDriverInfo(driverRow as DriverInfo);
-
-    if (rawUser?.id && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition((pos) => {
-        supabase.from('couriers')
-          .update({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } })
-          .eq('id', rawUser.id).then(() => {});
-      });
-    }
 
     if (rawUser?.id) {
       const { data: batchRows } = await supabase
@@ -258,7 +228,7 @@ export default function DriverDashboard() {
         .eq('assigned_to', rawUser.id)
         .order('assigned_at', { ascending: false });
 
-      setBatches((batchRows ?? []).map((b) => ({
+      const mapped: BatchRow[] = (batchRows ?? []).map((b) => ({
         id:           b.id as string,
         route:        (b.route as string[]) ?? [],
         status:       b.status as string,
@@ -267,10 +237,56 @@ export default function DriverDashboard() {
           ((b.ab_shipment_ids as string[])?.length ?? 0) +
           ((b.bc_shipment_ids as string[])?.length ?? 0),
         assignedAt:   b.assigned_at ?? null,
-      })));
+      }));
+      setBatches(mapped);
+
+      const activeBatches = mapped.filter((b) => b.status === 'in_transit' || b.status === 'assigned');
+      await loadAllActiveMissions(activeBatches);
     }
 
-    setLoading(false);
+    if (!silent) setLoading(false);
+  }
+
+  async function handleStartBatch(batchId: string) {
+    setActionLoading('start-' + batchId);
+    try {
+      const res = await fetch('/api/logistics/start-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batch_id: batchId, courier_id: rawUser!.id }),
+      });
+      if (res.ok) await fetchAll(true);
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handlePickup(shipmentId: string) {
+    setActionLoading('pickup-' + shipmentId);
+    try {
+      const res = await fetch('/api/logistics/pickup-shipment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shipment_id: shipmentId, courier_id: rawUser!.id }),
+      });
+      if (res.ok) await fetchAll(true);
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleDeliver(shipmentId: string) {
+    setActionLoading('deliver-' + shipmentId);
+    try {
+      const res = await fetch('/api/logistics/deliver-shipment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shipment_id: shipmentId, courier_id: rawUser!.id }),
+      });
+      if (res.ok) await fetchAll(true);
+    } finally {
+      setActionLoading(null);
+    }
   }
 
   async function handleLogout() {
@@ -304,63 +320,7 @@ export default function DriverDashboard() {
 
         <div className="dd-topbar-actions">
           {/* Notification bell */}
-          <div className="dd-notif-bell-wrap">
-            <button
-              type="button"
-              className="dd-topbar-bell"
-              aria-label="الإشعارات"
-              onClick={() => {
-                setShowNotifPanel((v) => !v);
-                setUnreadCount(0);
-                if (rawUser?.id) {
-                  const ids = pendingNotifications.map((n) => n.notificationId);
-                  localStorage.setItem(`dd_seen_notifs_${rawUser.id}`, JSON.stringify(ids));
-                }
-              }}
-            >
-              <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              </svg>
-              {unreadCount > 0 && (
-                <span className="dd-notif-dot">{unreadCount}</span>
-              )}
-            </button>
-
-            {showNotifPanel && (
-              <div className="dd-notif-panel">
-                <div className="dd-notif-panel-header">الإشعارات</div>
-                {pendingNotifications.length > 0 ? (
-                  pendingNotifications.map((notif) => (
-                    <div key={notif.notificationId} className="dd-notif-panel-item">
-                      <div className="dd-notif-panel-icon">
-                        <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                          <rect x="1" y="3" width="15" height="13" rx="2" /><path d="M16 8l4 2v5h-4V8z" /><circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" />
-                        </svg>
-                      </div>
-                      <div className="dd-notif-panel-body">
-                        <p className="dd-notif-panel-title">طلب توصيل جديد</p>
-                        <p className="dd-notif-panel-route">{notif.route.join(' ← ')}</p>
-                        <p className="dd-notif-panel-meta">{notif.shipmentCount} شحنة · {notif.totalVolume.toFixed(0)} وحدة</p>
-                        <div className="dd-notif-panel-actions">
-                          {notif.isAccepted ? (
-                            <span className="dd-notif-taken">تم القبول من سائق آخر</span>
-                          ) : (
-                            <>
-                              <button className="dd-notif-btn accept" onClick={() => handleAcceptBatch(notif)}>قبول</button>
-                              <button className="dd-notif-btn decline" onClick={() => handleDeclineBatch(notif.notificationId)}>رفض</button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="dd-notif-panel-empty">لا توجد إشعارات</p>
-                )}
-              </div>
-            )}
-          </div>
+          <DriverNotificationBell />
 
           {/* Avatar dropdown */}
           <div className="dd-avatar-wrapper" ref={avatarRef}>
@@ -425,8 +385,8 @@ export default function DriverDashboard() {
                 </svg>
               }
               label="الرئيسية"
-              active={true}
-              onClick={() => navigate('/driver-dashboard')}
+              active={currentPage === 'home'}
+              onClick={() => setCurrentPage('home')}
             />
 
             <SidebarItem
@@ -466,6 +426,18 @@ export default function DriverDashboard() {
               label="الأرباح"
               active={false}
               onClick={() => {}}
+            />
+
+            <SidebarItem
+              icon={
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+              }
+              label="صندوق الرسائل"
+              active={currentPage === 'inbox'}
+              badge={unreadMsgCount}
+              onClick={() => { setCurrentPage('inbox'); setUnreadMsgCount(0); }}
             />
 
             <div className="dd-sidebar-divider" />
@@ -518,6 +490,13 @@ export default function DriverDashboard() {
 
         {/* ── Main Content ── */}
         <main className="dd-content">
+
+          {/* ── Inbox page ── */}
+          {currentPage === 'inbox' && rawUser && (
+            <AdminMessagesInbox userId={rawUser.id} />
+          )}
+
+          {currentPage === 'home' && <>
 
           {/* ── Shift info banner ── */}
           <div className="dd-shift-banner">
@@ -596,6 +575,121 @@ export default function DriverDashboard() {
 
           </div>
 
+          {/* ── Active Mission Cards (one per assigned / in_transit batch) ── */}
+          {activeMissions.map((mission) => (
+            <div
+              key={mission.batchId}
+              className={`dd-mission-card${mission.batchStatus === 'in_transit' ? ' dd-mission-active' : ' dd-mission-assigned'}`}
+            >
+              {/* Header */}
+              <div className="dd-mission-header">
+                <div className="dd-mission-header-info">
+                  <div className="dd-mission-label">
+                    {mission.batchStatus === 'in_transit' ? (
+                      <>
+                        <span className="dd-mission-pulse" />
+                        المهمة الجارية
+                      </>
+                    ) : (
+                      <>
+                        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <rect x="1" y="3" width="15" height="13" rx="2" /><path d="M16 8l4 2v5h-4V8z" /><circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" />
+                        </svg>
+                        مهمة مخصصة
+                      </>
+                    )}
+                  </div>
+                  <div className="dd-mission-route">{mission.route.join(' ← ')}</div>
+                  <div className="dd-mission-meta">
+                    {mission.shipments.length} شحنة
+                    {mission.batchStatus === 'in_transit' && (
+                      <> · {mission.shipments.filter((s) => s.status === 'delivered').length} تم تسليمها</>
+                    )}
+                  </div>
+                </div>
+
+                {/* Start button — every assigned batch gets its own */}
+                {mission.batchStatus === 'assigned' && (
+                  <button
+                    className="dd-mission-start-btn"
+                    disabled={actionLoading === 'start-' + mission.batchId}
+                    onClick={() => handleStartBatch(mission.batchId)}
+                  >
+                    {actionLoading === 'start-' + mission.batchId ? (
+                      <span className="dd-mission-spinner" />
+                    ) : (
+                      <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <polygon points="5 3 19 12 5 21 5 3" />
+                      </svg>
+                    )}
+                    بدء المهمة
+                  </button>
+                )}
+              </div>
+
+              {/* Shipment list */}
+              {mission.shipments.length === 0 ? (
+                <div className="dd-mission-loading">لا توجد شحنات في هذه الدفعة</div>
+              ) : (
+                <div className="dd-mission-table-wrap">
+                  <table className="dd-mission-table">
+                    <thead>
+                      <tr>
+                        <th>رقم الشحنة</th>
+                        <th>من</th>
+                        <th>إلى</th>
+                        <th>الحالة / الإجراء</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mission.shipments.map((s) => {
+                        const isPickupLoading  = actionLoading === 'pickup-' + s.id;
+                        const isDeliverLoading = actionLoading === 'deliver-' + s.id;
+                        const anyLoading       = actionLoading !== null;
+
+                        return (
+                          <tr key={s.id}>
+                            <td className="dd-td-id">#{s.id.slice(-8).toUpperCase()}</td>
+                            <td className="dd-td-address">{s.pickup_zone}</td>
+                            <td className="dd-td-address">{s.dropoff_zone}</td>
+                            <td>
+                              {s.status === 'delivered' ? (
+                                <span className="dd-mission-done">
+                                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                                    <polyline points="20 6 9 17 4 12" />
+                                  </svg>
+                                  تم التسليم
+                                </span>
+                              ) : s.status === 'picked_up' ? (
+                                <button
+                                  className="dd-mission-action-btn dd-mission-deliver-btn"
+                                  disabled={anyLoading}
+                                  onClick={() => handleDeliver(s.id)}
+                                >
+                                  {isDeliverLoading ? <span className="dd-mission-spinner dd-mission-spinner-sm" /> : null}
+                                  تم التسليم للعميل
+                                </button>
+                              ) : (
+                                <button
+                                  className="dd-mission-action-btn dd-mission-pickup-btn"
+                                  disabled={anyLoading || mission.batchStatus !== 'in_transit'}
+                                  onClick={() => handlePickup(s.id)}
+                                >
+                                  {isPickupLoading ? <span className="dd-mission-spinner dd-mission-spinner-sm" /> : null}
+                                  تم الاستلام من المتجر
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ))}
+
           {/* ── Assigned Batches ── */}
           <div className="dd-orders-section">
             <div className="dd-orders-header">
@@ -660,6 +754,8 @@ export default function DriverDashboard() {
               </div>
             )}
           </div>
+
+          </>}
 
         </main>
       </div>

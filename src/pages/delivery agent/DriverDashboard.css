@@ -571,23 +571,27 @@
   top: calc(100% + 10px);
   left: 0;
   width: 300px;
+  max-height: 420px;
   background: #fff;
   border-radius: 14px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.18);
   border: 1px solid #e5e7eb;
   z-index: 200;
-  overflow: hidden;
+  overflow-y: auto;
   animation: dd-menu-in 0.15s ease;
   direction: rtl;
 }
 
 .dd-notif-panel-header {
+  position: sticky;
+  top: 0;
   padding: 0.9rem 1rem 0.75rem;
   font-weight: 700;
   font-size: 0.92rem;
   color: #1a1a2e;
   border-bottom: 1px solid #f1f5f9;
   background: #f8fafc;
+  z-index: 1;
 }
 
 .dd-notif-panel-item {
@@ -660,6 +664,192 @@
 @keyframes dd-pulse {
   0%, 100% { transform: scale(1); opacity: 1; }
   50%       { transform: scale(1.2); opacity: 0.8; }
+}
+
+/* ══════════════════════════════════════════════════════
+   ACTIVE MISSION PANEL
+   ══════════════════════════════════════════════════════ */
+
+.dd-mission-card {
+  border-radius: 18px;
+  padding: 1.5rem;
+  border: 1.5px solid;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  animation: dd-menu-in 0.2s ease;
+}
+
+.dd-mission-assigned {
+  background: #fff;
+  border-color: #2563eb30;
+  box-shadow: 0 2px 12px rgba(37,99,235,0.08);
+}
+
+.dd-mission-active {
+  background: #fff;
+  border-color: #7c3aed30;
+  box-shadow: 0 2px 12px rgba(124,58,237,0.08);
+}
+
+/* Header row */
+.dd-mission-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.dd-mission-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.dd-mission-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.dd-mission-assigned .dd-mission-label { color: #2563eb; }
+.dd-mission-active   .dd-mission-label { color: #7c3aed; }
+
+.dd-mission-route {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #1a1a2e;
+}
+
+.dd-mission-meta {
+  font-size: 0.82rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* Pulsing dot for in_transit */
+.dd-mission-pulse {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #7c3aed;
+  flex-shrink: 0;
+  animation: dd-pulse 1.5s ease-in-out infinite;
+}
+
+/* Start button */
+.dd-mission-start-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.25rem;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-family: var(--font-main);
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s, transform 0.1s;
+}
+.dd-mission-start-btn:hover:not(:disabled) { background: #1d4ed8; transform: translateY(-1px); }
+.dd-mission-start-btn:disabled { opacity: 0.65; cursor: not-allowed; }
+
+/* Loading placeholder */
+.dd-mission-loading {
+  text-align: center;
+  color: #94a3b8;
+  font-size: 0.88rem;
+  padding: 0.75rem 0;
+}
+
+/* Shipments table */
+.dd-mission-table-wrap { overflow-x: auto; }
+
+.dd-mission-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.dd-mission-table th {
+  text-align: right;
+  padding: 0.55rem 0.85rem;
+  color: #6b7280;
+  font-weight: 700;
+  font-size: 0.78rem;
+  border-bottom: 1px solid #f0ede8;
+  white-space: nowrap;
+}
+
+.dd-mission-table td {
+  padding: 0.7rem 0.85rem;
+  border-bottom: 1px solid #f8f7f5;
+  color: #374151;
+  vertical-align: middle;
+}
+.dd-mission-table tr:last-child td { border-bottom: none; }
+.dd-mission-table tr:hover td { background: #fafafa; }
+
+/* Shipment action buttons */
+.dd-mission-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.38rem 0.85rem;
+  border: none;
+  border-radius: 9px;
+  font-family: var(--font-main);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+  white-space: nowrap;
+}
+.dd-mission-action-btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
+.dd-mission-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.dd-mission-pickup-btn  { background: #dbeafe; color: #1d4ed8; }
+.dd-mission-deliver-btn { background: #dcfce7; color: #15803d; }
+
+/* Done state */
+.dd-mission-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #16a34a;
+}
+
+/* Spinner */
+.dd-mission-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: dd-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+.dd-mission-spinner-sm {
+  width: 12px;
+  height: 12px;
+  border-color: rgba(0,0,0,0.2);
+  border-top-color: currentColor;
+}
+
+@keyframes dd-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* ── Responsive sidebar ── */

@@ -44,6 +44,8 @@ export interface Shipment {
   pickup_lng: number;
   dropoff_lat: number;
   dropoff_lng: number;
+  picked_up_at: string | null;
+  delivered_at: string | null;
 }
 
 export interface DemandFlow {
@@ -88,6 +90,7 @@ export interface Batch {
   total_volume: number;
   reserved_until: string | null;
   created_at: string;
+  started_at: string | null;
 }
 
 export interface IntraCityTask {

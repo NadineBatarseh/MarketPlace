@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import supabase from '../../lib/supabase';
 import { useSharedAuth } from '../../context/AuthContext';
 import ChangePasswordModal from '../../components/ChangePasswordModal';
+import DriverNotificationBell from './DriverNotificationBell';
 import './DriverDashboard.css';
 
 interface DeliveryStop {
@@ -51,6 +52,7 @@ export default function DriverRouteMap() {
   const { name, rawUser } = useSharedAuth();
   const navigate          = useNavigate();
   const mapRef            = useRef<HTMLDivElement>(null);
+  const watchRef          = useRef<number | null>(null);
 
   const [stops, setStops]                   = useState<DeliveryStop[]>([]);
   const [orderedStops, setOrderedStops]     = useState<DeliveryStop[]>([]);
@@ -85,6 +87,24 @@ export default function DriverRouteMap() {
     locateDriver();
   }, [rawUser?.id]);
 
+  // ── Re-fetch stops when admin adds shipments to this batch (Phase 8) ─────────
+  useEffect(() => {
+    if (!rawUser?.id) return;
+    const channel = supabase
+      .channel('route-map-batch-updates')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'batches', filter: `assigned_to=eq.${rawUser.id}` },
+        () => {
+          setStops([]);
+          setOrderedStops([]);
+          fetchStops();
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [rawUser?.id]);
+
   // ── Build route once stops + location are both ready ─────────────────────────
   useEffect(() => {
     if (!stops.length || !driverLoc || !apiKey) return;
@@ -106,7 +126,7 @@ export default function DriverRouteMap() {
       .from('batches')
       .select('ab_shipment_ids, bc_shipment_ids')
       .eq('assigned_to', rawUser!.id)
-      .in('status', ['assigned', 'in_transit']);
+      .eq('status', 'in_transit');
 
     if (batchErr) { setError('خطأ في تحميل الدفعات'); setLoading(false); return; }
     if (!batchRows?.length) { setLoading(false); return; }
@@ -143,11 +163,19 @@ export default function DriverRouteMap() {
   }
 
   function locateDriver() {
-    navigator.geolocation.getCurrentPosition(
+    if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current);
+    watchRef.current = navigator.geolocation.watchPosition(
       (pos) => setDriverLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      ()    => setError('تعذّر تحديد موقعك — يرجى السماح بالوصول إلى الموقع الجغرافي')
+      ()    => setError('تعذّر تحديد موقعك — يرجى السماح بالوصول إلى الموقع الجغرافي'),
+      { enableHighAccuracy: true, maximumAge: 5_000, timeout: 20_000 }
     );
   }
+
+  useEffect(() => {
+    return () => {
+      if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current);
+    };
+  }, []);
 
   // ── Google Maps: optimized route ──────────────────────────────────────────────
 
@@ -238,6 +266,9 @@ export default function DriverRouteMap() {
         </div>
 
         <div className="dd-topbar-actions">
+          {/* Notification bell */}
+          <DriverNotificationBell />
+
           <div className="dd-avatar-wrapper">
             <div
               className={`dd-topbar-avatar${showAvatarMenu ? ' dd-avatar-active' : ''}`}
@@ -439,7 +470,7 @@ export default function DriverRouteMap() {
 
           {/* Empty state */}
           {!loading && stops.length === 0 && !error && (
-            <div className="dd-orders-empty">لا توجد شحنات نشطة لعرضها على الخريطة</div>
+            <div className="dd-orders-empty">لا توجد مهام جارية — ابدأ دفعة أولاً من لوحة التحكم</div>
           )}
 
           {/* Optimized stop list */}
