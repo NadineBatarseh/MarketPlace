@@ -207,6 +207,42 @@
   transform: translateY(-1px);
 }
 
+/* ── DELETED PRODUCT ROW ── */
+.pt-row--deleted {
+  opacity: 0.6;
+  background: #f8f8f8;
+}
+.pt-row--deleted:hover {
+  box-shadow: none;
+  transform: none;
+}
+.pt-row--deleted .pt-product-img {
+  filter: grayscale(100%);
+}
+.pt-row--deleted:hover .pt-product-img {
+  transform: none;
+}
+.pt-row--deleted .pt-product-name {
+  text-decoration: line-through;
+  color: #9ca3af;
+}
+.pt-cell-deleted-msg {
+  padding: 16px;
+  vertical-align: middle;
+}
+.pt-deleted-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #dc2626;
+  font-size: 0.82rem;
+  font-weight: 600;
+  background: #fff1f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  padding: 6px 12px;
+}
+
 /* First and last cells get rounded corners */
 .pt-row td:first-child {
   border-radius: 0 var(--pt-radius-sm) var(--pt-radius-sm) 0;

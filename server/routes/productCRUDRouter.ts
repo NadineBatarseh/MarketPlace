@@ -201,13 +201,9 @@ router.delete('/:id', async (req: Request, res: Response) => {
     return res.status(404).json({ ok: false, error: 'Product not found or does not belong to this shop.' });
   }
 
-  // Remove product from carts and favorites before deleting (FK constraints)
-  await supabase.from('cart_items').delete().eq('product_id', productId);
-  await supabase.from('favorite_items').delete().eq('product_id', productId);
-
   const { error: deleteErr } = await supabase
     .from('products')
-    .delete()
+    .update({ is_deleted: true })
     .eq('id', productId)
     .eq('shop_id', shop_id);
 

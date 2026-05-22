@@ -237,6 +237,40 @@
   object-fit: cover;
 }
 
+/* ── Deleted item state ── */
+.co-item--deleted {
+  opacity: 0.6;
+  background: #f8f8f8;
+  border-radius: 8px;
+}
+.co-item--deleted .co-item-name {
+  text-decoration: line-through;
+  color: #9ca3af;
+}
+.co-item--deleted .co-item-img img {
+  filter: grayscale(100%);
+  opacity: 0.5;
+}
+.co-item-deleted-msg {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #dc2626;
+  background: #fff1f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  padding: 4px 10px;
+}
+.co-deleted-warning {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+}
+
 /* ── Quantity ── */
 .co-qty {
   display: flex;

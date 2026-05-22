@@ -28,11 +28,14 @@ export default function Cart() {
   const [pendingRemove, setPendingRemove] = useState<CartItem | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
+  const activeItems = cartItems.filter((item) => !item.isDeleted);
+  const deletedItems = cartItems.filter((item) => item.isDeleted);
+
   const couponDiscount = appliedCoupon ? VALID_COUPONS[appliedCoupon] ?? 0 : 0;
-  const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotal = activeItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const tax = subtotal * TAX_RATE;
   const total = subtotal + SHIPPING_COST + tax - couponDiscount;
-  const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+  const totalItems = activeItems.reduce((sum, item) => sum + item.quantity, 0);
 
   const applyCoupon = () => {
     const code = couponCode.trim().toUpperCase();
@@ -84,7 +87,12 @@ export default function Cart() {
         <span>{total.toFixed(2)} ₪</span>
       </div>
 
-      <button type="button" className="pt-btn-checkout" onClick={() => navigate('/checkout')}>
+      <button
+        type="button"
+        className="pt-btn-checkout"
+        onClick={() => navigate('/checkout')}
+        disabled={activeItems.length === 0}
+      >
         المتابعة للدفع &larr;
       </button>
     </div>
@@ -120,7 +128,7 @@ export default function Cart() {
   );
 
   /* ── Empty State ── */
-  if (cartItems.length === 0) {
+  if (cartItems.length === 0 || (activeItems.length === 0 && deletedItems.length === 0)) {
     return (
       <>
         <Topbar />
@@ -152,22 +160,31 @@ export default function Cart() {
             name={item.name}
             color={item.color}
             size={item.size}
+            isDeleted={item.isDeleted}
             onRemove={() => setPendingRemove(item)}
           >
-            <td className="pt-cell pt-cell-price">
-              {item.price.toFixed(2)} ₪
-            </td>
+            {item.isDeleted ? (
+              <td className="pt-cell pt-cell-deleted-msg" colSpan={3}>
+                <span className="pt-deleted-badge">⚠️ تم حذف هذا المنتج من قبل التاجر — لا يمكن شراؤه</span>
+              </td>
+            ) : (
+              <>
+                <td className="pt-cell pt-cell-price">
+                  {item.price.toFixed(2)} ₪
+                </td>
 
-            <td className="pt-cell pt-cell-qty">
-              <QuantitySelector
-                value={item.quantity}
-                onChange={(qty) => updateCartQty(item.id, qty)}
-              />
-            </td>
+                <td className="pt-cell pt-cell-qty">
+                  <QuantitySelector
+                    value={item.quantity}
+                    onChange={(qty) => updateCartQty(item.id, qty)}
+                  />
+                </td>
 
-            <td className="pt-cell pt-cell-subtotal">
-              <strong>{(item.price * item.quantity).toFixed(2)} ₪</strong>
-            </td>
+                <td className="pt-cell pt-cell-subtotal">
+                  <strong>{(item.price * item.quantity).toFixed(2)} ₪</strong>
+                </td>
+              </>
+            )}
           </ProductRow>
         ))}
       </ProductListTemplate>

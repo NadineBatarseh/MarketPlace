@@ -86,6 +86,11 @@ router.post('/', async (req: Request, res: Response) => {
   const row = record;
   if (!row?.id) return;
 
+  // Skip sync entirely for soft-deleted products.
+  // Meta removal is handled explicitly by DELETE /api/catalog/product/:id
+  // when the merchant chooses "delete from website and Meta".
+  if (row.is_deleted === true) return;
+
   const syncInput: ProductSyncInput = {
     id: row.id,
     meta_product_id: row.meta_product_id ?? null,
