@@ -17,15 +17,26 @@ export default function InstagramConnectPage() {
     setStatus('loading');
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { setStatus('error'); return; }
+      if (!session) {
+        console.error('[Instagram] No session found — user not logged in');
+        setStatus('error');
+        return;
+      }
 
       const res = await fetch('/api/instagram/status', {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
+      if (!res.ok) {
+        const text = await res.text();
+        console.error(`[Instagram] /api/instagram/status returned ${res.status}:`, text);
+        setStatus('error');
+        return;
+      }
       const data = await res.json();
       setInfo(data);
       setStatus(data.connected ? 'connected' : 'disconnected');
-    } catch {
+    } catch (err) {
+      console.error('[Instagram] fetchStatus error:', err);
       setStatus('error');
     }
   }
@@ -54,10 +65,15 @@ export default function InstagramConnectPage() {
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
       const data = await res.json();
-      if (!data.ok || !data.auth_url) { setStatus('error'); return; }
+      if (!data.ok || !data.auth_url) {
+        console.error('[Instagram] /api/instagram/init failed:', data);
+        setStatus('error');
+        return;
+      }
 
       window.location.href = data.auth_url;
-    } catch {
+    } catch (err) {
+      console.error('[Instagram] startOAuth error:', err);
       setActionLoading(false);
       setStatus('error');
     }

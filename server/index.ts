@@ -23,7 +23,14 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-app.use(cors({ origin: ["http://localhost:5173", "http://localhost:4000"] }));
+app.use(cors({
+  origin: [
+    "http://localhost:5173",
+    "http://localhost:4000",
+    "https://souq-link.com",
+    "https://www.souq-link.com",
+  ],
+}));
 
 // Webhook must be mounted with raw body BEFORE express.json(),
 // because signature verification needs the unparsed buffer.
