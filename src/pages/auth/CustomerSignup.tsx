@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import zxcvbn from 'zxcvbn';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
@@ -17,6 +17,8 @@ export default function CustomerSignup() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [nameHint, setNameHint] = useState('');
+  const nameHintTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,17 +76,26 @@ export default function CustomerSignup() {
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="auth-field">
-            <label>الاسم الكامل</label>
+            <label>الاسم الكامل <span className="auth-required-star">*</span></label>
             <input
               type="text"
               placeholder="أدخل اسمك الكامل"
               value={name}
-              onChange={e => setName(e.target.value)}
+              onChange={e => {
+                const raw = e.target.value;
+                if (/[0-9]/.test(raw)) {
+                  setNameHint('لا يُسمح بالأرقام في هذا الحقل');
+                  if (nameHintTimer.current) clearTimeout(nameHintTimer.current);
+                  nameHintTimer.current = setTimeout(() => setNameHint(''), 2000);
+                }
+                setName(raw.replace(/[0-9]/g, ''));
+              }}
               required
             />
+            {nameHint && <p className="auth-phone-hint">{nameHint}</p>}
           </div>
           <div className="auth-field">
-            <label>البريد الإلكتروني</label>
+            <label>البريد الإلكتروني <span className="auth-required-star">*</span></label>
             <input
               type="email"
               placeholder="example@email.com"
@@ -95,7 +106,7 @@ export default function CustomerSignup() {
             />
           </div>
           <div className="auth-field">
-            <label>كلمة المرور</label>
+            <label>كلمة المرور <span className="auth-required-star">*</span></label>
             <div className="auth-input-wrap">
               <input
                 type={showPassword ? 'text' : 'password'}
@@ -122,7 +133,7 @@ export default function CustomerSignup() {
             <PasswordStrengthBar password={password} />
           </div>
           <div className="auth-field">
-            <label>تأكيد كلمة المرور</label>
+            <label>تأكيد كلمة المرور <span className="auth-required-star">*</span></label>
             <div className="auth-input-wrap">
               <input
                 type={showConfirm ? 'text' : 'password'}

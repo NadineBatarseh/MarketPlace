@@ -524,6 +524,34 @@
   margin-top: 0.2rem;
 }
 
+/* Document links */
+.ad-doc-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ad-doc-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #f0faf4;
+  border: 1px solid #c3e6d0;
+  color: #1a5c38;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.ad-doc-link:hover {
+  background: #d8f3e6;
+}
+
 /* Actions */
 .ad-card-actions {
   display: flex;

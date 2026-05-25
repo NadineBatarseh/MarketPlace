@@ -21,6 +21,9 @@
   justify-content: center;
   padding: 32px 16px;
   font-family: 'Segoe UI', 'Arial', sans-serif;
+  /* body has a global padding-top:68px for the Topbar; auth pages have no Topbar */
+  margin-top: -68px;
+  padding-top: 100px;
 }
 
 /* ── Card ── */
@@ -129,6 +132,13 @@
   font-size: 0.84rem;
   font-weight: 600;
   color: var(--auth-text);
+}
+
+.auth-required-star {
+  color: #dc2626;
+  margin-right: 3px;
+  font-size: 0.9rem;
+  line-height: 1;
 }
 
 .auth-field input,
@@ -440,6 +450,194 @@
 .auth-google-btn:hover {
   background: #f5f5f5;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* ── Phone split field ── */
+.auth-phone-split {
+  display: flex;
+  align-items: stretch;
+  border: 1.5px solid var(--auth-border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fafaf9;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.auth-phone-split:focus-within {
+  border-color: var(--auth-green);
+  box-shadow: 0 0 0 3px rgba(45, 106, 79, 0.1);
+  background: var(--auth-white);
+}
+.auth-phone-code {
+  padding: 11px 10px;
+  border: none;
+  border-right: 1.5px solid var(--auth-border);
+  border-radius: 0;
+  background: #f0f0ee;
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--auth-text);
+  outline: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  direction: ltr;
+}
+.auth-phone-prefix {
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--auth-muted);
+  background: #f5f5f3;
+  border-right: 1.5px solid var(--auth-border);
+  flex-shrink: 0;
+  user-select: none;
+}
+.auth-phone-local {
+  flex: 1;
+  padding: 11px 12px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.9rem;
+  outline: none;
+  direction: ltr;
+  text-align: left;
+  color: var(--auth-text);
+  min-width: 0;
+}
+.auth-phone-local::placeholder {
+  color: #c0bdb8;
+  letter-spacing: 0.05em;
+}
+.auth-phone-hint {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+/* ── Document section ── */
+.auth-doc-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid #e8e5e0;
+  border-radius: 12px;
+  background: #fdfcfb;
+}
+
+.auth-doc-section-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #1a3a2a;
+  margin-bottom: 2px;
+}
+
+/* ── Document upload ── */
+.auth-doc-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 120px;
+  border: 2px dashed #d1cfc9;
+  border-radius: 10px;
+  background: #fafaf8;
+  cursor: pointer;
+  padding: 16px 12px;
+  transition: border-color 0.18s, background 0.18s;
+  text-align: center;
+}
+
+.auth-doc-upload:hover {
+  border-color: #2d6a4f;
+  background: #f0faf4;
+}
+
+.auth-doc-upload--filled {
+  border-color: #2d6a4f;
+  border-style: solid;
+  background: #f0faf4;
+}
+
+.auth-doc-icon {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.auth-doc-hint {
+  font-size: 0.83rem;
+  color: #4a5568;
+  font-weight: 600;
+}
+
+.auth-doc-sub {
+  font-size: 0.74rem;
+  color: #9a9490;
+}
+
+.auth-doc-preview-img {
+  max-width: 100%;
+  max-height: 100px;
+  border-radius: 6px;
+  object-fit: contain;
+}
+
+.auth-doc-filename {
+  font-size: 0.8rem;
+  color: #2d6a4f;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.auth-doc-remove {
+  margin-top: 6px;
+  background: none;
+  border: none;
+  color: #b91c1c;
+  font-size: 0.78rem;
+  cursor: pointer;
+  padding: 0;
+  font-weight: 600;
+}
+
+.auth-doc-remove:hover {
+  text-decoration: underline;
+}
+
+/* ── Privacy checkbox ── */
+.auth-privacy-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.83rem;
+  color: #2d3748;
+  cursor: pointer;
+  line-height: 1.5;
+}
+
+.auth-privacy-check input[type="checkbox"] {
+  margin-top: 2px;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  accent-color: #2d6a4f;
+  cursor: pointer;
+}
+
+/* ── Privacy notice ── */
+.auth-privacy-notice {
+  font-size: 0.78rem;
+  color: #4a5568;
+  background: #f0faf4;
+  border: 1px solid #c3e6d0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  line-height: 1.6;
 }
 
 /* ── Responsive ── */

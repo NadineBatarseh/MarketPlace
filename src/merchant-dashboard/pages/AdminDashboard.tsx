@@ -45,6 +45,8 @@ interface MerchantApp {
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
   platform_email: string | null;
+  id_front_url: string | null;
+  id_back_url: string | null;
 }
 
 interface DeliveryApp {
@@ -57,6 +59,10 @@ interface DeliveryApp {
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
   platform_email: string | null;
+  id_front_url: string | null;
+  id_back_url: string | null;
+  license_front_url: string | null;
+  license_back_url: string | null;
 }
 
 interface HubWorkerApp {
@@ -1033,6 +1039,29 @@ export default function AdminDashboard() {
                   تاريخ الطلب:{' '}
                   {new Date(app.created_at).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}
                 </div>
+                {(app.id_front_url || app.id_back_url) && (
+                  <div className="ad-doc-row">
+                    {([
+                      { path: app.id_front_url, label: '🪪 هوية (أمامي)' },
+                      { path: app.id_back_url,  label: '🪪 هوية (خلفي)' },
+                    ] as const).filter(d => d.path).map(({ path, label }) => (
+                      <button
+                        key={label}
+                        type="button"
+                        className="ad-doc-link"
+                        onClick={async () => {
+                          const { data, error } = await supabase.storage
+                            .from('merchant-id-docs')
+                            .createSignedUrl(path!, 3600);
+                          if (error || !data?.signedUrl) { alert('تعذّر فتح المستند'); return; }
+                          window.open(data.signedUrl, '_blank');
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="ad-card-actions">
                 {activeTab !== 'approved' && (
@@ -1157,6 +1186,31 @@ export default function AdminDashboard() {
                   تاريخ الطلب:{' '}
                   {new Date(app.created_at).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}
                 </div>
+                {(app.id_front_url || app.id_back_url || app.license_front_url || app.license_back_url) && (
+                  <div className="ad-doc-row">
+                    {([
+                      { path: app.id_front_url,      label: '🪪 هوية (أمامي)' },
+                      { path: app.id_back_url,       label: '🪪 هوية (خلفي)' },
+                      { path: app.license_front_url, label: '🚗 رخصة (أمامي)' },
+                      { path: app.license_back_url,  label: '🚗 رخصة (خلفي)' },
+                    ] as const).filter(d => d.path).map(({ path, label }) => (
+                      <button
+                        key={label}
+                        type="button"
+                        className="ad-doc-link"
+                        onClick={async () => {
+                          const { data, error } = await supabase.storage
+                            .from('delivery-applications')
+                            .createSignedUrl(path!, 3600);
+                          if (error || !data?.signedUrl) { alert('تعذّر فتح المستند'); return; }
+                          window.open(data.signedUrl, '_blank');
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="ad-card-actions">
                 {activeTab !== 'approved' && (
