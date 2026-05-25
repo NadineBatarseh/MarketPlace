@@ -69,12 +69,14 @@ function StorePageWrapper() {
 function RootRedirect() {
   const { rawUser, role, isLoading } = useSharedAuth();
   if (isLoading) return null;
-  if (!rawUser || !role || role === 'customer') return <Navigate to="/home" replace />;
+  // Unauthenticated visitors and customers see the public homepage at /
+  if (!rawUser || !role || role === 'customer') return <CustomerLayout><HomePage /></CustomerLayout>;
+  // Authenticated users are sent to their role home
   if (role === 'merchant') return <Navigate to="/merchant-dashboard" replace />;
   if (role === 'admin') return <Navigate to="/admin-dashboard" replace />;
   if (role === 'delivery') return <Navigate to="/driver-dashboard" replace />;
   if (role === 'hubworker') return <Navigate to="/hub" replace />;
-  return <Navigate to="/home" replace />;
+  return <CustomerLayout><HomePage /></CustomerLayout>;
 }
 
 export default function App() {

@@ -1,6 +1,7 @@
 import express from 'express';
 import type { Request, Response } from 'express';
 import { supabase } from '../supabase.js';
+import { callTool } from '../mcpClient.js';
 import crypto from 'crypto';
 
 const router = express.Router();
@@ -224,6 +225,59 @@ router.delete('/disconnect', async (req: Request, res: Response) => {
   if (delError) return res.status(500).json({ ok: false, error: delError.message });
 
   return res.json({ ok: true });
+});
+
+/**
+ * POST /api/instagram/import-products
+ * Scans the merchant's recent Instagram posts with AI and saves detected products as drafts.
+ */
+router.post('/import-products', async (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ ok: false, error: 'Missing Authorization header' });
+
+  const token = authHeader.replace('Bearer ', '');
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !user) return res.status(401).json({ ok: false, error: 'Invalid token' });
+
+  const { data: conn } = await supabase
+    .from('instagram_connections')
+    .select('access_token, instagram_account_id')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (!conn) {
+    return res.status(400).json({ ok: false, error: 'لم يتم ربط حساب انستقرام بعد. قم بالربط أولاً.' });
+  }
+
+  const { data: shop } = await supabase
+    .from('shops')
+    .select('shop_id')
+    .eq('owner_id', user.id)
+    .maybeSingle();
+
+  if (!shop) {
+    return res.status(400).json({ ok: false, error: 'لم يتم العثور على متجر لهذا الحساب.' });
+  }
+
+  try {
+    const resultText = await callTool('instagram_import_products', {
+      shop_id: shop.shop_id,
+      _instagram_access_token: conn.access_token,
+      _instagram_account_id: conn.instagram_account_id,
+      _user_id: user.id,
+    });
+
+    const result = JSON.parse(resultText);
+
+    if (result.error) {
+      return res.status(500).json({ ok: false, error: result.error });
+    }
+
+    return res.json({ ok: true, count: result.count ?? 0, message: result.message ?? '' });
+  } catch (err: any) {
+    console.error('[import-products] error:', err.message);
+    return res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 export default router;

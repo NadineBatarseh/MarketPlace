@@ -8,10 +8,15 @@ interface ConnectionStatus {
   connected_at: string | null;
 }
 
+type ImportStatus = 'idle' | 'importing' | 'done' | 'error';
+
 export default function InstagramConnectPage() {
   const [status, setStatus] = useState<'loading' | 'connected' | 'disconnected' | 'error'>('loading');
   const [info, setInfo] = useState<ConnectionStatus | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [importStatus, setImportStatus] = useState<ImportStatus>('idle');
+  const [importResult, setImportResult] = useState<{ count: number; message: string } | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
 
   async function fetchStatus() {
     setStatus('loading');
@@ -31,10 +36,8 @@ export default function InstagramConnectPage() {
   }
 
   useEffect(() => {
-    // Check if we just returned from a successful OAuth redirect
     const params = new URLSearchParams(window.location.search);
     if (params.get('connected') === 'true') {
-      // Clean up URL param without a page reload
       const url = new URL(window.location.href);
       url.searchParams.delete('connected');
       window.history.replaceState({}, '', url.toString());
@@ -48,7 +51,6 @@ export default function InstagramConnectPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { setStatus('error'); return; }
 
-      // Backend generates a short state token and returns the full auth URL
       const res = await fetch('/api/instagram/init', {
         method: 'POST',
         headers: { Authorization: `Bearer ${session.access_token}` },
@@ -79,6 +81,34 @@ export default function InstagramConnectPage() {
       setStatus('error');
     } finally {
       setActionLoading(false);
+    }
+  }
+
+  async function startImport() {
+    setImportStatus('importing');
+    setImportResult(null);
+    setImportError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { setImportStatus('error'); setImportError('انتهت جلستك. أعد تسجيل الدخول.'); return; }
+
+      const res = await fetch('/api/instagram/import-products', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        setImportStatus('error');
+        setImportError(data.error ?? 'فشل الاستيراد.');
+        return;
+      }
+
+      setImportResult({ count: data.count, message: data.message });
+      setImportStatus('done');
+    } catch (err: any) {
+      setImportStatus('error');
+      setImportError(err.message ?? 'خطأ غير متوقع.');
     }
   }
 
@@ -131,12 +161,82 @@ export default function InstagramConnectPage() {
               </div>
             )}
             <div className="igc-actions">
-              <button className="igc-btn-primary" onClick={startOAuth} disabled={actionLoading}>
+              <button type="button" className="igc-btn-primary" onClick={startOAuth} disabled={actionLoading}>
                 إعادة الربط
               </button>
-              <button className="igc-btn-danger" onClick={disconnect} disabled={actionLoading}>
+              <button type="button" className="igc-btn-danger" onClick={disconnect} disabled={actionLoading}>
                 {actionLoading ? 'جارٍ القطع…' : 'قطع الاتصال'}
               </button>
+            </div>
+
+            {/* ── Import section ── */}
+            <div className="igc-import-section">
+              <div className="igc-import-header">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                <span>استيراد المنتجات من المنشورات</span>
+              </div>
+              <p className="igc-import-desc">
+                يقوم الذكاء الاصطناعي بفحص آخر منشوراتك واستخراج بيانات المنتجات وحفظها كمسودات تلقائياً.
+              </p>
+
+              {importStatus === 'idle' && (
+                <button type="button" className="igc-btn-import" onClick={startImport}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+                    <circle cx="12" cy="12" r="4"/>
+                    <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/>
+                  </svg>
+                  استيراد من انستقرام
+                </button>
+              )}
+
+              {importStatus === 'importing' && (
+                <div className="igc-import-loading">
+                  <div className="igc-import-spinner" />
+                  <div>
+                    <p className="igc-import-loading-title">جارٍ تحليل منشوراتك…</p>
+                    <p className="igc-import-loading-sub">قد يستغرق هذا حتى دقيقة واحدة</p>
+                  </div>
+                </div>
+              )}
+
+              {importStatus === 'done' && importResult && (
+                <div className="igc-import-result igc-import-result--success">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  <div>
+                    <p className="igc-import-result-title">
+                      {importResult.count > 0
+                        ? `تم استيراد ${importResult.count} منتج كمسودة`
+                        : 'لا توجد منتجات جديدة'}
+                    </p>
+                    <p className="igc-import-result-msg">{importResult.message}</p>
+                  </div>
+                  <button type="button" className="igc-import-retry" onClick={() => setImportStatus('idle')}>
+                    استيراد مجدداً
+                  </button>
+                </div>
+              )}
+
+              {importStatus === 'error' && (
+                <div className="igc-import-result igc-import-result--error">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                  </svg>
+                  <div>
+                    <p className="igc-import-result-title">فشل الاستيراد</p>
+                    <p className="igc-import-result-msg">{importError}</p>
+                  </div>
+                  <button type="button" className="igc-import-retry" onClick={() => setImportStatus('idle')}>
+                    إعادة المحاولة
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -157,7 +257,7 @@ export default function InstagramConnectPage() {
               <li>استخراج بيانات المنتجات تلقائياً</li>
               <li>تحليل إحصائيات حسابك</li>
             </ul>
-            <button className="igc-btn-connect" onClick={startOAuth} disabled={actionLoading}>
+            <button type="button" className="igc-btn-connect" onClick={startOAuth} disabled={actionLoading}>
               {actionLoading ? (
                 <><div className="igc-btn-spinner" /> جارٍ التوجيه…</>
               ) : (
@@ -177,7 +277,7 @@ export default function InstagramConnectPage() {
         {status === 'error' && (
           <div className="igc-state igc-error">
             <p>حدث خطأ في التحقق. تأكد من تسجيل الدخول وأعد المحاولة.</p>
-            <button className="igc-btn-primary" onClick={fetchStatus}>إعادة المحاولة</button>
+            <button type="button" className="igc-btn-primary" onClick={fetchStatus}>إعادة المحاولة</button>
           </div>
         )}
       </div>
