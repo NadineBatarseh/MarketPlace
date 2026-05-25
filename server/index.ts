@@ -520,6 +520,17 @@ app.use('/api/logistics', logisticsRouter);
 
 /* ---------- DEBUG (remove after fixing) ---------- */
 
+app.get("/api/debug/env-check", (_req: Request, res: Response) => {
+  return res.json({
+    INSTAGRAM_REDIRECT_URI: process.env.INSTAGRAM_REDIRECT_URI ?? '(not set)',
+    FRONTEND_URL: process.env.FRONTEND_URL ?? '(not set)',
+    META_APP_ID: process.env.META_APP_ID ?? '(not set)',
+    has_META_APP_SECRET: !!process.env.META_APP_SECRET,
+    has_SUPABASE_URL: !!process.env.SUPABASE_URL,
+    has_SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+  });
+});
+
 app.get("/api/debug/shops", async (_req: Request, res: Response) => {
   const { data, error } = await supabase.from("shops").select("*").limit(10);
   return res.json({ data, error });
