@@ -5,18 +5,6 @@ import crypto from 'crypto';
 
 const router = express.Router();
 
-// Short-lived in-memory store: state_token (UUID) → { sbAuthToken, expiresAt }
-// Avoids passing the full JWT (hundreds of chars) to Facebook's state param.
-const pendingStates = new Map<string, { sbAuthToken: string; expiresAt: number }>();
-
-// Clean up expired states every 5 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, val] of pendingStates) {
-    if (val.expiresAt < now) pendingStates.delete(key);
-  }
-}, 5 * 60 * 1000);
-
 const SCOPES = [
   'instagram_basic',
   'pages_show_list',
@@ -36,10 +24,11 @@ router.post('/init', async (req: Request, res: Response) => {
   if (error || !user) return res.status(401).json({ ok: false, error: 'Invalid token' });
 
   const stateToken = crypto.randomUUID();
-  pendingStates.set(stateToken, {
-    sbAuthToken,
-    expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
-  });
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  const { error: insertError } = await supabase
+    .from('instagram_oauth_states')
+    .insert({ state_token: stateToken, sb_auth_token: sbAuthToken, expires_at: expiresAt });
+  if (insertError) return res.status(500).json({ ok: false, error: 'Failed to create state token' });
 
   const redirectUri =
     process.env.INSTAGRAM_REDIRECT_URI ||
@@ -67,13 +56,24 @@ router.get('/callback', async (req: Request, res: Response) => {
   if (!code) return res.status(400).send('Missing authorization code.');
   if (!stateToken) return res.status(401).send('Missing state token.');
 
-  const pending = pendingStates.get(stateToken);
-  if (!pending || pending.expiresAt < Date.now()) {
+  const { data: pending, error: stateError } = await supabase
+    .from('instagram_oauth_states')
+    .select('sb_auth_token, expires_at')
+    .eq('state_token', stateToken)
+    .maybeSingle();
+
+  if (stateError || !pending) {
     return res.status(401).send('State token expired or invalid. Please try connecting again.');
   }
-  pendingStates.delete(stateToken); // one-time use
+  if (new Date(pending.expires_at) < new Date()) {
+    await supabase.from('instagram_oauth_states').delete().eq('state_token', stateToken);
+    return res.status(401).send('State token expired. Please try connecting again.');
+  }
 
-  const { sbAuthToken } = pending;
+  // One-time use — delete immediately
+  await supabase.from('instagram_oauth_states').delete().eq('state_token', stateToken);
+
+  const sbAuthToken = pending.sb_auth_token;
 
   try {
     const { data: { user }, error: userError } = await supabase.auth.getUser(sbAuthToken);
