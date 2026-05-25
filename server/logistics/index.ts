@@ -1,17 +1,17 @@
 import { Router, Request, Response } from 'express';
-import { runBatchCycle, startBatchCycleScheduler } from './batchCycle';
-import { startBackgroundJobs } from './phases/phase7_backgroundJobs';
-import { handleBreakdown } from './phases/phase9_breakdownHandling';
-import { tryAddShipmentsToBatch } from './phases/phase8_inTransitAdditions';
-import { sequenceIntraCityTasks } from './phases/phase10_intraCitySequencing';
-import { atomicAssign } from './driverAssignment';
-import { autoAssignUnbatchedShipments } from './phases/phase0a_autoAssignUnbatched';
-import { supabase } from '../supabase';
-import { C } from './constants';
+import { runBatchCycle, startBatchCycleScheduler } from './batchCycle.js';
+import { startBackgroundJobs } from './phases/phase7_backgroundJobs.js';
+import { handleBreakdown } from './phases/phase9_breakdownHandling.js';
+import { tryAddShipmentsToBatch } from './phases/phase8_inTransitAdditions.js';
+import { sequenceIntraCityTasks } from './phases/phase10_intraCitySequencing.js';
+import { atomicAssign } from './driverAssignment.js';
+import { autoAssignUnbatchedShipments } from './phases/phase0a_autoAssignUnbatched.js';
+import { supabase } from '../supabase.js';
+import { C } from './constants.js';
 
 export const logisticsRouter = Router();
 
-// ── POST /api/logistics/cycle ─────────────────────────────────────────────────
+// â”€â”€ POST /api/logistics/cycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Manually trigger one full batch cycle
 logisticsRouter.post('/cycle', async (_req: Request, res: Response) => {
   try {
@@ -23,7 +23,7 @@ logisticsRouter.post('/cycle', async (_req: Request, res: Response) => {
   }
 });
 
-// ── POST /api/logistics/breakdown ────────────────────────────────────────────
+// â”€â”€ POST /api/logistics/breakdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Courier reports a vehicle breakdown
 // Body: { batch_id: string }
 logisticsRouter.post('/breakdown', async (req: Request, res: Response) => {
@@ -43,7 +43,7 @@ logisticsRouter.post('/breakdown', async (req: Request, res: Response) => {
   }
 });
 
-// ── POST /api/logistics/add-shipments ────────────────────────────────────────
+// â”€â”€ POST /api/logistics/add-shipments â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Add new shipments to an in-transit batch (Phase 8)
 // Body: { batch_id, zone_b, new_shipment_ids, existing_reserved_until }
 logisticsRouter.post('/add-shipments', async (req: Request, res: Response) => {
@@ -73,7 +73,7 @@ logisticsRouter.post('/add-shipments', async (req: Request, res: Response) => {
   }
 });
 
-// ── POST /api/logistics/sequence ─────────────────────────────────────────────
+// â”€â”€ POST /api/logistics/sequence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Compute intra-city stop sequence for a courier arriving at a city (Phase 10)
 // Body: { tasks, entry_point, initial_volume }
 logisticsRouter.post('/sequence', (req: Request, res: Response) => {
@@ -93,7 +93,7 @@ logisticsRouter.post('/sequence', (req: Request, res: Response) => {
   }
 });
 
-// ── POST /api/logistics/start-batch ─────────────────────────────────────────
+// â”€â”€ POST /api/logistics/start-batch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Driver starts an assigned batch, transitioning it to in_transit.
 // Body: { batch_id, courier_id }
 logisticsRouter.post('/start-batch', async (req: Request, res: Response) => {
@@ -120,7 +120,7 @@ logisticsRouter.post('/start-batch', async (req: Request, res: Response) => {
   res.json({ success: true });
 });
 
-// ── POST /api/logistics/pickup-shipment ──────────────────────────────────────
+// â”€â”€ POST /api/logistics/pickup-shipment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Driver confirms pickup of a shipment from the shop.
 // Validates: batch is in_transit and belongs to this courier; shipment is batched/reserved.
 // Body: { shipment_id, courier_id }
@@ -171,14 +171,14 @@ logisticsRouter.post('/pickup-shipment', async (req: Request, res: Response) => 
     .select('id');
 
   if (!updated?.length) {
-    res.status(409).json({ success: false, error: 'Pickup failed — shipment status changed' });
+    res.status(409).json({ success: false, error: 'Pickup failed â€” shipment status changed' });
     return;
   }
 
   res.json({ success: true });
 });
 
-// ── POST /api/logistics/deliver-shipment ─────────────────────────────────────
+// â”€â”€ POST /api/logistics/deliver-shipment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Driver confirms delivery of a shipment to the customer.
 // Validates: batch is in_transit and belongs to this courier; shipment is picked_up.
 // Auto-completes the batch when all its shipments are delivered.
@@ -228,7 +228,7 @@ logisticsRouter.post('/deliver-shipment', async (req: Request, res: Response) =>
     .select('id');
 
   if (!updated?.length) {
-    res.status(409).json({ success: false, error: 'Delivery failed — shipment status changed' });
+    res.status(409).json({ success: false, error: 'Delivery failed â€” shipment status changed' });
     return;
   }
 
@@ -250,8 +250,8 @@ logisticsRouter.post('/deliver-shipment', async (req: Request, res: Response) =>
   res.json({ success: true, batch_completed: count === 0 });
 });
 
-// ── POST /api/logistics/accept ───────────────────────────────────────────────
-// Courier accepts a batch — atomic assignment (D34)
+// â”€â”€ POST /api/logistics/accept â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Courier accepts a batch â€” atomic assignment (D34)
 // Body: { batch_id, courier_id }
 logisticsRouter.post('/accept', async (req: Request, res: Response) => {
   const { batch_id, courier_id } = req.body as {
@@ -277,7 +277,7 @@ logisticsRouter.post('/accept', async (req: Request, res: Response) => {
   }
 });
 
-// ── Real-time auto-assignment ─────────────────────────────────────────────────
+// â”€â”€ Real-time auto-assignment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Listens for new shipment inserts and immediately tries to slot them into an
 // existing assigned/in_transit batch. A lock prevents overlapping runs when
 // multiple shipments arrive at once.
@@ -296,7 +296,7 @@ function startShipmentWatcher(): void {
         if (row.batch_id !== null) return;
         if (row.status !== 'available' && row.status !== 'delayed') return;
 
-        if (running) return; // a run is already in progress — it will pick this up
+        if (running) return; // a run is already in progress â€” it will pick this up
         running = true;
 
         try {
@@ -313,7 +313,7 @@ function startShipmentWatcher(): void {
     });
 }
 
-// ── Bootstrap function ────────────────────────────────────────────────────────
+// â”€â”€ Bootstrap function â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Call this once from server/index.ts during startup
 export function bootstrapLogistics(): void {
   startBackgroundJobs();

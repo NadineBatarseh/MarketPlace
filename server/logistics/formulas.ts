@@ -1,8 +1,8 @@
-import { C } from './constants';
+import { C } from './constants.js';
 
-// ── F1 ──────────────────────────────────────────────────────────────────────
+// â”€â”€ F1 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // urgency_score_i = (NOW - created_at_i) / (deadline_i - created_at_i)
-// Range: [0, 1]  — 0 = just created, 1 = deadline passed
+// Range: [0, 1]  â€” 0 = just created, 1 = deadline passed
 export function computeUrgencyScore(
   createdAt: Date,
   deadline: Date,
@@ -14,20 +14,20 @@ export function computeUrgencyScore(
   return Math.min(Math.max(elapsed / window, 0), 1);
 }
 
-// ── F2 ──────────────────────────────────────────────────────────────────────
-// U_batch = (1/N) * Σ urgency_score_i
+// â”€â”€ F2 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// U_batch = (1/N) * خ£ urgency_score_i
 export function computeBatchRawUrgency(urgencyScores: number[]): number {
   if (urgencyScores.length === 0) return 0;
   return urgencyScores.reduce((sum, s) => sum + s, 0) / urgencyScores.length;
 }
 
-// ── F3 ──────────────────────────────────────────────────────────────────────
-// cost(X→Y) = distance(X,Y) × COST_PER_KM
+// â”€â”€ F3 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// cost(Xâ†’Y) = distance(X,Y) أ— COST_PER_KM
 export function computeRouteCost(distanceKm: number): number {
   return distanceKm * C.COST_PER_KM;
 }
 
-// ── Haversine distance (km) ──────────────────────────────────────────────────
+// â”€â”€ Haversine distance (km) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function haversineDistance(
   lat1: number, lng1: number,
   lat2: number, lng2: number
@@ -45,7 +45,7 @@ function toRad(deg: number): number {
   return (deg * Math.PI) / 180;
 }
 
-// Haversine × road factor → estimated actual road distance
+// Haversine أ— road factor â†’ estimated actual road distance
 export function roadDistance(
   lat1: number, lng1: number,
   lat2: number, lng2: number
@@ -58,38 +58,38 @@ export function estimateDurationMinutes(distanceKm: number): number {
   return (distanceKm / C.AVERAGE_SPEED_KMH) * 60;
 }
 
-// ── D13 ─────────────────────────────────────────────────────────────────────
-// penalty = BASE_PENALTY × (1 - Û)
+// â”€â”€ D13 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// penalty = BASE_PENALTY أ— (1 - أ›)
 export function computeDeadEndPenalty(uHat: number): number {
   return C.BASE_PENALTY * (1 - uHat);
 }
 
-// ── D14 ─────────────────────────────────────────────────────────────────────
-// Score_adj = Score - BASE_PENALTY × (1 - Û)
+// â”€â”€ D14 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Score_adj = Score - BASE_PENALTY أ— (1 - أ›)
 export function computeAdjustedScore(score: number, uHat: number): number {
   return score - computeDeadEndPenalty(uHat);
 }
 
-// ── D22 ─────────────────────────────────────────────────────────────────────
-// reserved_until = NOW + duration(A→B)
+// â”€â”€ D22 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// reserved_until = NOW + duration(Aâ†’B)
 export function computeReservedUntil(travelDurationMinutes: number): Date {
   return new Date(Date.now() + travelDurationMinutes * 60 * 1000);
 }
 
-// ── D33 — Proximity factor ───────────────────────────────────────────────────
-// P = e^(-λ × distance_km)
+// â”€â”€ D33 â€” Proximity factor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// P = e^(-خ» أ— distance_km)
 export function computeProximityFactor(distanceKm: number): number {
   return Math.exp(-C.LAMBDA * distanceKm);
 }
 
-// ── D10 — Batch score ────────────────────────────────────────────────────────
-// Score = W_n·N̂ + W_u·Û - W_d·D̂
+// â”€â”€ D10 â€” Batch score â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Score = W_nآ·Nج‚ + W_uآ·أ› - W_dآ·Dج‚
 export function computeBatchScore(nHat: number, uHat: number, dHat: number): number {
   return C.W_N * nHat + C.W_U * uHat - C.W_D * dHat;
 }
 
-// ── D33 — Driver score ───────────────────────────────────────────────────────
-// Driver_Score = W_prox·P + W_cap·C - W_load·L
+// â”€â”€ D33 â€” Driver score â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Driver_Score = W_proxآ·P + W_capآ·C - W_loadآ·L
 export function computeDriverScore(
   proximityFactor: number,
   capacityUtilization: number,

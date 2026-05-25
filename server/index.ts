@@ -996,7 +996,7 @@ app.get("/auth/meta", (_req: Request, res: Response) => {
 
 /* ---------- SERVE FRONTEND (production only) ---------- */
 
-if (process.env.NODE_ENV === "production") {
+if (process.env.NODE_ENV === "production" && !process.env.VERCEL) {
   const distPath = path.join(__dirname, "../dist");
   app.use(express.static(distPath));
   app.get("*", (_req: Request, res: Response) => {

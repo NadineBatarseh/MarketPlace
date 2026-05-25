@@ -1,9 +1,9 @@
-import supabase from '../../supabase';
-import { computeAdjustedScore } from '../formulas';
-import { rankBatches } from './phase1_scoring';
-import { CandidateBatch } from '../types';
+import supabase from '../../supabase.js';
+import { computeAdjustedScore } from '../formulas.js';
+import { rankBatches } from './phase1_scoring.js';
+import { CandidateBatch } from '../types.js';
 
-// ── D12 — Dead-end detection ──────────────────────────────────────────────────
+// â”€â”€ D12 â€” Dead-end detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // COUNT shipments where pickup_zone = Zone B AND status IN ('available','delayed')
 export async function isDeadEnd(zoneB: string): Promise<boolean> {
   const { count, error } = await supabase
@@ -20,8 +20,8 @@ export async function isDeadEnd(zoneB: string): Promise<boolean> {
   return (count ?? 0) === 0;
 }
 
-// ── D13, D14 — Apply dead-end penalty and re-rank ────────────────────────────
-// Score_adj = Score - BASE_PENALTY × (1 - Û)
+// â”€â”€ D13, D14 â€” Apply dead-end penalty and re-rank â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Score_adj = Score - BASE_PENALTY أ— (1 - أ›)
 function applyPenalty(batch: CandidateBatch): CandidateBatch {
   return {
     ...batch,
@@ -29,7 +29,7 @@ function applyPenalty(batch: CandidateBatch): CandidateBatch {
   };
 }
 
-// ── Main export ───────────────────────────────────────────────────────────────
+// â”€â”€ Main export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Checks the top batch's Zone B. If dead-end, applies the dynamic penalty
 // and re-ranks all batches. Returns the updated ranked list.
 export async function applyLookAhead(

@@ -1,5 +1,5 @@
-import { supabase } from '../supabase';
-import { Coordinates } from './types';
+import { supabase } from '../supabase.js';
+import { Coordinates } from './types.js';
 
 // Reads the courier's live GPS location from couriers.location via the batch
 export async function getCourierLocation(batchId: string): Promise<Coordinates | null> {

@@ -1,7 +1,7 @@
-import supabase from '../../supabase';
-import { C } from '../constants';
-import { roadDistance, estimateDurationMinutes } from '../formulas';
-import { Coordinates } from '../types';
+import supabase from '../../supabase.js';
+import { C } from '../constants.js';
+import { roadDistance, estimateDurationMinutes } from '../formulas.js';
+import { Coordinates } from '../types.js';
 
 // Courier is considered "arrived" at a zone when within this distance
 const ARRIVAL_THRESHOLD_KM = 1.0;
@@ -38,8 +38,8 @@ async function getZoneCoords(zone: string): Promise<Coordinates | null> {
   return { lat, lng };
 }
 
-// ── D28 — Remaining capacity check ───────────────────────────────────────────
-// batch.current_volume + Σ new_shipments.volume ≤ MAX_VOLUME
+// â”€â”€ D28 â€” Remaining capacity check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// batch.current_volume + خ£ new_shipments.volume â‰¤ MAX_VOLUME
 async function hasCapacity(batchId: string, newShipmentIds: string[]): Promise<boolean> {
   const [batchRes, shipmentsRes] = await Promise.all([
     supabase.from('batches').select('total_volume').eq('id', batchId).single(),
@@ -57,7 +57,7 @@ async function hasCapacity(batchId: string, newShipmentIds: string[]): Promise<b
   return currentVolume + addedVolume <= C.MAX_VOLUME;
 }
 
-// ── Main export ───────────────────────────────────────────────────────────────
+// â”€â”€ Main export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function tryAddShipmentsToBatch(params: AdditionParams): Promise<boolean> {
   const { batch_id, zone_b, new_shipment_ids, existing_reserved_until } = params;
 
@@ -67,21 +67,21 @@ export async function tryAddShipmentsToBatch(params: AdditionParams): Promise<bo
     getZoneCoords(zone_b),
   ]);
 
-  // ── D26 — Courier has not yet reached Zone B ──────────────────────────────
+  // â”€â”€ D26 â€” Courier has not yet reached Zone B â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Benefit of the doubt if location data is missing
   const notArrived = (courierLoc && zoneBCoords)
     ? roadDistance(courierLoc.lat, courierLoc.lng, zoneBCoords.lat, zoneBCoords.lng) > ARRIVAL_THRESHOLD_KM
     : true;
 
-  // ── D27 — Sufficient time buffer remaining ────────────────────────────────
+  // â”€â”€ D27 â€” Sufficient time buffer remaining â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const timeOk = (courierLoc && zoneBCoords)
     ? estimateDurationMinutes(roadDistance(courierLoc.lat, courierLoc.lng, zoneBCoords.lat, zoneBCoords.lng)) > C.INTRA_CITY_MIN_TIME_BUFFER_MINUTES
     : false;
 
-  // ── D28 — Remaining capacity ──────────────────────────────────────────────
+  // â”€â”€ D28 â€” Remaining capacity â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const capacityOk = await hasCapacity(batch_id, new_shipment_ids);
 
-  // D26 ∧ D27 ∧ D28 must all be true
+  // D26 âˆ§ D27 âˆ§ D28 must all be true
   if (!notArrived || !timeOk || !capacityOk) return false;
 
   const addedVolume = await getVolume(new_shipment_ids);

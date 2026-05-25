@@ -1,34 +1,34 @@
-import { C } from '../constants';
-import { haversineDistance } from '../formulas';
-import { Coordinates, IntraCityTask } from '../types';
+import { C } from '../constants.js';
+import { haversineDistance } from '../formulas.js';
+import { Coordinates, IntraCityTask } from '../types.js';
 
-// Phase 10 — Intra-City Sequencing
+// Phase 10 â€” Intra-City Sequencing
 // Produces an ordered stop list from a set of pickup and delivery tasks
 // inside a single city, using Greedy Nearest Neighbor + 2-opt improvement.
 
-// ── Running capacity tracker ──────────────────────────────────────────────────
+// â”€â”€ Running capacity tracker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function applyVolumeChange(current: number, task: IntraCityTask): number {
   return task.type === 'pickup'
     ? current + task.volume
     : current - task.volume;
 }
 
-// ── D29 — Pickup capacity feasibility ────────────────────────────────────────
-// pickup feasible if current_volume + task.volume ≤ MAX_VOLUME
+// â”€â”€ D29 â€” Pickup capacity feasibility â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// pickup feasible if current_volume + task.volume â‰¤ MAX_VOLUME
 function isCapacityFeasible(task: IntraCityTask, currentVolume: number): boolean {
   if (task.type === 'delivery') return true;
   return currentVolume + task.volume <= C.MAX_VOLUME;
 }
 
-// ── D30 — Merchant readiness check ───────────────────────────────────────────
-// pickup feasible if current_time ≥ task.ready_time
+// â”€â”€ D30 â€” Merchant readiness check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// pickup feasible if current_time â‰¥ task.ready_time
 function isReadyTimeFeasible(task: IntraCityTask, now: Date): boolean {
   if (task.type === 'delivery' || !task.ready_time) return true;
   return now >= new Date(task.ready_time);
 }
 
-// ── D31 — Task score ─────────────────────────────────────────────────────────
-// task_score = W_dist × distance(current, task) - W_urg × urgency_score
+// â”€â”€ D31 â€” Task score â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// task_score = W_dist أ— distance(current, task) - W_urg أ— urgency_score
 // Lower score = visit sooner
 function scoreTask(
   task: IntraCityTask,
@@ -41,7 +41,7 @@ function scoreTask(
   return C.W_DIST * dist - C.W_URG * task.urgency_score;
 }
 
-// ── Step 10a — Greedy nearest neighbor ───────────────────────────────────────
+// â”€â”€ Step 10a â€” Greedy nearest neighbor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function greedySequence(
   tasks: IntraCityTask[],
   entryPoint: Coordinates,
@@ -60,7 +60,7 @@ function greedySequence(
     for (let i = 0; i < unvisited.length; i++) {
       const task = unvisited[i];
 
-      // D29 and D30 — skip infeasible tasks
+      // D29 and D30 â€” skip infeasible tasks
       if (!isCapacityFeasible(task, currentVolume)) continue;
       if (!isReadyTimeFeasible(task, now)) continue;
 
@@ -89,7 +89,7 @@ function greedySequence(
   return sequence;
 }
 
-// ── Capacity validity check for a full sequence ───────────────────────────────
+// â”€â”€ Capacity validity check for a full sequence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function isCapacityValidThroughout(
   sequence: IntraCityTask[],
   initialVolume: number
@@ -102,7 +102,7 @@ function isCapacityValidThroughout(
   return true;
 }
 
-// ── Total route distance for a sequence ──────────────────────────────────────
+// â”€â”€ Total route distance for a sequence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function totalDistance(
   sequence: IntraCityTask[],
   entryPoint: Coordinates
@@ -116,7 +116,7 @@ function totalDistance(
   return dist;
 }
 
-// ── D32 — 2-opt swap ─────────────────────────────────────────────────────────
+// â”€â”€ D32 â€” 2-opt swap â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Accept swap if:
 //   new_total_distance < current_total_distance
 //   AND capacity is valid throughout the reversed segment
@@ -158,7 +158,7 @@ function twoOptImprove(
   return best;
 }
 
-// ── Main export ───────────────────────────────────────────────────────────────
+// â”€â”€ Main export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function sequenceIntraCityTasks(
   tasks: IntraCityTask[],
   entryPoint: Coordinates,

@@ -1,15 +1,15 @@
-import supabase from '../supabase';
-import { C } from './constants';
+import supabase from '../supabase.js';
+import { C } from './constants.js';
 import {
   computeProximityFactor,
   computeDriverScore,
   roadDistance,
-} from './formulas';
-import { Courier } from './types';
+} from './formulas.js';
+import { Courier } from './types.js';
 
-// ── D33 — Score a driver against a specific batch ─────────────────────────────
-// Driver_Score = W_prox·P + W_cap·C - W_load·L
-//   P = e^(-λ × distance(driver, Zone_A))
+// â”€â”€ D33 â€” Score a driver against a specific batch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Driver_Score = W_proxآ·P + W_capآ·C - W_loadآ·L
+//   P = e^(-خ» أ— distance(driver, Zone_A))
 //   C = batch.total_volume / courier.max_volume
 //   L = hours_driven_today / MAX_SHIFT_HOURS
 function scoreDriver(
@@ -57,7 +57,7 @@ async function fetchAvailableCouriers(
     .slice(0, limit);
 }
 
-// ── D34 — Atomic assignment check ─────────────────────────────────────────────
+// â”€â”€ D34 â€” Atomic assignment check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // UPDATE batches SET status='assigned' WHERE id=:id AND status='pending_assignment'
 // Returns true if this driver successfully claimed the batch.
 export async function atomicAssign(
@@ -79,7 +79,7 @@ export async function atomicAssign(
   return Array.isArray(data) && data.length > 0;
 }
 
-// Notify a driver by inserting into driver_notifications — picked up via Supabase Realtime on the dashboard.
+// Notify a driver by inserting into driver_notifications â€” picked up via Supabase Realtime on the dashboard.
 async function notifyDriver(courierId: string, batchId: string): Promise<void> {
   const { error } = await supabase
     .from('driver_notifications')
@@ -134,9 +134,9 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// ── Main export ───────────────────────────────────────────────────────────────
+// â”€â”€ Main export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Broadcasts to top N drivers per round. First to accept wins (D34).
-// If no one accepts after MAX_ASSIGNMENT_ROUNDS → flags for human dispatcher.
+// If no one accepts after MAX_ASSIGNMENT_ROUNDS â†’ flags for human dispatcher.
 export async function assignBatch(
   batchId: string,
   zoneALat: number,
@@ -165,7 +165,7 @@ export async function assignBatch(
     const acceptedBy = await waitForAcceptance(batchId, courierIds, C.ASSIGNMENT_TIMEOUT_MS);
 
     if (acceptedBy) {
-      // D34 — atomic assignment (no-op if frontend already did it)
+      // D34 â€” atomic assignment (no-op if frontend already did it)
       await atomicAssign(batchId, acceptedBy);
       // Ensure all notifications are flipped regardless of who ran atomicAssign
       await supabase

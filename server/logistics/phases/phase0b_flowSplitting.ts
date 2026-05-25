@@ -1,9 +1,9 @@
-import { supabase } from '../../supabase';
-import { C } from '../constants';
-import { computeUrgencyScore, computeBatchRawUrgency, roadDistance, estimateDurationMinutes, haversineDistance } from '../formulas';
-import { CandidateBatch, DemandFlow, Shipment } from '../types';
+import { supabase } from '../../supabase.js';
+import { C } from '../constants.js';
+import { computeUrgencyScore, computeBatchRawUrgency, roadDistance, estimateDurationMinutes, haversineDistance } from '../formulas.js';
+import { CandidateBatch, DemandFlow, Shipment } from '../types.js';
 
-// ── Step 1: Fetch and sort shipments for a flow (D3) ─────────────────────────
+// â”€â”€ Step 1: Fetch and sort shipments for a flow (D3) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // urgency_score_i = (NOW - created_at_i) / (deadline_i - created_at_i)
 // sorted DESC so most urgent shipments enter the first batch
 async function fetchAndSortShipments(flow: DemandFlow): Promise<Shipment[]> {
@@ -32,9 +32,9 @@ async function fetchAndSortShipments(flow: DemandFlow): Promise<Shipment[]> {
     }) as Shipment[];
 }
 
-// ── Step 3: Greedy bin packing (D4) ──────────────────────────────────────────
+// â”€â”€ Step 3: Greedy bin packing (D4) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Close a batch when:
-//   Σvolume + next.volume > MAX_VOLUME  OR  stops + 1 > MAX_STOPS
+//   خ£volume + next.volume > MAX_VOLUME  OR  stops + 1 > MAX_STOPS
 function packIntoBatches(
   shipments: Shipment[],
   flow: DemandFlow
@@ -114,10 +114,10 @@ function packIntoBatches(
   return batches;
 }
 
-// ── Step 4: Handle the thin last batch (D5, D6) ───────────────────────────────
+// â”€â”€ Step 4: Handle the thin last batch (D5, D6) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // A batch is dispatched if:
 //   1. shipment_count >= MIN_BATCH_THRESHOLD, OR
-//   2. forceDispatchAfterMaxWait — the flow's avg waiting time exceeded MAX_FLOW_WAITING_MINUTES
+//   2. forceDispatchAfterMaxWait â€” the flow's avg waiting time exceeded MAX_FLOW_WAITING_MINUTES
 // Otherwise shipments are marked delayed for the next cycle.
 async function handleThinBatch(
   batch: CandidateBatch,
@@ -130,7 +130,7 @@ async function handleThinBatch(
     return batch;
   }
 
-  // D6 — delayed_until = NOW + cycle_interval
+  // D6 â€” delayed_until = NOW + cycle_interval
   const delayedUntil = new Date(
     Date.now() + C.CYCLE_INTERVAL_MINUTES * 60_000
   ).toISOString();
@@ -151,7 +151,7 @@ async function handleThinBatch(
   return null;
 }
 
-// ── Main export ───────────────────────────────────────────────────────────────
+// â”€â”€ Main export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export async function splitAllFlows(flows: DemandFlow[]): Promise<CandidateBatch[]> {
   const result: CandidateBatch[] = [];
 
@@ -159,7 +159,7 @@ export async function splitAllFlows(flows: DemandFlow[]): Promise<CandidateBatch
     const shipments = await fetchAndSortShipments(flow);
     if (shipments.length === 0) continue;
 
-    // D6b — force-dispatch if this flow has been waiting too long on average,
+    // D6b â€” force-dispatch if this flow has been waiting too long on average,
     // regardless of batch size. Applies to all batches produced from this flow.
     const forceDispatchAfterMaxWait =
       flow.avg_waiting_hours * 60 >= C.MAX_FLOW_WAITING_MINUTES;

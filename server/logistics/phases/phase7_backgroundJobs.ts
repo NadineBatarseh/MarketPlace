@@ -1,7 +1,7 @@
-import supabase from '../../supabase';
+import supabase from '../../supabase.js';
 
-// ── Job 1 — Release expired reservations (D23) ───────────────────────────────
-// reserved_until < NOW → status back to 'available'
+// â”€â”€ Job 1 â€” Release expired reservations (D23) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// reserved_until < NOW â†’ status back to 'available'
 async function releaseExpiredReservations(): Promise<void> {
   const { error } = await supabase
     .from('shipments')
@@ -14,7 +14,7 @@ async function releaseExpiredReservations(): Promise<void> {
   }
 }
 
-// ── Start background jobs ─────────────────────────────────────────────────────
+// â”€â”€ Start background jobs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export function startBackgroundJobs(): void {
   setInterval(releaseExpiredReservations, 5 * 60_000);  // every 5 min
 

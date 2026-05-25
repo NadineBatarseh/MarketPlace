@@ -1,10 +1,10 @@
-import supabase from '../../supabase';
-import { C } from '../constants';
-import { Shipment } from '../types';
+import supabase from '../../supabase.js';
+import { C } from '../constants.js';
+import { Shipment } from '../types.js';
 
-// Phase 3 — Read Zone A→B shipments (no lock, no status change)
+// Phase 3 â€” Read Zone Aâ†’B shipments (no lock, no status change)
 // Only reads the batch's shipments to compute remaining courier capacity.
-// D15: remaining_capacity = MAX_VOLUME - Σvolume_i
+// D15: remaining_capacity = MAX_VOLUME - خ£volume_i
 export async function readBatchShipments(
   shipmentIds: string[]
 ): Promise<Shipment[]> {
@@ -27,8 +27,8 @@ export async function readBatchShipments(
   })) as Shipment[];
 }
 
-// ── D15 ───────────────────────────────────────────────────────────────────────
-// remaining_capacity = MAX_VOLUME - Σvolume_i
+// â”€â”€ D15 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// remaining_capacity = MAX_VOLUME - خ£volume_i
 export function computeRemainingCapacity(shipments: Shipment[]): number {
   const used = shipments.reduce((sum, s) => sum + s.volume, 0);
   return C.MAX_VOLUME - used;

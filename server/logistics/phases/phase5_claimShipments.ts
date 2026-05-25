@@ -1,14 +1,14 @@
-import supabase from '../../supabase';
+import supabase from '../../supabase.js';
 
-// Phase 5 — Claim all shipments AND create the batch record atomically.
+// Phase 5 â€” Claim all shipments AND create the batch record atomically.
 //
 // The SQL function runs inside a single transaction:
 //   1. Inserts the batches row first (satisfies the FK on shipments.batch_id)
-//   2. Claims Zone A→B shipments (status → 'batched')
-//   3. Claims Zone B→C shipments (status → 'reserved')
+//   2. Claims Zone Aâ†’B shipments (status â†’ 'batched')
+//   3. Claims Zone Bâ†’C shipments (status â†’ 'reserved')
 //
 // Uses SELECT FOR UPDATE SKIP LOCKED so concurrent cycles don't deadlock.
-// Returns false if any A→B shipment is already locked by another process.
+// Returns false if any Aâ†’B shipment is already locked by another process.
 export async function claimShipmentsAtomically(
   batchId: string,
   abIds: string[],

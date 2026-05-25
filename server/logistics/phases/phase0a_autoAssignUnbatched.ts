@@ -1,7 +1,7 @@
-import { supabase } from '../../supabase';
-import { C } from '../constants';
-import { roadDistance, estimateDurationMinutes } from '../formulas';
-import { getCourierLocation, getZoneCoords } from '../locationUtils';
+import { supabase } from '../../supabase.js';
+import { C } from '../constants.js';
+import { roadDistance, estimateDurationMinutes } from '../formulas.js';
+import { getCourierLocation, getZoneCoords } from '../locationUtils.js';
 
 // Driver must be at least this far from a zone to still pick up from it
 const ARRIVAL_THRESHOLD_KM = 1.0;
@@ -28,9 +28,9 @@ function computeVolume(row: any): number {
   return (row.order_details?.qty ?? 0) * (row.order_details?.products?.capacity_units ?? 0);
 }
 
-// ── Live-location check ───────────────────────────────────────────────────────
+// â”€â”€ Live-location check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Returns true if the driver still has enough time to pick up from the given zone.
-// Uses the courier's live GPS position — no assumptions based on route order.
+// Uses the courier's live GPS position â€” no assumptions based on route order.
 async function driverCanStillReach(batchId: string, zone: string): Promise<boolean> {
   const [courierLoc, zoneCoords] = await Promise.all([
     getCourierLocation(batchId),
@@ -51,15 +51,15 @@ async function driverCanStillReach(batchId: string, zone: string): Promise<boole
   return true;
 }
 
-// ── Main export ───────────────────────────────────────────────────────────────
+// â”€â”€ Main export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Runs at the start of each batch cycle. Scans all unbatched shipments and
 // slots each one into the best compatible existing batch.
 //
-// Priority: in_transit batches first (driver already en route — utilise the trip),
+// Priority: in_transit batches first (driver already en route â€” utilise the trip),
 //           then assigned batches.
 //
 // For in_transit batches: every pickup zone is validated against the driver's
-// LIVE GPS location — we never assume which zones the driver has or hasn't left.
+// LIVE GPS location â€” we never assume which zones the driver has or hasn't left.
 // For assigned batches: no movement yet, so only a zone-match + volume check.
 export async function autoAssignUnbatchedShipments(): Promise<void> {
   const { data: rawShipments } = await supabase
@@ -84,7 +84,7 @@ export async function autoAssignUnbatchedShipments(): Promise<void> {
 
   if (!rawBatches?.length) return;
 
-  // in_transit first — maximises utilisation of an already-moving driver
+  // in_transit first â€” maximises utilisation of an already-moving driver
   const batches: EligibleBatch[] = (rawBatches as EligibleBatch[]).sort((a, b) => {
     if (a.status === b.status) return 0;
     return a.status === 'in_transit' ? -1 : 1;
@@ -106,14 +106,14 @@ export async function autoAssignUnbatchedShipments(): Promise<void> {
       // Volume must fit
       if (batch.total_volume + shipment.volume > C.MAX_VOLUME) continue;
 
-      // For in_transit batches: check driver's live GPS — no assumptions
+      // For in_transit batches: check driver's live GPS â€” no assumptions
       if (batch.status === 'in_transit') {
         const canReach = await driverCanStillReach(batch.id, shipment.pickup_zone);
         if (!canReach) continue;
       }
 
       // Determine which leg array to append to:
-      // pickupIdx === 0 → AB leg, pickupIdx >= 1 → BC (or later) leg
+      // pickupIdx === 0 â†’ AB leg, pickupIdx >= 1 â†’ BC (or later) leg
       const leg: 'ab_shipment_ids' | 'bc_shipment_ids' =
         pickupIdx === 0 ? 'ab_shipment_ids' : 'bc_shipment_ids';
 
@@ -143,7 +143,7 @@ export async function autoAssignUnbatchedShipments(): Promise<void> {
 
       if (sErr || bErr) {
         console.error(
-          `[Phase 0a] Failed to assign shipment ${shipment.id} → batch ${batch.id}:`,
+          `[Phase 0a] Failed to assign shipment ${shipment.id} â†’ batch ${batch.id}:`,
           sErr?.message ?? bErr?.message,
         );
         break;
@@ -165,10 +165,10 @@ export async function autoAssignUnbatchedShipments(): Promise<void> {
       }
 
       console.log(
-        `[Phase 0a] Shipment ${shipment.id} → batch ${batch.id} ` +
+        `[Phase 0a] Shipment ${shipment.id} â†’ batch ${batch.id} ` +
         `(${leg}, status=${batch.status})`,
       );
-      break; // shipment placed — move to the next one
+      break; // shipment placed â€” move to the next one
     }
   }
 }

@@ -1,15 +1,15 @@
-import supabase from '../../supabase';
-import { C } from '../constants';
+import supabase from '../../supabase.js';
+import { C } from '../constants.js';
 import {
   roadDistance,
   estimateDurationMinutes,
   computeRouteCost,
-} from '../formulas';
-import { scoreAndRankBatches } from './phase1_scoring';
-import { CandidateBatch, DemandFlow, RoutePlan } from '../types';
+} from '../formulas.js';
+import { scoreAndRankBatches } from './phase1_scoring.js';
+import { CandidateBatch, DemandFlow, RoutePlan } from '../types.js';
 
-// ── D16 — Filter Zone B→C candidates by remaining capacity ───────────────────
-// Σvolume_B→C ≤ remaining_capacity
+// â”€â”€ D16 â€” Filter Zone Bâ†’C candidates by remaining capacity â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// خ£volume_Bâ†’C â‰¤ remaining_capacity
 function filterByCapacity(
   flows: DemandFlow[],
   zoneB: string,
@@ -20,8 +20,8 @@ function filterByCapacity(
   );
 }
 
-// ── D17 — Score Zone B→C candidates ──────────────────────────────────────────
-// Same formula as Phase 1, normalized across B→C candidates only
+// â”€â”€ D17 â€” Score Zone Bâ†’C candidates â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Same formula as Phase 1, normalized across Bâ†’C candidates only
 function scoreCandidates(candidates: DemandFlow[]): CandidateBatch[] {
   const asCandidateBatches: CandidateBatch[] = candidates.map(flow => {
     const travelKm = roadDistance(
@@ -45,8 +45,8 @@ function scoreCandidates(candidates: DemandFlow[]): CandidateBatch[] {
   return scoreAndRankBatches(asCandidateBatches);
 }
 
-// ── D18 — Extension cost ──────────────────────────────────────────────────────
-// cost_extend = cost(B→C) + cost(C→home_base)
+// â”€â”€ D18 â€” Extension cost â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// cost_extend = cost(Bâ†’C) + cost(Câ†’home_base)
 function computeExtensionCost(
   bLat: number, bLng: number,
   cLat: number, cLng: number,
@@ -58,8 +58,8 @@ function computeExtensionCost(
   );
 }
 
-// ── D19 — New dispatch cost ───────────────────────────────────────────────────
-// cost_new = cost(home→B) + cost(B→C) + cost(C→home)
+// â”€â”€ D19 â€” New dispatch cost â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// cost_new = cost(homeâ†’B) + cost(Bâ†’C) + cost(Câ†’home)
 function computeNewDispatchCost(
   homeLat: number, homeLng: number,
   bLat: number, bLng: number,
@@ -72,20 +72,20 @@ function computeNewDispatchCost(
   );
 }
 
-// ── D21 — Emergency re-batch for rejected flows that have been waiting too long ─
+// â”€â”€ D21 â€” Emergency re-batch for rejected flows that have been waiting too long â”€
 function triggerEmergencyReBatch(flow: DemandFlow): void {
   if (flow.avg_waiting_hours * 60 >= C.MAX_FLOW_WAITING_MINUTES) {
     console.warn(
-      `[Phase 4] Emergency re-batch triggered for ${flow.origin} → ${flow.destination}`
+      `[Phase 4] Emergency re-batch triggered for ${flow.origin} â†’ ${flow.destination}`
     );
     // Signal is returned to the batch cycle which re-runs for this flow immediately.
     // In production this would publish to a queue or call the cycle runner directly.
   }
 }
 
-// ── Main export ───────────────────────────────────────────────────────────────
-// Returns the full RoutePlan: which zones, which B→C shipment IDs.
-// If no viable Zone C exists, returns the A→B-only plan.
+// â”€â”€ Main export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Returns the full RoutePlan: which zones, which Bâ†’C shipment IDs.
+// If no viable Zone C exists, returns the Aâ†’B-only plan.
 export async function planFullRoute(
   batch: CandidateBatch,
   remainingCapacity: number,
@@ -95,18 +95,18 @@ export async function planFullRoute(
 ): Promise<RoutePlan> {
   const zoneB = batch.destination;
 
-  // D16 — eligible Zone C flows
+  // D16 â€” eligible Zone C flows
   const eligible = filterByCapacity(allFlows, zoneB, remainingCapacity);
 
   if (eligible.length === 0) {
     return { route: [batch.origin, zoneB], bc_shipment_ids: [], bc_total_volume: 0 };
   }
 
-  // D17 — score and rank Zone C candidates
+  // D17 â€” score and rank Zone C candidates
   const ranked = scoreCandidates(eligible);
   const best = ranked[0];
 
-  // D18, D19 — feasibility check
+  // D18, D19 â€” feasibility check
   const costExtend = computeExtensionCost(
     batch.destination_lat, batch.destination_lng,
     best.destination_lat, best.destination_lng,
@@ -118,7 +118,7 @@ export async function planFullRoute(
     best.destination_lat, best.destination_lng
   );
 
-  // D21 — emergency re-batch for rejected candidates
+  // D21 â€” emergency re-batch for rejected candidates
   for (const rejected of ranked.slice(1)) {
     const flow = allFlows.find(
       f => f.origin === rejected.origin && f.destination === rejected.destination
@@ -126,7 +126,7 @@ export async function planFullRoute(
     if (flow) triggerEmergencyReBatch(flow);
   }
 
-  // D20 — extend only if cost_extend < cost_new
+  // D20 â€” extend only if cost_extend < cost_new
   if (costExtend >= costNew) {
     const bestFlow = allFlows.find(
       f => f.origin === best.origin && f.destination === best.destination
@@ -135,7 +135,7 @@ export async function planFullRoute(
     return { route: [batch.origin, zoneB], bc_shipment_ids: [], bc_total_volume: 0 };
   }
 
-  // Fetch the actual Zone B→C shipment IDs to claim
+  // Fetch the actual Zone Bâ†’C shipment IDs to claim
   const { data: bcShipments } = await supabase
     .from('shipments')
     .select('id, order_details(qty, products(capacity_units))')

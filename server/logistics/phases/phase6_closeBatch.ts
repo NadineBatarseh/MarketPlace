@@ -1,5 +1,5 @@
-import supabase from '../../supabase';
-import { Batch } from '../types';
+import supabase from '../../supabase.js';
+import { Batch } from '../types.js';
 
 interface CloseBatchParams {
   id: string;
@@ -10,7 +10,7 @@ interface CloseBatchParams {
   reserved_until: string | null;
 }
 
-// Phase 6 — Persist the batch record and mark it PENDING_ASSIGNMENT.
+// Phase 6 â€” Persist the batch record and mark it PENDING_ASSIGNMENT.
 // All shipments have already been claimed atomically in Phase 5.
 export async function closeBatch(params: CloseBatchParams): Promise<Batch | null> {
   const now = new Date().toISOString();
@@ -38,7 +38,7 @@ export async function closeBatch(params: CloseBatchParams): Promise<Batch | null
   }
 
   console.log(
-    `[Phase 6] Batch ${params.id} closed — route: ${params.route.join(' → ')}`
+    `[Phase 6] Batch ${params.id} closed â€” route: ${params.route.join(' â†’ ')}`
   );
 
   return data as Batch;

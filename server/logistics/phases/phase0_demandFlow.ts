@@ -1,9 +1,9 @@
-import { supabase } from '../../supabase';
-import { DemandFlow } from '../types';
+import { supabase } from '../../supabase.js';
+import { DemandFlow } from '../types.js';
 
-// Phase 0 — Demand Flow Extraction
-// Groups all available + delayed shipments by pickup_zone → dropoff_zone direction.
-// No flow is rejected at this stage — even a single-shipment flow is returned.
+// Phase 0 â€” Demand Flow Extraction
+// Groups all available + delayed shipments by pickup_zone â†’ dropoff_zone direction.
+// No flow is rejected at this stage â€” even a single-shipment flow is returned.
 // Low-count decisions are handled later in Phase 0b using MIN_BATCH_THRESHOLD,
 // urgency override, and max waiting time rules.
 export async function extractDemandFlows(): Promise<DemandFlow[]> {
@@ -19,7 +19,7 @@ export async function extractDemandFlows(): Promise<DemandFlow[]> {
   return (data as DemandFlow[]) ?? [];
 }
 
-// ── SQL function to create in Supabase ────────────────────────────────────────
+// â”€â”€ SQL function to create in Supabase â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //
 // CREATE OR REPLACE FUNCTION extract_demand_flows()
 // RETURNS TABLE (

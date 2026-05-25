@@ -1,38 +1,38 @@
-import { supabase } from '../supabase';
+import { supabase } from '../supabase.js';
 
 export const C = {
-  // ── Capacity (overridable from batch_config) ─────────────────
+  // â”€â”€ Capacity (overridable from batch_config) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   MAX_VOLUME: 100,
   MAX_STOPS: 20,
 
-  // ── Batch threshold (D5) ─────────────────────────────────────
+  // â”€â”€ Batch threshold (D5) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   MIN_BATCH_THRESHOLD: 5,
 
-  // ── Time windows (MAX_FLOW_WAITING_MINUTES overridable) ──────
+  // â”€â”€ Time windows (MAX_FLOW_WAITING_MINUTES overridable) â”€â”€â”€â”€â”€â”€
   CYCLE_INTERVAL_MINUTES: 30,
   MAX_FLOW_WAITING_MINUTES: 120,
 INTRA_CITY_MIN_TIME_BUFFER_MINUTES: 15,
 
-  // ── Max distance between stops (overridable from batch_config)
+  // â”€â”€ Max distance between stops (overridable from batch_config)
   MAX_DISTANCE_KM: 50,
 
-  // ── Scoring weights (must sum to 1) ─────────────────────────
+  // â”€â”€ Scoring weights (must sum to 1) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   W_N: 0.35,
   W_U: 0.45,
   W_D: 0.20,
 
-  // ── Dead-end penalty (D13) ──────────────────────────────────
+  // â”€â”€ Dead-end penalty (D13) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   BASE_PENALTY: 0.20,
 
-  // ── Emergency re-batch trigger threshold (D21) ──────────────
+  // â”€â”€ Emergency re-batch trigger threshold (D21) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   URGENCY_THRESHOLD: 0.70,
 
-  // ── Cost (F3) ───────────────────────────────────────────────
+  // â”€â”€ Cost (F3) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   COST_PER_KM: 2.5,
   ROAD_FACTOR: 1.3,
   AVERAGE_SPEED_KMH: 60,
 
-  // ── Driver assignment (D33) ─────────────────────────────────
+  // â”€â”€ Driver assignment (D33) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   W_PROX: 0.50,
   W_CAP: 0.30,
   W_LOAD: 0.20,
@@ -42,7 +42,7 @@ INTRA_CITY_MIN_TIME_BUFFER_MINUTES: 15,
   ASSIGNMENT_TIMEOUT_MS: 300_000,
   MAX_ASSIGNMENT_ROUNDS: 3,
 
-  // ── Intra-city sequencing (D31) ─────────────────────────────
+  // â”€â”€ Intra-city sequencing (D31) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   W_DIST: 0.60,
   W_URG: 0.40,
 };

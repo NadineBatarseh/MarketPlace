@@ -1,15 +1,15 @@
-import supabase from '../../supabase';
-import { Shipment } from '../types';
+import supabase from '../../supabase.js';
+import { Shipment } from '../types.js';
 
 interface BreakdownResult {
   re_pooled: string[];
   stranded: string[];
 }
 
-// Phase 9 — Breakdown Handling
+// Phase 9 â€” Breakdown Handling
 // When a courier reports a breakdown, shipments are split by physical custody:
-//   batched / reserved → re-pool as 'available' (still at origin, not yet collected)
-//   picked_up          → mark as 'stranded' (physically in the vehicle)
+//   batched / reserved â†’ re-pool as 'available' (still at origin, not yet collected)
+//   picked_up          â†’ mark as 'stranded' (physically in the vehicle)
 export async function handleBreakdown(batchId: string): Promise<BreakdownResult> {
   const { data: shipments, error } = await supabase
     .from('shipments')
@@ -58,7 +58,7 @@ export async function handleBreakdown(batchId: string): Promise<BreakdownResult>
       console.error('[Phase 9] stranded update error:', strandedError.message);
     }
 
-    // Alert dispatchers — in production this would send a push notification or email
+    // Alert dispatchers â€” in production this would send a push notification or email
     console.warn(
       `[Phase 9] STRANDED shipments require manual handling: [${alreadyCollected.join(', ')}]`
     );
