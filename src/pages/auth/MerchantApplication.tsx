@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import supabase from '../../lib/supabase';
 import { validateIsraeliId } from '../../utils/validateIsraeliId';
@@ -6,7 +6,8 @@ import { useFieldHint } from './useFieldHint';
 import './Auth.css';
 
 const MAX_IMAGES = 8;
-const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_FILE_BYTES = 5 * 1024 * 1024;
+const MAX_DOC_BYTES = 5 * 1024 * 1024;
 const DESC_MAX = 500;
 
 interface Category {
@@ -37,6 +38,11 @@ export default function MerchantApplication() {
   const idHint = useFieldHint();
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [idFrontFile, setIdFrontFile] = useState<File | null>(null);
+  const [idFrontPreview, setIdFrontPreview] = useState<string | null>(null);
+  const [idBackFile, setIdBackFile] = useState<File | null>(null);
+  const [idBackPreview, setIdBackPreview] = useState<string | null>(null);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [error, setError] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [submissionId, setSubmissionId] = useState('');
@@ -49,6 +55,26 @@ export default function MerchantApplication() {
   const imgInputRef = useRef<HTMLInputElement>(null);
   const storeTypeRef = useRef<HTMLDivElement>(null);
   const cityRef = useRef<HTMLDivElement>(null);
+  const idFrontRef = useRef<HTMLInputElement>(null);
+  const idBackRef = useRef<HTMLInputElement>(null);
+
+  const handleDocFile = useCallback((
+    file: File,
+    setFile: (f: File | null) => void,
+    setPreview: (url: string | null) => void,
+    setErr: (msg: string) => void
+  ) => {
+    if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
+      setErr('يُقبل فقط صور (JPG/PNG) أو PDF');
+      return;
+    }
+    if (file.size > MAX_DOC_BYTES) {
+      setErr('الحجم الأقصى للملف 5 ميجابايت');
+      return;
+    }
+    setFile(file);
+    setPreview(file.type.startsWith('image/') ? URL.createObjectURL(file) : null);
+  }, []);
 
   useEffect(() => {
     supabase
@@ -153,6 +179,16 @@ export default function MerchantApplication() {
       return;
     }
 
+    if (!idFrontFile) {
+      setError('يرجى رفع الوجه الأمامي للهوية الوطنية');
+      return;
+    }
+
+    if (!idBackFile) {
+      setError('يرجى رفع الوجه الخلفي للهوية الوطنية');
+      return;
+    }
+
     setLoading(true);
 
     const folderName = `${Date.now()}_${form.name_of_store.trim() || 'unknown'}`;
@@ -179,6 +215,28 @@ export default function MerchantApplication() {
       return;
     }
 
+    const uploadDoc = async (file: File, name: string) => {
+      const ext = file.name.split('.').pop();
+      const path = `${folderName}/${name}.${ext}`;
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from('merchant-id-docs')
+        .upload(path, file, { upsert: true });
+      if (uploadErr) throw new Error(uploadErr.message);
+      return uploadData.path;
+    };
+
+    let idFrontPath: string, idBackPath: string;
+    try {
+      [idFrontPath, idBackPath] = await Promise.all([
+        uploadDoc(idFrontFile, 'id-front'),
+        uploadDoc(idBackFile, 'id-back'),
+      ]);
+    } catch (err: unknown) {
+      setError('تعذّر رفع مستندات الهوية: ' + (err instanceof Error ? err.message : String(err)));
+      setLoading(false);
+      return;
+    }
+
     const { data, error: dbError } = await supabase
       .from('merchant_applications')
       .insert({
@@ -192,6 +250,8 @@ export default function MerchantApplication() {
         Type_of_store: form.type_of_store_id,
         description: form.description,
         pictures: uploadedUrls.length > 0 ? uploadedUrls : null,
+        id_front_url: idFrontPath,
+        id_back_url: idBackPath,
         status: 'pending',
       })
       .select('id')
@@ -443,9 +503,59 @@ export default function MerchantApplication() {
             />
           </div>
 
+          <div className="auth-doc-section">
+            <div className="auth-doc-section-title">🪪 الهوية الوطنية</div>
+            <div className="auth-row">
+              {([
+                { label: 'الوجه الأمامي', file: idFrontFile, preview: idFrontPreview, ref: idFrontRef, setFile: setIdFrontFile, setPreview: setIdFrontPreview },
+                { label: 'الوجه الخلفي',  file: idBackFile,  preview: idBackPreview,  ref: idBackRef,  setFile: setIdBackFile,  setPreview: setIdBackPreview  },
+              ] as const).map(({ label, file, preview, ref, setFile, setPreview }) => (
+                <div key={label} className="auth-field">
+                  <label>{label} <span className="auth-required-star">*</span></label>
+                  <div
+                    className={`auth-doc-upload${file ? ' auth-doc-upload--filled' : ''}`}
+                    onClick={() => ref.current?.click()}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleDocFile(f, setFile, setPreview, setError); }}
+                  >
+                    {preview ? (
+                      <img src={preview} alt={label} className="auth-doc-preview-img" />
+                    ) : file ? (
+                      <span className="auth-doc-filename">{file.name}</span>
+                    ) : (
+                      <>
+                        <span className="auth-doc-icon">📄</span>
+                        <span className="auth-doc-hint">اضغط أو اسحب الملف هنا</span>
+                        <span className="auth-doc-sub">JPG / PNG / PDF — حتى 5 ميجابايت</span>
+                      </>
+                    )}
+                  </div>
+                  <input ref={ref} type="file" accept="image/*,application/pdf" style={{ display: 'none' }}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) handleDocFile(f, setFile, setPreview, setError); }} />
+                  {file && (
+                    <button type="button" className="auth-doc-remove" onClick={() => { setFile(null); setPreview(null); }}>× إزالة</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="auth-privacy-notice">
+            🔒 <strong>خصوصية بياناتك:</strong> يتم تخزين المستندات المرفوعة بشكل آمن، ولا يمكن الاطلاع عليها إلا من قِبل فريق الإدارة المخوّل. لن تُستخدم بياناتك لأي غرض خارج نطاق مراجعة طلبك.
+          </div>
+
+          <label className="auth-privacy-check">
+            <input
+              type="checkbox"
+              checked={privacyAccepted}
+              onChange={e => setPrivacyAccepted(e.target.checked)}
+            />
+            أوافق على استخدام بياناتي ومستنداتي لأغراض مراجعة طلب الانضمام فقط
+          </label>
+
           {error && <p className="auth-error">{error}</p>}
 
-          <button type="submit" className="auth-submit" disabled={loading}>
+          <button type="submit" className="auth-submit" disabled={loading || !privacyAccepted}>
             {loadingLabel}
           </button>
         </form>
