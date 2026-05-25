@@ -24,7 +24,7 @@ export default function CheckoutPage() {
   const handlePay = async () => {
     if (!customer) { navigate('/login'); return; }
     if (!payment)  { setPayError('الرجاء اختيار طريقة الدفع'); return; }
-    if (cartItems.length === 0) { setPayError('السلة فارغة'); return; }
+    if (activeItems.length === 0) { setPayError('لا توجد منتجات متاحة للشراء في سلتك'); return; }
 
     setPaying(true);
     setPayError(null);
@@ -42,8 +42,8 @@ export default function CheckoutPage() {
 
       if (ordErr || !orderData) throw ordErr ?? new Error('فشل إنشاء الطلب');
 
-      // 2. Insert order_details for every cart item
-      const details = cartItems.map(item => ({
+      // 2. Insert order_details for active (non-deleted) cart items only
+      const details = activeItems.map(item => ({
         order_id:   orderData.id,
         product_id: item.id,
         qty:        item.quantity,
@@ -69,8 +69,11 @@ export default function CheckoutPage() {
     }
   };
 
+  const activeItems  = cartItems.filter(item => !item.isDeleted);
+  const hasDeleted   = cartItems.some(item => item.isDeleted);
+
   const DELIVERY_COST = 25;
-  const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotal = activeItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const total = subtotal + DELIVERY_COST;
 
   return (
@@ -202,30 +205,43 @@ export default function CheckoutPage() {
             {cartItems.length === 0 ? (
               <p className="co-empty">السلة فارغة</p>
             ) : (
-              <ul className="co-items">
-                {cartItems.map(item => (
-                  <li key={item.id} className="co-item">
-                    <div className="co-item-info">
-                      <span className="co-item-name">{item.name}</span>
-                      <span className="co-item-price">{(item.price * item.quantity).toLocaleString('ar-SA')} ₪</span>
-                      <div className="co-qty">
-                        <button type="button" onClick={() => updateCartQty(item.id, item.quantity - 1)}
-                          disabled={item.quantity <= 1}>−</button>
-                        <span>{item.quantity}</span>
-                        <button type="button" onClick={() => updateCartQty(item.id, item.quantity + 1)}>+</button>
+              <>
+                {hasDeleted && (
+                  <div className="co-deleted-warning">
+                    ⚠️ بعض المنتجات في سلتك لم تعد متاحة وستُستثنى من الطلب
+                  </div>
+                )}
+                <ul className="co-items">
+                  {cartItems.map(item => (
+                    <li key={item.id} className={`co-item${item.isDeleted ? ' co-item--deleted' : ''}`}>
+                      <div className="co-item-info">
+                        <span className="co-item-name">{item.name}</span>
+                        {item.isDeleted ? (
+                          <span className="co-item-deleted-msg">⚠️ تم حذف هذا المنتج من قبل التاجر</span>
+                        ) : (
+                          <>
+                            <span className="co-item-price">{(item.price * item.quantity).toLocaleString('ar-SA')} ₪</span>
+                            <div className="co-qty">
+                              <button type="button" onClick={() => updateCartQty(item.id, item.quantity - 1)}
+                                disabled={item.quantity <= 1}>−</button>
+                              <span>{item.quantity}</span>
+                              <button type="button" onClick={() => updateCartQty(item.id, item.quantity + 1)}>+</button>
+                            </div>
+                          </>
+                        )}
+                        <button type="button" className="co-remove" onClick={() => removeFromCart(item.id)}>
+                          🗑 إزالة
+                        </button>
                       </div>
-                      <button type="button" className="co-remove" onClick={() => removeFromCart(item.id)}>
-                        🗑 إزالة
-                      </button>
-                    </div>
-                    {item.image && (
-                      <div className="co-item-img">
-                        <img src={item.image} alt={item.name} />
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
+                      {item.image && (
+                        <div className="co-item-img">
+                          <img src={item.image} alt={item.name} />
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
 
             <div className="co-divider" />

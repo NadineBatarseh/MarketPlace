@@ -17,6 +17,7 @@ interface DBProduct {
   stock_Quantity: number;
   capacity_units: number | null;
   category_id?: string | null;
+  is_deleted?: boolean;
 }
 
 interface CategoryFilterDef {
@@ -1257,6 +1258,9 @@ export default function MerchantEditPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<DBProduct | null>(null);
   const [loadingProducts, setLoadingProducts] = useState(!!shop?.shop_id);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deleteStatus, setDeleteStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [deleteMsg, setDeleteMsg] = useState('');
 
   useEffect(() => {
     if (!shop?.shop_id) { setLoadingProducts(false); return; }
@@ -1265,21 +1269,74 @@ export default function MerchantEditPage() {
       .select('id, shop_id, title, description, price, image_urls, stock_Quantity, capacity_units')
       .eq('shop_id', shop.shop_id)
       .eq('isPublish', true)
+      .not('is_deleted', 'eq', true)
       .then(({ data, error }) => {
         if (!error && data) setProducts(data as DBProduct[]);
         setLoadingProducts(false);
       });
   }, [shop?.shop_id]);
 
-  const deleteProduct = async (id: string) => {
+  const closedDeleteModal = () => {
+    setPendingDeleteId(null);
+    setDeleteStatus('idle');
+    setDeleteMsg('');
+  };
+
+  const handleDeleteSiteOnly = async (id: string) => {
     if (!shop?.shop_id) return;
-    const { data: files } = await supabase.storage.from('product-images').list(id);
-    if (files && files.length > 0) {
-      await supabase.storage.from('product-images').remove(files.map(f => `${id}/${f.name}`));
+    setDeleteStatus('loading');
+    setDeleteMsg('');
+    const { error } = await supabase
+      .from('products')
+      .update({ is_deleted: true })
+      .eq('id', id)
+      .eq('shop_id', shop.shop_id);
+    if (error) {
+      setDeleteStatus('error');
+      setDeleteMsg('حدث خطأ أثناء الحذف، يرجى المحاولة مرة أخرى');
+      return;
     }
-    await supabase.from('product_variants').delete().eq('product_id', id);
-    const { error } = await supabase.from('products').delete().eq('id', id).eq('shop_id', shop.shop_id);
-    if (!error) setProducts(prev => prev.filter(p => p.id !== id));
+    setProducts(prev => prev.filter(p => p.id !== id));
+    closedDeleteModal();
+  };
+
+  const handleDeleteSiteAndMeta = async (id: string) => {
+    if (!shop?.shop_id) return;
+    setDeleteStatus('loading');
+    setDeleteMsg('');
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token ?? '';
+
+    let metaOk = false;
+    try {
+      const res = await fetch(`${API_BASE}/api/catalog/product/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      metaOk = res.ok;
+    } catch {
+      metaOk = false;
+    }
+
+    if (!metaOk) {
+      setDeleteStatus('error');
+      setDeleteMsg('تعذر حذف المنتج من كتالوج Meta، يرجى المحاولة مرة أخرى');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('products')
+      .update({ is_deleted: true })
+      .eq('id', id)
+      .eq('shop_id', shop.shop_id);
+    if (error) {
+      setDeleteStatus('error');
+      setDeleteMsg('تم الحذف من Meta لكن حدث خطأ في تحديث السجل، يرجى المحاولة مرة أخرى');
+      return;
+    }
+    setProducts(prev => prev.filter(p => p.id !== id));
+    closedDeleteModal();
   };
 
   if (!shop) {
@@ -1318,7 +1375,7 @@ export default function MerchantEditPage() {
               <div key={p.id} className="mep-product-card">
                 <div className="mep-product-actions">
                   <button type="button" className="mep-product-edit-btn" onClick={() => setEditingProduct(p)} title="تعديل المنتج">✏️</button>
-                  <button type="button" className="mep-product-del-btn" onClick={() => deleteProduct(p.id)} title="حذف المنتج">🗑</button>
+                  <button type="button" className="mep-product-del-btn" onClick={() => setPendingDeleteId(p.id)} title="حذف المنتج">🗑</button>
                 </div>
                 <div className="mep-product-img">
                   {p.image_urls?.[0] ? <img src={p.image_urls[0]} alt={p.title} /> : '📦'}
@@ -1356,6 +1413,52 @@ export default function MerchantEditPage() {
           onSave={updated => setProducts(prev => prev.map(p => p.id === updated.id ? updated : p))}
           onClose={() => setEditingProduct(null)}
         />
+      )}
+
+      {pendingDeleteId && (
+        <div className="mep-del-overlay" onClick={deleteStatus !== 'loading' ? closedDeleteModal : undefined}>
+          <div className="mep-del-modal" onClick={e => e.stopPropagation()}>
+            <div className="mep-del-modal-title">🗑 حذف المنتج</div>
+            <div className="mep-del-modal-msg">
+              هل تريد حذف المنتج من الموقع فقط، أم من الموقع ومن كتالوج Meta أيضًا؟
+            </div>
+
+            {deleteStatus === 'loading' && (
+              <div className="mep-del-modal-loading">جارٍ التنفيذ...</div>
+            )}
+
+            {deleteStatus === 'error' && (
+              <div className="mep-del-modal-error">{deleteMsg}</div>
+            )}
+
+            <div className="mep-del-modal-actions">
+              <button
+                type="button"
+                className="mep-del-btn-meta"
+                disabled={deleteStatus === 'loading'}
+                onClick={() => handleDeleteSiteAndMeta(pendingDeleteId)}
+              >
+                حذف من الموقع و Meta
+              </button>
+              <button
+                type="button"
+                className="mep-del-btn-site"
+                disabled={deleteStatus === 'loading'}
+                onClick={() => handleDeleteSiteOnly(pendingDeleteId)}
+              >
+                حذف من الموقع فقط
+              </button>
+              <button
+                type="button"
+                className="mep-del-btn-cancel"
+                disabled={deleteStatus === 'loading'}
+                onClick={closedDeleteModal}
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

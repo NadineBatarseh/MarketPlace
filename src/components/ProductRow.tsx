@@ -8,6 +8,7 @@ interface ProductRowProps {
   size?: string;
   onRemove: () => void;
   children?: React.ReactNode;
+  isDeleted?: boolean;
 }
 
 export default function ProductRow({
@@ -17,12 +18,14 @@ export default function ProductRow({
   size,
   onRemove,
   children,
+  isDeleted,
 }: ProductRowProps) {
   return (
-    <tr className="pt-row">
+    <tr className={`pt-row${isDeleted ? ' pt-row--deleted' : ''}`}>
       {/* Remove button */}
       <td className="pt-cell pt-cell-remove">
         <button
+          type="button"
           className="pt-remove-btn"
           onClick={onRemove}
           aria-label={`إزالة ${name}`}

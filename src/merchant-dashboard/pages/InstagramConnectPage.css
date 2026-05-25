@@ -230,3 +230,134 @@
   color: #dc2626;
   margin-bottom: 16px;
 }
+
+/* ── Import section ── */
+.igc-import-section {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid #f0f0f0;
+  text-align: right;
+}
+
+.igc-import-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #111;
+  margin-bottom: 8px;
+}
+
+.igc-import-desc {
+  font-size: 0.85rem;
+  color: #777;
+  margin: 0 0 20px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.igc-btn-import {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #6c3fc5 0%, #9b59b6 100%);
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 28px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.igc-btn-import:hover { opacity: 0.88; }
+
+.igc-import-loading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #f8f4ff;
+  border: 1px solid #e4d9f7;
+  border-radius: 12px;
+  padding: 16px 20px;
+  text-align: right;
+}
+
+.igc-import-spinner {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: 3px solid #e4d9f7;
+  border-top-color: #6c3fc5;
+  border-radius: 50%;
+  animation: igc-spin 0.8s linear infinite;
+}
+
+.igc-import-loading-title {
+  margin: 0 0 3px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #4f2d91;
+}
+
+.igc-import-loading-sub {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #9b86c8;
+}
+
+.igc-import-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border-radius: 12px;
+  padding: 16px 18px;
+  text-align: right;
+  flex-wrap: wrap;
+}
+
+.igc-import-result--success {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+}
+
+.igc-import-result--error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+}
+
+.igc-import-result > div { flex: 1; min-width: 0; }
+
+.igc-import-result-title {
+  margin: 0 0 3px;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.igc-import-result-msg {
+  margin: 0;
+  font-size: 0.82rem;
+  opacity: 0.85;
+  line-height: 1.5;
+}
+
+.igc-import-retry {
+  flex-shrink: 0;
+  align-self: center;
+  background: transparent;
+  border: 1.5px solid currentColor;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: inherit;
+  transition: opacity 0.2s;
+}
+
+.igc-import-retry:hover { opacity: 0.75; }

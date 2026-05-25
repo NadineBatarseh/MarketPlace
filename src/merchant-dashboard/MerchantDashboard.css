@@ -3154,3 +3154,97 @@
   padding: 0.4rem 0;
   font-style: italic;
 }
+
+/* ── Delete product confirmation modal ── */
+.mep-del-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+.mep-del-modal {
+  background: #fff;
+  border-radius: 16px;
+  padding: 28px 32px;
+  max-width: 420px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  direction: rtl;
+}
+.mep-del-modal-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 10px;
+}
+.mep-del-modal-msg {
+  font-size: 0.88rem;
+  color: #4b5563;
+  line-height: 1.65;
+  margin-bottom: 20px;
+}
+.mep-del-modal-loading {
+  font-size: 0.85rem;
+  color: #6b7280;
+  margin-bottom: 12px;
+}
+.mep-del-modal-error {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #dc2626;
+  background: #fff1f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 14px;
+}
+.mep-del-modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mep-del-btn-meta {
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 11px 16px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.mep-del-btn-meta:hover:not(:disabled) { background: #b91c1c; }
+.mep-del-btn-site {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 11px 16px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.mep-del-btn-site:hover:not(:disabled) { background: #fee2e2; }
+.mep-del-btn-cancel {
+  background: #f3f4f6;
+  color: #374151;
+  border: none;
+  border-radius: 8px;
+  padding: 11px 16px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.mep-del-btn-cancel:hover:not(:disabled) { background: #e5e7eb; }
+.mep-del-btn-meta:disabled,
+.mep-del-btn-site:disabled,
+.mep-del-btn-cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

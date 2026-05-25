@@ -21,6 +21,7 @@ export interface CartItem {
   quantity: number;
   color?: string;
   size?: string;
+  isDeleted?: boolean;
 }
 
 export interface FavoriteItem {
@@ -191,7 +192,7 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
 
       const { data: items, error } = await supabase
         .from('cart_items')
-        .select('product_id, quantity, color, size, products(id, title, image_urls, price)')
+        .select('product_id, quantity, color, size, products(id, title, image_urls, price, is_deleted)')
         .eq('cartSerial_id', serialId);
 
       if (error) { console.error('[ShopContext] load cart_items failed:', error); return; }
@@ -200,12 +201,13 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
       setCartItems((items as any[]).map((item) => ({
         id: cartItemKey(item.product_id, item.color ?? undefined, item.size ?? undefined),
         productId: item.product_id,
-        name: item.products?.title ?? 'منتج',
+        name: item.products?.title ?? 'منتج محذوف',
         image: item.products?.image_urls?.[0] ?? '',
         price: parseFloat(String(item.products?.price ?? '0').replace(/[^\d.]/g, '')) || 0,
         quantity: item.quantity ?? 1,
         color: item.color ?? undefined,
         size: item.size ?? undefined,
+        isDeleted: item.products == null || item.products.is_deleted === true,
       })));
     }
 
