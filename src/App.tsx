@@ -12,6 +12,7 @@ import RoleGuard from './components/RoleGuard';
 import OrderHistoryPage from './pages/orderHistory/OrderHistoryPage';
 import OrderTrackingPage from './pages/orderTrackingPage/OrderTrackingPage';
 import MetaConnectPage from './pages/MetaConnectPage';
+import PrivacyPolicyPage from './pages/privacy/PrivacyPolicyPage';
 
 
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
@@ -104,6 +105,7 @@ export default function App() {
               <Route path="/activate" element={<Activate />} />
               <Route path="/sync" element={<ProductsPage />} />
               <Route path="/meta-connect" element={<MetaConnectPage />} />
+              <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
 
               {/* Customer or guest browsing — other roles redirected to their home */}
               <Route path="/home" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><HomePage /></CustomerLayout></RoleGuard>} />
