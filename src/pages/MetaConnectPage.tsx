@@ -6,7 +6,7 @@ import Topbar from '../components/Topbar';
 import supabase from '../lib/supabase';
 
 const APP_ID = '1539852660587503';
-const REDIRECT_URI = 'https://attently-hard-juanita.ngrok-free.dev/auth/callback';
+const REDIRECT_URI = 'https://souq-link.com/auth/callback';
 const SCOPE = 'catalog_management';
 
 const PERMISSIONS = [
