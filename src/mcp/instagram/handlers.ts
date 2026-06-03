@@ -14,9 +14,9 @@ async function assertShopOwnership(shopId: string, userId: string): Promise<void
   const db = getServiceRoleClient();
   const { data } = await db
     .from('shops')
-    .select('shop_id')
+    .select('shop_id, merchants!inner(user_id)')
     .eq('shop_id', shopId)
-    .eq('owner_id', userId)
+    .eq('merchants.user_id', userId)
     .maybeSingle();
   if (!data) throw new Error('Access denied: this store does not belong to your account.');
 }

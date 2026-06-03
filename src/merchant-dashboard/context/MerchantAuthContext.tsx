@@ -38,10 +38,18 @@ interface MerchantAuthContextType {
 const MerchantAuthContext = createContext<MerchantAuthContextType | null>(null);
 
 async function fetchMerchantShop(userId: string): Promise<MerchantShop | null> {
+  const { data: merchantData } = await supabase
+    .from('merchants')
+    .select('id')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (!merchantData) return null;
+
   const { data, error } = await supabase
     .from('shops')
     .select('*')
-    .eq('owner_id', userId)
+    .eq('merchant_id', merchantData.id)
     .maybeSingle();
 
   if (error || !data) return null;
