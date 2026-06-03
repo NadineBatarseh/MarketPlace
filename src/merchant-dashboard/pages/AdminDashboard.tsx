@@ -7,6 +7,7 @@ import AdminSentMessages from '../../pages/admin/AdminSentMessages';
 import emailjs from '@emailjs/browser';
 import supabase from '../../lib/supabase';
 import ChangePasswordModal from '../../components/ChangePasswordModal';
+import ApplicationCard, { AppIcons, type MediaSpec, type InfoSpec } from '../components/ApplicationCard';
 import './AdminDashboard.css';
 
 // ── Sidebar item component (mirrors MerchantDashboard pattern) ─────────────
@@ -77,7 +78,7 @@ interface HubWorkerApp {
   platform_email: string | null;
 }
 
-type FilterTab = 'pending' | 'approved' | 'rejected';
+type FilterTab = 'all' | 'pending' | 'approved' | 'rejected';
 type Section = 'merchant' | 'delivery' | 'hubworker' | 'batches' | 'logistics' | 'couriers' | 'shops' | 'messages';
 
 interface BatchConfigForm {
@@ -114,9 +115,35 @@ interface Batch {
 }
 
 const TAB_LABELS: Record<FilterTab, string> = {
+  all: 'الكل',
   pending: 'قيد المراجعة',
   approved: 'موافق عليها',
   rejected: 'مرفوضة',
+};
+
+/* Status classification box icons (right-aligned in RTL) */
+const TAB_ICONS: Record<FilterTab, JSX.Element> = {
+  all: (
+    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
+      <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+    </svg>
+  ),
+  pending: (
+    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+    </svg>
+  ),
+  approved: (
+    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
+    </svg>
+  ),
+  rejected: (
+    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
+    </svg>
+  ),
 };
 
 const STORE_TYPES: Record<string, string> = {
@@ -134,6 +161,18 @@ const VEHICLE_TYPES: Record<string, string> = {
   car: 'سيارة',
   van: 'فان',
   bicycle: 'دراجة هوائية',
+};
+
+const SECTION_HEADERS: Record<string, { title: string; subtitle: string }> = {
+  merchant:  { title: 'طلبات التجار',     subtitle: 'إدارة ومراجعة طلبات انضمام التجار إلى المنصة' },
+  delivery:  { title: 'طلبات المناديب',   subtitle: 'إدارة ومراجعة طلبات انضمام مناديب التوصيل إلى المنصة' },
+  hubworker: { title: 'عمال المستودع',    subtitle: 'إدارة ومراجعة طلبات انضمام عمال المستودع إلى المنصة' },
+};
+
+/* Table column headers for the applications list (per kind) */
+const APP_TABLE_COLUMNS: Record<'merchant' | 'delivery', string[]> = {
+  merchant: ['المتجر', 'نوع المتجر', 'الموقع', 'التواصل', 'المستندات', 'الحالة', 'الإجراءات'],
+  delivery: ['المندوب', 'نوع المركبة', 'الموقع', 'التواصل', 'المستندات', 'الحالة', 'الإجراءات'],
 };
 
 type ApproveModalState<T> = {
@@ -160,6 +199,11 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState<FilterTab>('pending');
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
+
+  // Toolbar state (applications list)
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortOrder, setSortOrder]     = useState<'newest' | 'oldest'>('newest');
+  const [typeFilter, setTypeFilter]   = useState<string>('all');
 
   const today = new Date().toLocaleDateString('ar-EG', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
@@ -255,7 +299,11 @@ export default function AdminDashboard() {
   useEffect(() => { loadApps(); }, []);
   useEffect(() => { loadDeliveryApps(); }, []);
   useEffect(() => { loadHubApps(); }, []);
-  useEffect(() => { contentRef.current?.scrollTo({ top: 0 }); }, [activeSection]);
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 });
+    setSearchQuery('');
+    setTypeFilter('all');
+  }, [activeSection]);
 
   useEffect(() => {
     const merchantSub = supabase
@@ -751,14 +799,51 @@ export default function AdminDashboard() {
 
   // ── Derived ─────────────────────────────────────────────────────────────────
 
-  const filteredMerchants = apps.filter(a => a.status === activeTab);
-  const filteredDelivery = deliveryApps.filter(a => a.status === activeTab);
-  const filteredHub = hubApps.filter(a => a.status === activeTab);
+  const search = searchQuery.trim().toLowerCase();
+  const matchesSearch = (fields: (string | null | undefined)[]) =>
+    search === '' || fields.some(f => (f ?? '').toString().toLowerCase().includes(search));
+
+  const byStatus = (status: string) => activeTab === 'all' || status === activeTab;
+  const byDate = <T extends { created_at: string }>(arr: T[]): T[] =>
+    [...arr].sort((a, b) =>
+      sortOrder === 'newest'
+        ? +new Date(b.created_at) - +new Date(a.created_at)
+        : +new Date(a.created_at) - +new Date(b.created_at));
+
+  const filteredMerchants = byDate(apps
+    .filter(a => byStatus(a.status))
+    .filter(a => typeFilter === 'all' || a.Type_of_store === typeFilter)
+    .filter(a => matchesSearch([a.name_of_store, a.name_of_owner, a.phone_number, a.email, a.city])));
+
+  const filteredDelivery = byDate(deliveryApps
+    .filter(a => byStatus(a.status))
+    .filter(a => typeFilter === 'all' || a.type_of_vehicle === typeFilter)
+    .filter(a => matchesSearch([a.name, a.phone_number, a.email, a.ID_number])));
+
+  const filteredHub = byDate(hubApps
+    .filter(a => byStatus(a.status))
+    .filter(a => matchesSearch([a.name, a.phone_number, a.email, a.place_of_residence])));
+
+  const refreshCurrent = () => {
+    if (activeSection === 'merchant') loadApps();
+    else if (activeSection === 'delivery') loadDeliveryApps();
+    else if (activeSection === 'hubworker') loadHubApps();
+  };
+
+  // Type-filter options for the toolbar dropdown (varies per section)
+  const typeFilterOptions: { value: string; label: string }[] =
+    activeSection === 'merchant'
+      ? Object.entries(STORE_TYPES).map(([value, label]) => ({ value, label }))
+      : activeSection === 'delivery'
+        ? Object.entries(VEHICLE_TYPES).map(([value, label]) => ({ value, label }))
+        : [];
 
   const loading = activeSection === 'merchant' ? appsLoading : activeSection === 'delivery' ? deliveryLoading : activeSection === 'hubworker' ? hubLoading : false;
   const loadError = activeSection === 'merchant' ? appsError : activeSection === 'delivery' ? deliveryError : activeSection === 'hubworker' ? hubError : '';
   const currentApps = activeSection === 'merchant' ? filteredMerchants : activeSection === 'delivery' ? filteredDelivery : filteredHub;
   const allCurrentApps = activeSection === 'merchant' ? apps : activeSection === 'delivery' ? deliveryApps : hubApps;
+  const isAppSection = activeSection === 'merchant' || activeSection === 'delivery' || activeSection === 'hubworker';
+  const sectionHeader = SECTION_HEADERS[activeSection];
 
   return (
     <div className="ad-root">
@@ -970,121 +1055,185 @@ export default function AdminDashboard() {
         <main className="ad-content" ref={contentRef}>
           {loadError && <div className="ad-error">{loadError}</div>}
 
+          {/* Page header — application sections */}
+          {isAppSection && sectionHeader && (
+            <div className="ad-page-head">
+              <h1 className="ad-page-title">{sectionHeader.title}</h1>
+              <p className="ad-page-subtitle">{sectionHeader.subtitle}</p>
+            </div>
+          )}
+
           {/* Filter tabs — only for application sections */}
-          {activeSection !== 'batches' && activeSection !== 'logistics' && activeSection !== 'couriers' && activeSection !== 'shops' && activeSection !== 'messages' && (
+          {isAppSection && (
             <div className="ad-tabs">
-              {(['pending', 'approved', 'rejected'] as FilterTab[]).map(tab => {
-                const count = allCurrentApps.filter(a => a.status === tab).length;
+              {(['all', 'pending', 'approved', 'rejected'] as FilterTab[]).map(tab => {
+                const count = tab === 'all'
+                  ? allCurrentApps.length
+                  : allCurrentApps.filter(a => a.status === tab).length;
                 return (
                   <button
                     key={tab}
                     type="button"
                     className={`ad-tab ad-tab--${tab}${activeTab === tab ? ' ad-tab--active' : ''}`}
                     onClick={() => setActiveTab(tab)}
+                    aria-pressed={activeTab === tab}
                   >
-                    {TAB_LABELS[tab]}
+                    <span className="ad-tab-label">{TAB_LABELS[tab]}</span>
                     <span className="ad-tab-count">{count}</span>
+                    <span className="ad-tab-icon" aria-hidden="true">{TAB_ICONS[tab]}</span>
                   </button>
                 );
               })}
             </div>
           )}
 
-          {activeSection !== 'batches' && activeSection !== 'logistics' && activeSection !== 'couriers' && activeSection !== 'shops' && activeSection !== 'messages' && (loading ? (
-            <div className="ad-loading">جاري تحميل الطلبات...</div>
-          ) : currentApps.length === 0 ? (
-            <div className="ad-empty">لا توجد طلبات في هذا القسم</div>
-          ) : (
-        <div className="ad-cards">
-          {/* ── Merchant cards ── */}
-          {activeSection === 'merchant' && (filteredMerchants as MerchantApp[]).map(app => (
-            <div key={app.id} className="ad-card">
-              <div className="ad-card-body">
-                <div className="ad-card-header-row">
-                  <div className="ad-card-name">{app.name_of_store}</div>
-                  {app.Type_of_store && (
-                    <span className="ad-type-chip">{STORE_TYPES[app.Type_of_store] ?? app.Type_of_store}</span>
-                  )}
-                </div>
-                <div className="ad-card-owner">
-                  <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                  </svg>
-                  {app.name_of_owner}
-                  <span className="ad-card-email"> — {app.email}</span>
-                </div>
-                <div className="ad-meta-row">
-                  <div className="ad-card-detail">
-                    <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.1 19.79 19.79 0 0 1 1.62 4.5 2 2 0 0 1 3.6 2.3h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.08 6.08l.97-.97a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.73 2.02z"/>
-                    </svg>
-                    {app.phone_number}
-                  </div>
-                  <div className="ad-card-detail">
-                    <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 1 1 18 0z"/><circle cx="12" cy="10" r="3"/>
-                    </svg>
-                    {app.city}
-                  </div>
-                </div>
-                {app.description && <div className="ad-card-desc">{app.description}</div>}
-                {app.pictures && app.pictures.length > 0 && (
-                  <div className="ad-pics-row">
-                    {app.pictures.map((url, i) => (
-                      <img key={i} src={url} alt={`صورة ${i + 1}`} className="ad-pic-thumb" onClick={() => setLightbox(url)} />
-                    ))}
-                  </div>
-                )}
-                <div className="ad-card-date">
-                  تاريخ الطلب:{' '}
-                  {new Date(app.created_at).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}
-                </div>
-                {(app.id_front_url || app.id_back_url) && (
-                  <div className="ad-doc-row">
-                    {([
-                      { path: app.id_front_url, label: '💳 هوية (أمامي)' },
-                      { path: app.id_back_url,  label: '💳 هوية (خلفي)' },
-                    ] as const).filter(d => d.path).map(({ path, label }) => (
-                      <button
-                        key={label}
-                        type="button"
-                        className="ad-doc-link"
-                        onClick={async () => {
-                          const { data, error } = await supabase.storage
-                            .from('merchant-id-docs')
-                            .createSignedUrl(path!, 3600);
-                          if (error || !data?.signedUrl) { alert('تعذّر فتح المستند'); return; }
-                          window.open(data.signedUrl, '_blank');
-                        }}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
+          {/* Toolbar — refresh / search / filter / sort */}
+          {isAppSection && (
+            <div className="ad-toolbar">
+              <button
+                type="button"
+                className="ad-toolbar-refresh"
+                onClick={refreshCurrent}
+                disabled={loading}
+                title="تحديث"
+              >
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" />
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                </svg>
+                تحديث
+              </button>
+
+              <div className="ad-toolbar-search">
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="بحث بالاسم، المتجر، الهاتف..."
+                />
+                {searchQuery && (
+                  <button type="button" className="ad-toolbar-search-clear" onClick={() => setSearchQuery('')} aria-label="مسح البحث">×</button>
                 )}
               </div>
-              <div className="ad-card-actions">
-                {activeTab !== 'approved' && (
-                  <button type="button" className="ad-btn ad-btn--approve" disabled={actionLoading === app.id} onClick={() => openApproveModal(app)}>
-                    ✅ موافقة
-                  </button>
-                )}
-                {activeTab === 'approved' && (
-                  <button type="button" className="ad-btn ad-btn--reject" disabled={actionLoading === app.id} onClick={() => updateMerchantStatus(app.id, 'rejected')}>
-                    {actionLoading === app.id ? '...' : '↩ سحب الموافقة'}
-                  </button>
-                )}
-                {activeTab !== 'rejected' && (
-                  <button type="button" className="ad-btn ad-btn--reject" disabled={actionLoading === app.id} onClick={() => openRejectModal(app)}>
-                    ❌ رفض
-                  </button>
-                )}
-                <button type="button" className="ad-btn ad-btn--delete" disabled={actionLoading === app.id} onClick={() => deleteMerchantApp(app)}>
-                  🗑 حذف
-                </button>
+
+              <div className="ad-toolbar-spacer" />
+
+              {typeFilterOptions.length > 0 && (
+                <div className="ad-toolbar-select">
+                  <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+                  </svg>
+                  <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
+                    <option value="all">كل الأنواع</option>
+                    {typeFilterOptions.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="ad-toolbar-select">
+                <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="3" y1="6" x2="13" y2="6" /><line x1="3" y1="12" x2="11" y2="12" /><line x1="3" y1="18" x2="9" y2="18" />
+                  <polyline points="17 8 17 18" /><polyline points="20 15 17 18 14 15" />
+                </svg>
+                <select value={sortOrder} onChange={e => setSortOrder(e.target.value as 'newest' | 'oldest')}>
+                  <option value="newest">ترتيب: الأحدث</option>
+                  <option value="oldest">ترتيب: الأقدم</option>
+                </select>
               </div>
             </div>
-          ))}
+          )}
+
+          {activeSection !== 'batches' && activeSection !== 'logistics' && activeSection !== 'couriers' && activeSection !== 'shops' && activeSection !== 'messages' && (loading ? (
+            <div className="ad-state" role="status" aria-live="polite">
+              <span className="ad-state-spin" aria-hidden="true" />
+              <div className="ad-state-title">جاري تحميل الطلبات…</div>
+              <div className="ad-state-sub">يرجى الانتظار قليلاً بينما نجلب أحدث الطلبات.</div>
+            </div>
+          ) : currentApps.length === 0 ? (
+            <div className="ad-state">
+              <div className="ad-state-icon">{AppIcons.inbox}</div>
+              <div className="ad-state-title">
+                {activeTab === 'all'      ? 'لا توجد طلبات' :
+                 activeTab === 'pending'  ? 'لا توجد طلبات قيد المراجعة' :
+                 activeTab === 'approved' ? 'لا توجد طلبات موافق عليها بعد' :
+                                            'لا توجد طلبات مرفوضة'}
+              </div>
+              <div className="ad-state-sub">
+                ستظهر الطلبات الجديدة هنا فور وصولها — يمكنك مراجعتها والرد عليها مباشرة.
+              </div>
+            </div>
+          ) : (
+        <div className={activeSection === 'hubworker' ? 'ad-cards' : 'ad-table'}>
+          {/* ── Table header (merchant / delivery) ── */}
+          {(activeSection === 'merchant' || activeSection === 'delivery') && (
+            <div className="ad-table-head" aria-hidden="true">
+              {APP_TABLE_COLUMNS[activeSection].map((col, i) => (
+                <div key={i} className="ad-row-cell ad-table-head-cell">{col}</div>
+              ))}
+            </div>
+          )}
+
+          {/* ── Merchant cards ── */}
+          {activeSection === 'merchant' && (filteredMerchants as MerchantApp[]).map(app => {
+            const documents: MediaSpec[] = [];
+            if (app.pictures) {
+              app.pictures.forEach((url, i) => {
+                documents.push({ url, label: `صورة المتجر ${i + 1}`, variant: 'picture' });
+              });
+            }
+            if (app.id_front_url) documents.push({ path: app.id_front_url, bucket: 'merchant-id-docs', label: 'الهوية — الواجهة' });
+            if (app.id_back_url)  documents.push({ path: app.id_back_url,  bucket: 'merchant-id-docs', label: 'الهوية — الخلفية' });
+
+            const contactItems: InfoSpec[] = [
+              { icon: AppIcons.mail,  label: 'البريد الإلكتروني', value: app.email,        href: `mailto:${app.email}` },
+              { icon: AppIcons.phone, label: 'رقم الهاتف',       value: app.phone_number, href: `tel:${app.phone_number}` },
+              { icon: AppIcons.pin,   label: 'المدينة',          value: app.city },
+            ];
+
+            const detailItems: InfoSpec[] = [];
+            if (app.Type_of_store) {
+              detailItems.push({
+                icon: AppIcons.store,
+                label: 'نوع المتجر',
+                value: STORE_TYPES[app.Type_of_store] ?? app.Type_of_store,
+              });
+            }
+            detailItems.push({
+              icon: AppIcons.user,
+              label: 'صاحب المتجر',
+              value: app.name_of_owner,
+            });
+
+            return (
+              <ApplicationCard
+                key={app.id}
+                applicantName={app.name_of_store}
+                ownerName={app.name_of_owner}
+                typeChip={app.Type_of_store ? (STORE_TYPES[app.Type_of_store] ?? app.Type_of_store) : undefined}
+                appKind="merchant"
+                status={app.status}
+                location={app.city}
+                phone={app.phone_number}
+                email={app.email}
+                contactItems={contactItems}
+                detailItems={detailItems}
+                description={app.description}
+                documents={documents}
+                createdAt={app.created_at}
+                loading={actionLoading === app.id}
+                onApprove={() => openApproveModal(app)}
+                onReject={() => openRejectModal(app)}
+                onWithdraw={() => updateMerchantStatus(app.id, 'rejected')}
+                onDelete={() => deleteMerchantApp(app)}
+                onLightbox={(url) => setLightbox(url)}
+              />
+            );
+          })}
 
           {/* ── Hub worker cards ── */}
           {activeSection === 'hubworker' && (filteredHub as HubWorkerApp[]).map(app => (
@@ -1128,17 +1277,17 @@ export default function AdminDashboard() {
                 </div>
               </div>
               <div className="ad-card-actions">
-                {activeTab !== 'approved' && (
+                {app.status !== 'approved' && (
                   <button type="button" className="ad-btn ad-btn--approve" disabled={hubActionLoading === app.id} onClick={() => openHubApproveModal(app)}>
                     ✅ موافقة
                   </button>
                 )}
-                {activeTab === 'approved' && (
+                {app.status === 'approved' && (
                   <button type="button" className="ad-btn ad-btn--reject" disabled={hubActionLoading === app.id} onClick={() => updateHubStatus(app.id, 'rejected')}>
                     {hubActionLoading === app.id ? '...' : '↩ سحب الموافقة'}
                   </button>
                 )}
-                {activeTab !== 'rejected' && (
+                {app.status !== 'rejected' && (
                   <button type="button" className="ad-btn ad-btn--reject" disabled={hubActionLoading === app.id} onClick={() => openHubRejectModal(app)}>
                     ❌ رفض
                   </button>
@@ -1151,89 +1300,57 @@ export default function AdminDashboard() {
           ))}
 
           {/* ── Delivery cards ── */}
-          {activeSection === 'delivery' && (filteredDelivery as DeliveryApp[]).map(app => (
-            <div key={app.id} className="ad-card">
-              <div className="ad-card-body">
-                <div className="ad-card-header-row">
-                  <div className="ad-card-name">{app.name}</div>
-                  {app.type_of_vehicle && (
-                    <span className="ad-type-chip">{VEHICLE_TYPES[app.type_of_vehicle] ?? app.type_of_vehicle}</span>
-                  )}
-                </div>
-                <div className="ad-card-owner">
-                  <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                    <polyline points="22,6 12,13 2,6"/>
-                  </svg>
-                  {app.email}
-                </div>
-                <div className="ad-meta-row">
-                  <div className="ad-card-detail">
-                    <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.1 19.79 19.79 0 0 1 1.62 4.5 2 2 0 0 1 3.6 2.3h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.08 6.08l.97-.97a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.73 2.02z"/>
-                    </svg>
-                    {app.phone_number}
-                  </div>
-                  <div className="ad-card-detail">
-                    <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                      <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-                    </svg>
-                    هوية: {app.ID_number}
-                  </div>
-                </div>
-                <div className="ad-card-date">
-                  تاريخ الطلب:{' '}
-                  {new Date(app.created_at).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}
-                </div>
-                {(app.id_front_url || app.id_back_url || app.license_front_url || app.license_back_url) && (
-                  <div className="ad-doc-row">
-                    {([
-                      { path: app.id_front_url,      label: '💳 هوية (أمامي)' },
-                      { path: app.id_back_url,       label: '💳 هوية (خلفي)' },
-                      { path: app.license_front_url, label: '🚗 رخصة (أمامي)' },
-                      { path: app.license_back_url,  label: '🚗 رخصة (خلفي)' },
-                    ] as const).filter(d => d.path).map(({ path, label }) => (
-                      <button
-                        key={label}
-                        type="button"
-                        className="ad-doc-link"
-                        onClick={async () => {
-                          const { data, error } = await supabase.storage
-                            .from('delivery-applications')
-                            .createSignedUrl(path!, 3600);
-                          if (error || !data?.signedUrl) { alert('تعذّر فتح المستند'); return; }
-                          window.open(data.signedUrl, '_blank');
-                        }}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="ad-card-actions">
-                {activeTab !== 'approved' && (
-                  <button type="button" className="ad-btn ad-btn--approve" disabled={deliveryActionLoading === app.id} onClick={() => openDeliveryApproveModal(app)}>
-                    ✅ موافقة
-                  </button>
-                )}
-                {activeTab === 'approved' && (
-                  <button type="button" className="ad-btn ad-btn--reject" disabled={deliveryActionLoading === app.id} onClick={() => updateDeliveryStatus(app.id, 'rejected')}>
-                    {deliveryActionLoading === app.id ? '...' : '↩ سحب الموافقة'}
-                  </button>
-                )}
-                {activeTab !== 'rejected' && (
-                  <button type="button" className="ad-btn ad-btn--reject" disabled={deliveryActionLoading === app.id} onClick={() => openDeliveryRejectModal(app)}>
-                    ❌ رفض
-                  </button>
-                )}
-                <button type="button" className="ad-btn ad-btn--delete" disabled={deliveryActionLoading === app.id} onClick={() => deleteDeliveryApp(app)}>
-                  🗑 حذف
-                </button>
-              </div>
-            </div>
-          ))}
+          {activeSection === 'delivery' && (filteredDelivery as DeliveryApp[]).map(app => {
+            const documents: MediaSpec[] = [];
+            if (app.id_front_url)      documents.push({ path: app.id_front_url,      bucket: 'delivery-applications', label: 'الهوية الوطنية — الواجهة' });
+            if (app.id_back_url)       documents.push({ path: app.id_back_url,       bucket: 'delivery-applications', label: 'الهوية الوطنية — الخلفية' });
+            if (app.license_front_url) documents.push({ path: app.license_front_url, bucket: 'delivery-applications', label: 'رخصة القيادة — الواجهة' });
+            if (app.license_back_url)  documents.push({ path: app.license_back_url,  bucket: 'delivery-applications', label: 'رخصة القيادة — الخلفية' });
+
+            const contactItems: InfoSpec[] = [
+              { icon: AppIcons.mail,  label: 'البريد الإلكتروني', value: app.email,        href: `mailto:${app.email}` },
+              { icon: AppIcons.phone, label: 'رقم الهاتف',       value: app.phone_number, href: `tel:${app.phone_number}` },
+            ];
+
+            const detailItems: InfoSpec[] = [];
+            if (app.type_of_vehicle) {
+              detailItems.push({
+                icon: AppIcons.car,
+                label: 'نوع المركبة',
+                value: VEHICLE_TYPES[app.type_of_vehicle] ?? app.type_of_vehicle,
+              });
+            }
+            if (app.ID_number) {
+              detailItems.push({
+                icon: AppIcons.idCard,
+                label: 'رقم الهوية الوطنية',
+                value: app.ID_number,
+              });
+            }
+
+            return (
+              <ApplicationCard
+                key={app.id}
+                applicantName={app.name}
+                ownerName="مندوب توصيل"
+                typeChip={app.type_of_vehicle ? (VEHICLE_TYPES[app.type_of_vehicle] ?? app.type_of_vehicle) : undefined}
+                appKind="delivery"
+                status={app.status}
+                phone={app.phone_number}
+                email={app.email}
+                contactItems={contactItems}
+                detailItems={detailItems}
+                documents={documents}
+                createdAt={app.created_at}
+                loading={deliveryActionLoading === app.id}
+                onApprove={() => openDeliveryApproveModal(app)}
+                onReject={() => openDeliveryRejectModal(app)}
+                onWithdraw={() => updateDeliveryStatus(app.id, 'rejected')}
+                onDelete={() => deleteDeliveryApp(app)}
+                onLightbox={(url) => setLightbox(url)}
+              />
+            );
+          })}
         </div>
           ))}
 
