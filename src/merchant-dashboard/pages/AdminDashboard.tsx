@@ -1042,8 +1042,8 @@ export default function AdminDashboard() {
                 {(app.id_front_url || app.id_back_url) && (
                   <div className="ad-doc-row">
                     {([
-                      { path: app.id_front_url, label: '🪪 هوية (أمامي)' },
-                      { path: app.id_back_url,  label: '🪪 هوية (خلفي)' },
+                      { path: app.id_front_url, label: '💳 هوية (أمامي)' },
+                      { path: app.id_back_url,  label: '💳 هوية (خلفي)' },
                     ] as const).filter(d => d.path).map(({ path, label }) => (
                       <button
                         key={label}
@@ -1189,8 +1189,8 @@ export default function AdminDashboard() {
                 {(app.id_front_url || app.id_back_url || app.license_front_url || app.license_back_url) && (
                   <div className="ad-doc-row">
                     {([
-                      { path: app.id_front_url,      label: '🪪 هوية (أمامي)' },
-                      { path: app.id_back_url,       label: '🪪 هوية (خلفي)' },
+                      { path: app.id_front_url,      label: '💳 هوية (أمامي)' },
+                      { path: app.id_back_url,       label: '💳 هوية (خلفي)' },
                       { path: app.license_front_url, label: '🚗 رخصة (أمامي)' },
                       { path: app.license_back_url,  label: '🚗 رخصة (خلفي)' },
                     ] as const).filter(d => d.path).map(({ path, label }) => (

@@ -87,8 +87,8 @@ async function resolveShopId(req: Request, res: Response): Promise<string | null
 
   const { data: shop, error: shopErr } = await supabase
     .from("shops")
-    .select("shop_id")
-    .eq("owner_id", user.id)
+    .select("shop_id, merchants!inner(user_id)")
+    .eq("merchants.user_id", user.id)
     .maybeSingle();
 
   if (shopErr || !shop) {

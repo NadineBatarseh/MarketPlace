@@ -36,8 +36,7 @@ export default function MerchantActivation({ onNavigate }: Props) {
     const { error } = await supabase
       .from('shops')
       .update({ status: 'published' })
-      .eq('shop_id', shop.shop_id)
-      .eq('owner_id', merchant!.id);
+      .eq('shop_id', shop.shop_id);
 
     if (error) {
       showToast('error', 'تعذّر نشر المتجر: ' + error.message);

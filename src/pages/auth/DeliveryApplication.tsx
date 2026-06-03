@@ -134,24 +134,22 @@ export default function DeliveryApplication() {
 
     const folder = `${Date.now()}_${form.nationalId}`;
 
-    const uploadDoc = async (file: File, name: string) => {
-      const ext = file.name.split('.').pop();
-      const path = `${folder}/${name}.${ext}`;
-      const { data: uploadData, error: uploadErr } = await supabase.storage
-        .from('delivery-applications')
-        .upload(path, file, { upsert: true });
-      if (uploadErr) throw new Error(uploadErr.message);
-      return uploadData.path;
-    };
-
     let idFrontPath: string, idBackPath: string, licenseFrontPath: string, licenseBackPath: string;
     try {
-      [idFrontPath, idBackPath, licenseFrontPath, licenseBackPath] = await Promise.all([
-        uploadDoc(idFrontFile, 'id-front'),
-        uploadDoc(idBackFile, 'id-back'),
-        uploadDoc(licenseFrontFile, 'license-front'),
-        uploadDoc(licenseBackFile, 'license-back'),
-      ]);
+      const formData = new FormData();
+      formData.append('bucket', 'delivery-applications');
+      formData.append('folder', folder);
+      formData.append('idFront', idFrontFile!);
+      formData.append('idBack', idBackFile!);
+      formData.append('licenseFront', licenseFrontFile!);
+      formData.append('licenseBack', licenseBackFile!);
+      const res = await fetch('/api/applications/upload-docs', { method: 'POST', body: formData });
+      if (!res.ok) throw new Error((await res.json()).error ?? res.statusText);
+      const result = await res.json();
+      idFrontPath = result.idFrontPath;
+      idBackPath = result.idBackPath;
+      licenseFrontPath = result.licenseFrontPath;
+      licenseBackPath = result.licenseBackPath;
     } catch (err: unknown) {
       setError('تعذّر رفع المستندات: ' + (err instanceof Error ? err.message : String(err)));
       setLoading(false);
@@ -326,7 +324,7 @@ export default function DeliveryApplication() {
           </div>
 
           <div className="auth-doc-section">
-            <div className="auth-doc-section-title">🪪 الهوية الوطنية</div>
+            <div className="auth-doc-section-title">💳 الهوية الوطنية</div>
             <div className="auth-row">
               {([
                 { label: 'الوجه الأمامي', file: idFrontFile, preview: idFrontPreview, ref: idFrontRef, setFile: setIdFrontFile, setPreview: setIdFrontPreview },

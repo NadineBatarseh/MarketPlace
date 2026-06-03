@@ -199,11 +199,11 @@ export default function AdminSentMessages() {
     setRecipientsLoading(true);
     const [{ data: couriers }, { data: shops }] = await Promise.all([
       supabase.from('couriers').select('id, name').order('name'),
-      supabase.from('shops').select('owner_id, name').not('owner_id', 'is', null).order('name'),
+      supabase.from('shops').select('name, merchants!inner(user_id)').order('name'),
     ]);
     setRecipients([
       ...(couriers ?? []).map((c: any) => ({ id: c.id, name: c.name, type: 'courier' as const })),
-      ...(shops ?? []).filter((s: any) => s.owner_id).map((s: any) => ({ id: s.owner_id, name: s.name, type: 'shop' as const })),
+      ...(shops ?? []).filter((s: any) => s.merchants?.user_id).map((s: any) => ({ id: s.merchants.user_id, name: s.name, type: 'shop' as const })),
     ]);
     setRecipientsLoading(false);
   }

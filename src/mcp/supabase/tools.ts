@@ -11,8 +11,8 @@ async function resolveShopId(sb_auth_token: string): Promise<string> {
 
   const { data: shop, error: shopErr } = await supabase
     .from("shops")
-    .select("shop_id")
-    .eq("owner_id", user.id)
+    .select("shop_id, merchants!inner(user_id)")
+    .eq("merchants.user_id", user.id)
     .maybeSingle();
 
   if (shopErr || !shop) throw new Error("No shop is associated with this account");
@@ -242,7 +242,7 @@ export function registerSupabaseTools(server: McpServer) {
     async ({ shop_id }) => {
       const { data, error } = await supabase
         .from("shops")
-        .select("shop_id, name, location, description, logo_url, owner_id")
+        .select("shop_id, name, location, description, logo_url")
         .eq("shop_id", shop_id)
         .maybeSingle();
       if (error) throw new Error(error.message);
