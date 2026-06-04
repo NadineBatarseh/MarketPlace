@@ -50,7 +50,9 @@ export function useCategoryProducts(shopIds: string[]): Result {
         .from('products')
         .select('id, title, description, price, image_urls, stock_Quantity', { count: 'exact' })
         .in('shop_id', shopIds)
-        .eq('isPublish', true);
+        .eq('isPublish', true)
+        .not('is_deleted', 'eq', true)
+        .not('is_archived', 'eq', true);
 
       if (sort === 'price_asc') query = query.order('price', { ascending: true });
       else if (sort === 'price_desc') query = query.order('price', { ascending: false });

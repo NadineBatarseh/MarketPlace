@@ -88,7 +88,9 @@ export function useSidebarData(shopId: string): Result {
           .from('products')
           .select('id')
           .eq('shop_id', shopId)
-          .eq('isPublish', true);
+          .eq('isPublish', true)
+          .not('is_deleted', 'eq', true)
+          .not('is_archived', 'eq', true);
 
         if (cancelled) return;
 

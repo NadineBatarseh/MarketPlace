@@ -69,7 +69,7 @@ export default function StorePage({ shopId }: Props) {
         if (hasDynamic) {
           // Fetch all published product IDs for this shop once (needed for color variant lookup)
           const { data: shopProductRows } = await supabase
-            .from('products').select('id').eq('shop_id', shopId).eq('isPublish', true);
+            .from('products').select('id').eq('shop_id', shopId).eq('isPublish', true).not('is_deleted', 'eq', true).not('is_archived', 'eq', true);
           const shopProductIds = (shopProductRows ?? []).map(r => r.id as string);
 
           for (const [filterId, values] of activeFilterEntries) {
@@ -114,7 +114,9 @@ export default function StorePage({ shopId }: Props) {
           .from('products')
           .select('id, title, description, price, image_urls, stock_Quantity')
           .eq('shop_id', shopId)
-          .eq('isPublish', true);
+          .eq('isPublish', true)
+          .not('is_deleted', 'eq', true)
+          .not('is_archived', 'eq', true);
 
         if (matchingIds !== null) query = query.in('id', matchingIds.slice(0, 500));
         if (shopCategoryId) query = query.eq('category_id', shopCategoryId);

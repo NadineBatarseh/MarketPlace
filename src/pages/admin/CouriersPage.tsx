@@ -2,11 +2,13 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import supabase from '../../lib/supabase';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import AdminMessageModal from '../../components/AdminMessageModal';
+import { archiveCourier, restoreCourier } from '../../lib/adminArchive';
 
 interface Courier {
   id: string;
   name: string;
   status: 'available' | 'on_route' | 'offline';
+  is_archived: boolean;
   home_base_zone: string | null;
   home_base: { lat: number; lng: number } | null;
   location: { lat: number; lng: number } | null;
@@ -148,14 +150,20 @@ export default function CouriersPage() {
   const [error, setError]               = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | Courier['status']>('all');
   const [search, setSearch]             = useState('');
+  const [showArchived, setShowArchived] = useState(false);
   const [autoRefresh, setAutoRefresh]   = useState(false);
   const [addresses, setAddresses]       = useState<Record<string, string | null>>({});
   const geocodingRef                    = useRef(false);
-  const [deleteTarget, setDeleteTarget] = useState<CourierWithBatches | null>(null);
-  const [deleting, setDeleting]         = useState(false);
-  const [deleteError, setDeleteError]   = useState('');
+  const [archiveTarget, setArchiveTarget] = useState<CourierWithBatches | null>(null);
+  const [archiving, setArchiving]         = useState(false);
+  const [archiveError, setArchiveError]   = useState('');
+  const [archiveBlock, setArchiveBlock]   = useState<{ activeCount?: number } | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<CourierWithBatches | null>(null);
+  const [restoring, setRestoring]         = useState(false);
+  const [restoreError, setRestoreError]   = useState('');
   const [messageTarget, setMessageTarget] = useState<CourierWithBatches | null>(null);
   const [openMenuId, setOpenMenuId]     = useState<string | null>(null);
+  const [menuPos, setMenuPos]           = useState<{ top: number; left: number } | null>(null);
   const menuRef                         = useRef<HTMLDivElement | null>(null);
   const [expandedId, setExpandedId]     = useState<string | null>(null);
 
@@ -166,7 +174,7 @@ export default function CouriersPage() {
     const [{ data: courierRows, error: cErr }, { data: batchRows }] = await Promise.all([
       supabase
         .from('couriers')
-        .select('id, name, status, home_base_zone, home_base, location, max_volume, hours_driven_today, user_id, id_front_url, id_back_url, license_front_url, license_back_url')
+        .select('id, name, status, home_base_zone, home_base, location, max_volume, hours_driven_today, user_id, id_front_url, id_back_url, license_front_url, license_back_url, is_archived')
         .order('name'),
       supabase.from('batches').select('assigned_to').in('status', ['assigned', 'in_transit']),
     ]);
@@ -229,16 +237,42 @@ export default function CouriersPage() {
     geocodingRef.current = false;
   }
 
-  async function handleDelete() {
-    if (!deleteTarget) return;
-    setDeleting(true);
-    setDeleteError('');
-    const { error: err } = await supabase.from('couriers').delete().eq('id', deleteTarget.id);
-    if (err) { setDeleteError('فشل الحذف: ' + err.message); setDeleting(false); return; }
-    setCouriers(prev => prev.filter(c => c.id !== deleteTarget.id));
-    setAddresses(prev => { const next = { ...prev }; delete next[deleteTarget.id]; return next; });
-    setDeleteTarget(null);
-    setDeleting(false);
+  async function handleArchive() {
+    if (!archiveTarget) return;
+    setArchiving(true);
+    setArchiveError('');
+    const force = archiveBlock !== null;
+    const res = await archiveCourier(archiveTarget.id, { force });
+    if (!res.ok) {
+      if (res.code === 'ACTIVE_BATCHES') {
+        setArchiveBlock({ activeCount: res.activeCount });
+        setArchiving(false);
+        return;
+      }
+      setArchiveError('فشل الحذف: ' + (res.error ?? ''));
+      setArchiving(false);
+      return;
+    }
+    setCouriers(prev => prev.map(c => c.id === archiveTarget.id ? { ...c, is_archived: true } : c));
+    closeArchiveDialog();
+    setArchiving(false);
+  }
+
+  function closeArchiveDialog() {
+    setArchiveTarget(null);
+    setArchiveError('');
+    setArchiveBlock(null);
+  }
+
+  async function handleRestore() {
+    if (!restoreTarget) return;
+    setRestoring(true);
+    setRestoreError('');
+    const res = await restoreCourier(restoreTarget.id);
+    if (!res.ok) { setRestoreError('فشل الاستعادة: ' + (res.error ?? '')); setRestoring(false); return; }
+    setCouriers(prev => prev.map(c => c.id === restoreTarget.id ? { ...c, is_archived: false } : c));
+    setRestoreTarget(null);
+    setRestoring(false);
   }
 
   useEffect(() => { load(); }, [load]);
@@ -274,14 +308,17 @@ export default function CouriersPage() {
     return () => { supabase.removeChannel(ch); };
   }, []);
 
+  const activeCouriers = couriers.filter(c => !c.is_archived);
   const counts = {
-    all:       couriers.length,
-    available: couriers.filter(c => c.status === 'available').length,
-    on_route:  couriers.filter(c => c.status === 'on_route').length,
-    offline:   couriers.filter(c => c.status === 'offline').length,
+    all:       activeCouriers.length,
+    available: activeCouriers.filter(c => c.status === 'available').length,
+    on_route:  activeCouriers.filter(c => c.status === 'on_route').length,
+    offline:   activeCouriers.filter(c => c.status === 'offline').length,
   };
+  const archivedCount = couriers.length - activeCouriers.length;
 
   const visible = couriers
+    .filter(c => showArchived ? c.is_archived : !c.is_archived)
     .filter(c => statusFilter === 'all' || c.status === statusFilter)
     .filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase()) ||
                  (c.email ?? '').toLowerCase().includes(search.toLowerCase()) ||
@@ -325,18 +362,40 @@ export default function CouriersPage() {
         />
       )}
 
-      {deleteTarget && (
+      {archiveTarget && (
         <ConfirmDialog
           title="تأكيد حذف المندوب"
-          message={<>هل أنت متأكد من حذف المندوب <strong>{deleteTarget.name}</strong>؟</>}
-          warning={deleteTarget.activeBatches > 0
-            ? `تحذير: لدى هذا المندوب ${deleteTarget.activeBatches} دفعة نشطة حالياً.`
-            : undefined}
-          confirmLabel="حذف"
-          loading={deleting}
-          error={deleteError}
-          onConfirm={handleDelete}
-          onCancel={() => { setDeleteTarget(null); setDeleteError(''); }}
+          icon="🗑️"
+          message={<>هل أنت متأكد من حذف المندوب <strong>{archiveTarget.name}</strong>؟ لن يظهر في القوائم الرئيسية، ويمكن استعادته لاحقًا من سلة المحذوفات.</>}
+          warning={
+            archiveBlock
+              ? `تعذّر الحذف: لدى هذا المندوب ${archiveBlock.activeCount} دفعة نشطة. تأكيد الحذف الآن سيتم رغم وجود دفعات نشطة.`
+              : archiveTarget.activeBatches > 0
+                ? `لدى هذا المندوب ${archiveTarget.activeBatches} دفعة نشطة حالياً.`
+                : undefined
+          }
+          confirmColor="#DC2626"
+          confirmLabel={archiveBlock ? 'حذف رغم الدفعات النشطة' : 'حذف'}
+          reversible
+          loading={archiving}
+          error={archiveError}
+          onConfirm={handleArchive}
+          onCancel={closeArchiveDialog}
+        />
+      )}
+
+      {restoreTarget && (
+        <ConfirmDialog
+          title="تأكيد استعادة المندوب"
+          icon="♻️"
+          message={<>هل تريد استعادة المندوب <strong>{restoreTarget.name}</strong> من سلة المحذوفات؟</>}
+          confirmColor="#16a34a"
+          confirmLabel="استعادة"
+          reversible
+          loading={restoring}
+          error={restoreError}
+          onConfirm={handleRestore}
+          onCancel={() => { setRestoreTarget(null); setRestoreError(''); }}
         />
       )}
 
@@ -421,6 +480,24 @@ export default function CouriersPage() {
             color: '#0F2B4E', outline: 'none', minWidth: 220,
           }}
         />
+
+        {/* Deleted items (soft-deleted) — kept separate from the main status filters */}
+        <button
+          onClick={() => setShowArchived(v => !v)}
+          title="عرض العناصر المحذوفة"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            padding: '5px 13px', borderRadius: 20, border: '1.5px solid',
+            borderColor: showArchived ? '#94A3B8' : '#E2E8F0',
+            background:  showArchived ? '#475569' : '#fff',
+            color:       showArchived ? '#fff' : '#64748B',
+            cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: showArchived ? 700 : 400,
+          }}>
+          🗑️ سلة المحذوفات
+          {archivedCount > 0 && (
+            <span style={{ fontFamily: 'monospace', opacity: 0.8 }}>{archivedCount}</span>
+          )}
+        </button>
       </div>
 
       {error && (
@@ -559,7 +636,12 @@ export default function CouriersPage() {
                           <div style={{ position: 'relative', display: 'inline-block' }}
                             ref={openMenuId === courier.id ? menuRef : null}>
                             <button
-                              onClick={() => setOpenMenuId(prev => prev === courier.id ? null : courier.id)}
+                              onClick={e => {
+                                if (openMenuId === courier.id) { setOpenMenuId(null); return; }
+                                const r = e.currentTarget.getBoundingClientRect();
+                                setMenuPos({ top: r.bottom + 4, left: r.left });
+                                setOpenMenuId(courier.id);
+                              }}
                               title="المزيد من الإجراءات"
                               style={{
                                 width: 32, height: 32, borderRadius: 8,
@@ -573,12 +655,12 @@ export default function CouriersPage() {
                               ···
                             </button>
 
-                            {openMenuId === courier.id && (
+                            {openMenuId === courier.id && menuPos && (
                               <div style={{
-                                position: 'absolute', top: 36, left: 0,
+                                position: 'fixed', top: menuPos.top, left: menuPos.left,
                                 background: '#fff', border: '1.5px solid #E2E8F0',
                                 borderRadius: 10, boxShadow: '0 6px 24px rgba(0,0,0,0.10)',
-                                zIndex: 100, minWidth: 148, overflow: 'hidden',
+                                zIndex: 1000, minWidth: 148, overflow: 'hidden',
                               }}>
                                 <button
                                   onClick={() => { setOpenMenuId(null); setMessageTarget(courier); }}
@@ -591,16 +673,23 @@ export default function CouriersPage() {
                                   إرسال رسالة
                                 </button>
                                 <div style={{ height: 1, background: '#F1F5F9', margin: '2px 0' }} />
-                                <button
-                                  onClick={() => { setOpenMenuId(null); setDeleteTarget(courier); setDeleteError(''); }}
-                                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', border: 'none', background: 'none', color: '#DC2626', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: 700, textAlign: 'right' }}
-                                  onMouseEnter={e => (e.currentTarget.style.background = '#FEF2F2')}
-                                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                                  <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                    <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-                                  </svg>
-                                  حذف
-                                </button>
+                                {courier.is_archived ? (
+                                  <button
+                                    onClick={() => { setOpenMenuId(null); setRestoreTarget(courier); setRestoreError(''); }}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', border: 'none', background: 'none', color: '#15803D', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: 700, textAlign: 'right' }}
+                                    onMouseEnter={e => (e.currentTarget.style.background = '#F0FDF4')}
+                                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                                    <span>♻️</span> استعادة
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => { setOpenMenuId(null); setArchiveTarget(courier); setArchiveError(''); setArchiveBlock(null); }}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', border: 'none', background: 'none', color: '#DC2626', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: 700, textAlign: 'right' }}
+                                    onMouseEnter={e => (e.currentTarget.style.background = '#FEF2F2')}
+                                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                                    <span>🗑️</span> حذف
+                                  </button>
+                                )}
                               </div>
                             )}
                           </div>

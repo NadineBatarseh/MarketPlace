@@ -8,6 +8,7 @@ import emailjs from '@emailjs/browser';
 import supabase from '../../lib/supabase';
 import ChangePasswordModal from '../../components/ChangePasswordModal';
 import ApplicationCard, { AppIcons, type MediaSpec, type InfoSpec } from '../components/ApplicationCard';
+import { archiveApplication, restoreApplication } from '../../lib/adminArchive';
 import './AdminDashboard.css';
 
 // ── Sidebar item component (mirrors MerchantDashboard pattern) ─────────────
@@ -48,6 +49,7 @@ interface MerchantApp {
   platform_email: string | null;
   id_front_url: string | null;
   id_back_url: string | null;
+  is_archived?: boolean;
 }
 
 interface DeliveryApp {
@@ -64,6 +66,7 @@ interface DeliveryApp {
   id_back_url: string | null;
   license_front_url: string | null;
   license_back_url: string | null;
+  is_archived?: boolean;
 }
 
 interface HubWorkerApp {
@@ -76,6 +79,7 @@ interface HubWorkerApp {
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
   platform_email: string | null;
+  is_archived?: boolean;
 }
 
 type FilterTab = 'all' | 'pending' | 'approved' | 'rejected';
@@ -204,6 +208,7 @@ export default function AdminDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder]     = useState<'newest' | 'oldest'>('newest');
   const [typeFilter, setTypeFilter]   = useState<string>('all');
+  const [showArchived, setShowArchived] = useState(false);
 
   const today = new Date().toLocaleDateString('ar-EG', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
@@ -580,18 +585,22 @@ export default function AdminDashboard() {
     setRejectModal({ app: null, reason: '', message: '', sending: false, error: '' });
   };
 
-  const deleteMerchantApp = async (app: MerchantApp) => {
-    if (!confirm(`هل تريد حذف طلب "${app.name_of_store}"؟`)) return;
+  // Archive keeps the application row AND its uploaded documents (unlike the old
+  // hard-delete) so the record stays auditable; it just leaves the active inbox.
+  const archiveMerchantApp = async (app: MerchantApp) => {
+    if (!confirm(`هل أنت متأكد من حذف طلب "${app.name_of_store}"؟ لن يظهر في القوائم الرئيسية، ويمكن استعادته لاحقًا من سلة المحذوفات.`)) return;
     setActionLoading(app.id);
-    if (app.pictures && app.pictures.length > 0) {
-      const paths = app.pictures.map(url => {
-        const parts = url.split('/merchant-applications/');
-        return parts[1] ?? '';
-      }).filter(Boolean);
-      if (paths.length > 0) await supabase.storage.from('merchant-applications').remove(paths);
-    }
-    const { error } = await supabase.from('merchant_applications').delete().eq('id', app.id);
-    if (!error) setApps(prev => prev.filter(a => a.id !== app.id));
+    const res = await archiveApplication('merchant', app.id);
+    if (res.ok) setApps(prev => prev.map(a => a.id === app.id ? { ...a, is_archived: true } : a));
+    else setAppsError('فشل الحذف: ' + (res.error ?? ''));
+    setActionLoading(null);
+  };
+
+  const restoreMerchantApp = async (app: MerchantApp) => {
+    setActionLoading(app.id);
+    const res = await restoreApplication('merchant', app.id);
+    if (res.ok) setApps(prev => prev.map(a => a.id === app.id ? { ...a, is_archived: false } : a));
+    else setAppsError('فشل الاستعادة: ' + (res.error ?? ''));
     setActionLoading(null);
   };
 
@@ -688,11 +697,20 @@ export default function AdminDashboard() {
     setDeliveryRejectModal({ app: null, reason: '', message: '', sending: false, error: '' });
   };
 
-  const deleteDeliveryApp = async (app: DeliveryApp) => {
-    if (!confirm(`هل تريد حذف طلب "${app.name}"؟`)) return;
+  const archiveDeliveryApp = async (app: DeliveryApp) => {
+    if (!confirm(`هل أنت متأكد من حذف طلب "${app.name}"؟ لن يظهر في القوائم الرئيسية، ويمكن استعادته لاحقًا من سلة المحذوفات.`)) return;
     setDeliveryActionLoading(app.id);
-    const { error } = await supabase.from('delivery_applications').delete().eq('id', app.id);
-    if (!error) setDeliveryApps(prev => prev.filter(a => a.id !== app.id));
+    const res = await archiveApplication('delivery', app.id);
+    if (res.ok) setDeliveryApps(prev => prev.map(a => a.id === app.id ? { ...a, is_archived: true } : a));
+    else setDeliveryError('فشل الحذف: ' + (res.error ?? ''));
+    setDeliveryActionLoading(null);
+  };
+
+  const restoreDeliveryApp = async (app: DeliveryApp) => {
+    setDeliveryActionLoading(app.id);
+    const res = await restoreApplication('delivery', app.id);
+    if (res.ok) setDeliveryApps(prev => prev.map(a => a.id === app.id ? { ...a, is_archived: false } : a));
+    else setDeliveryError('فشل الاستعادة: ' + (res.error ?? ''));
     setDeliveryActionLoading(null);
   };
 
@@ -789,11 +807,20 @@ export default function AdminDashboard() {
     setHubRejectModal({ app: null, reason: '', message: '', sending: false, error: '' });
   };
 
-  const deleteHubApp = async (app: HubWorkerApp) => {
-    if (!confirm(`هل تريد حذف طلب "${app.name}"؟`)) return;
+  const archiveHubApp = async (app: HubWorkerApp) => {
+    if (!confirm(`هل أنت متأكد من حذف طلب "${app.name}"؟ لن يظهر في القوائم الرئيسية، ويمكن استعادته لاحقًا من سلة المحذوفات.`)) return;
     setHubActionLoading(app.id);
-    const { error } = await supabase.from('hubworker_applications').delete().eq('id', app.id);
-    if (!error) setHubApps(prev => prev.filter(a => a.id !== app.id));
+    const res = await archiveApplication('hubworker', app.id);
+    if (res.ok) setHubApps(prev => prev.map(a => a.id === app.id ? { ...a, is_archived: true } : a));
+    else setHubError('فشل الحذف: ' + (res.error ?? ''));
+    setHubActionLoading(null);
+  };
+
+  const restoreHubApp = async (app: HubWorkerApp) => {
+    setHubActionLoading(app.id);
+    const res = await restoreApplication('hubworker', app.id);
+    if (res.ok) setHubApps(prev => prev.map(a => a.id === app.id ? { ...a, is_archived: false } : a));
+    else setHubError('فشل الاستعادة: ' + (res.error ?? ''));
     setHubActionLoading(null);
   };
 
@@ -810,19 +837,29 @@ export default function AdminDashboard() {
         ? +new Date(b.created_at) - +new Date(a.created_at)
         : +new Date(a.created_at) - +new Date(b.created_at));
 
+  const byArchived = (archived: boolean | undefined) => showArchived ? archived === true : archived !== true;
+
   const filteredMerchants = byDate(apps
+    .filter(a => byArchived(a.is_archived))
     .filter(a => byStatus(a.status))
     .filter(a => typeFilter === 'all' || a.Type_of_store === typeFilter)
     .filter(a => matchesSearch([a.name_of_store, a.name_of_owner, a.phone_number, a.email, a.city])));
 
   const filteredDelivery = byDate(deliveryApps
+    .filter(a => byArchived(a.is_archived))
     .filter(a => byStatus(a.status))
     .filter(a => typeFilter === 'all' || a.type_of_vehicle === typeFilter)
     .filter(a => matchesSearch([a.name, a.phone_number, a.email, a.ID_number])));
 
   const filteredHub = byDate(hubApps
+    .filter(a => byArchived(a.is_archived))
     .filter(a => byStatus(a.status))
     .filter(a => matchesSearch([a.name, a.phone_number, a.email, a.place_of_residence])));
+
+  const archivedCount =
+    activeSection === 'merchant' ? apps.filter(a => a.is_archived).length :
+    activeSection === 'delivery' ? deliveryApps.filter(a => a.is_archived).length :
+    activeSection === 'hubworker' ? hubApps.filter(a => a.is_archived).length : 0;
 
   const refreshCurrent = () => {
     if (activeSection === 'merchant') loadApps();
@@ -1145,6 +1182,16 @@ export default function AdminDashboard() {
                   <option value="oldest">ترتيب: الأقدم</option>
                 </select>
               </div>
+
+              <button
+                type="button"
+                className="ad-toolbar-refresh"
+                onClick={() => setShowArchived(v => !v)}
+                title="عرض العناصر المحذوفة"
+                style={showArchived ? { background: '#475569', color: '#fff', borderColor: '#475569' } : undefined}
+              >
+                🗑️ سلة المحذوفات{archivedCount > 0 ? ` (${archivedCount})` : ''}
+              </button>
             </div>
           )}
 
@@ -1229,7 +1276,9 @@ export default function AdminDashboard() {
                 onApprove={() => openApproveModal(app)}
                 onReject={() => openRejectModal(app)}
                 onWithdraw={() => updateMerchantStatus(app.id, 'rejected')}
-                onDelete={() => deleteMerchantApp(app)}
+                onArchive={() => archiveMerchantApp(app)}
+                onRestore={() => restoreMerchantApp(app)}
+                isArchived={app.is_archived}
                 onLightbox={(url) => setLightbox(url)}
               />
             );
@@ -1277,24 +1326,32 @@ export default function AdminDashboard() {
                 </div>
               </div>
               <div className="ad-card-actions">
-                {app.status !== 'approved' && (
-                  <button type="button" className="ad-btn ad-btn--approve" disabled={hubActionLoading === app.id} onClick={() => openHubApproveModal(app)}>
-                    ✅ موافقة
+                {app.is_archived ? (
+                  <button type="button" className="ad-btn ad-btn--approve" disabled={hubActionLoading === app.id} onClick={() => restoreHubApp(app)}>
+                    {hubActionLoading === app.id ? '...' : '♻️ استعادة'}
                   </button>
+                ) : (
+                  <>
+                    {app.status !== 'approved' && (
+                      <button type="button" className="ad-btn ad-btn--approve" disabled={hubActionLoading === app.id} onClick={() => openHubApproveModal(app)}>
+                        ✅ موافقة
+                      </button>
+                    )}
+                    {app.status === 'approved' && (
+                      <button type="button" className="ad-btn ad-btn--reject" disabled={hubActionLoading === app.id} onClick={() => updateHubStatus(app.id, 'rejected')}>
+                        {hubActionLoading === app.id ? '...' : '↩ سحب الموافقة'}
+                      </button>
+                    )}
+                    {app.status !== 'rejected' && (
+                      <button type="button" className="ad-btn ad-btn--reject" disabled={hubActionLoading === app.id} onClick={() => openHubRejectModal(app)}>
+                        ❌ رفض
+                      </button>
+                    )}
+                    <button type="button" className="ad-btn ad-btn--delete" disabled={hubActionLoading === app.id} onClick={() => archiveHubApp(app)}>
+                      🗑️ حذف
+                    </button>
+                  </>
                 )}
-                {app.status === 'approved' && (
-                  <button type="button" className="ad-btn ad-btn--reject" disabled={hubActionLoading === app.id} onClick={() => updateHubStatus(app.id, 'rejected')}>
-                    {hubActionLoading === app.id ? '...' : '↩ سحب الموافقة'}
-                  </button>
-                )}
-                {app.status !== 'rejected' && (
-                  <button type="button" className="ad-btn ad-btn--reject" disabled={hubActionLoading === app.id} onClick={() => openHubRejectModal(app)}>
-                    ❌ رفض
-                  </button>
-                )}
-                <button type="button" className="ad-btn ad-btn--delete" disabled={hubActionLoading === app.id} onClick={() => deleteHubApp(app)}>
-                  🗑 حذف
-                </button>
               </div>
             </div>
           ))}
@@ -1346,7 +1403,9 @@ export default function AdminDashboard() {
                 onApprove={() => openDeliveryApproveModal(app)}
                 onReject={() => openDeliveryRejectModal(app)}
                 onWithdraw={() => updateDeliveryStatus(app.id, 'rejected')}
-                onDelete={() => deleteDeliveryApp(app)}
+                onArchive={() => archiveDeliveryApp(app)}
+                onRestore={() => restoreDeliveryApp(app)}
+                isArchived={app.is_archived}
                 onLightbox={(url) => setLightbox(url)}
               />
             );

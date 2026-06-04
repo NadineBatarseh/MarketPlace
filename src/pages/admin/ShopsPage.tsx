@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import supabase from '../../lib/supabase';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import AdminMessageModal from '../../components/AdminMessageModal';
+import { archiveShop, restoreShop } from '../../lib/adminArchive';
 
 interface MerchantInfo {
   user_id: string | null;
@@ -28,6 +29,7 @@ interface Shop {
   status: string;
   created_at: string;
   merchant_id: string | null;
+  is_archived: boolean;
 }
 
 interface ShopEnriched extends Shop {
@@ -172,13 +174,20 @@ export default function ShopsPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [typeFilter, setTypeFilter]     = useState<string>('all');
   const [search, setSearch]             = useState('');
-  const [deleteTarget, setDeleteTarget]   = useState<ShopEnriched | null>(null);
-  const [deleting, setDeleting]           = useState(false);
-  const [deleteError, setDeleteError]     = useState('');
+  const [showArchived, setShowArchived] = useState(false);
+  const [archiveTarget, setArchiveTarget] = useState<ShopEnriched | null>(null);
+  const [archiving, setArchiving]         = useState(false);
+  const [archiveError, setArchiveError]   = useState('');
+  // Set when a risk guard (active orders) blocked the first attempt; the next confirm forces.
+  const [archiveBlock, setArchiveBlock]   = useState<{ activeCount?: number } | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<ShopEnriched | null>(null);
+  const [restoring, setRestoring]         = useState(false);
+  const [restoreError, setRestoreError]   = useState('');
   const [suspendTarget, setSuspendTarget] = useState<ShopEnriched | null>(null);
   const [suspending, setSuspending]       = useState(false);
   const [suspendError, setSuspendError]   = useState('');
   const [openMenuId, setOpenMenuId]       = useState<string | null>(null);
+  const [menuPos, setMenuPos]             = useState<{ top: number; left: number } | null>(null);
   const menuRef                           = useRef<HTMLDivElement | null>(null);
   const [messageTarget, setMessageTarget] = useState<ShopEnriched | null>(null);
   const [docsTarget, setDocsTarget]       = useState<ShopEnriched | null>(null);
@@ -195,7 +204,7 @@ export default function ShopsPage() {
     ] = await Promise.all([
       supabase
         .from('shops')
-        .select('shop_id, name, shopLogo, location, zone_id, description, whatsapp, facebook, instagram, Type_of_store, shop_lat, shop_lng, status, created_at, merchant_id')
+        .select('shop_id, name, shopLogo, location, zone_id, description, whatsapp, facebook, instagram, Type_of_store, shop_lat, shop_lng, status, created_at, merchant_id, is_archived')
         .order('created_at', { ascending: false }),
       supabase.from('shop_ratings').select('shop_id, avg_rating, review_count'),
       supabase.from('products').select('shop_id').eq('isPublish', true),
@@ -216,7 +225,12 @@ export default function ShopsPage() {
 
     if (merchantIds.length > 0) {
       try {
-        const resp = await fetch(`/api/admin/shop-owners?merchantIds=${merchantIds.join(',')}`);
+        // shop-owners is admin-only (service-role PII) — must send the access token.
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.access_token;
+        const resp = await fetch(`/api/admin/shop-owners?merchantIds=${merchantIds.join(',')}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
         const json = await resp.json();
         if (json.ok) ownersByMerchantId = json.owners;
       } catch {
@@ -235,6 +249,7 @@ export default function ShopsPage() {
       return {
         ...s,
         status:        (s.status ?? 'pending').replace(/^'|'$/g, ''),
+        is_archived:   s.is_archived ?? false,
         avg_rating:    ratingsMap[s.shop_id]?.avg_rating  ?? null,
         review_count:  ratingsMap[s.shop_id]?.review_count ?? 0,
         product_count: productCounts[s.shop_id] ?? 0,
@@ -245,15 +260,43 @@ export default function ShopsPage() {
     setLoading(false);
   }, []);
 
-  async function handleDelete() {
-    if (!deleteTarget) return;
-    setDeleting(true);
-    setDeleteError('');
-    const { error: err } = await supabase.from('shops').delete().eq('shop_id', deleteTarget.shop_id);
-    if (err) { setDeleteError('فشل الحذف: ' + err.message); setDeleting(false); return; }
-    setShops(prev => prev.filter(s => s.shop_id !== deleteTarget.shop_id));
-    setDeleteTarget(null);
-    setDeleting(false);
+  async function handleArchive() {
+    if (!archiveTarget) return;
+    setArchiving(true);
+    setArchiveError('');
+    // If a risk guard already warned us once, this confirm forces through.
+    const force = archiveBlock !== null;
+    const res = await archiveShop(archiveTarget.shop_id, { force });
+    if (!res.ok) {
+      if (res.code === 'ACTIVE_ORDERS') {
+        setArchiveBlock({ activeCount: res.activeCount });
+        setArchiving(false);
+        return;
+      }
+      setArchiveError('فشل الحذف: ' + (res.error ?? ''));
+      setArchiving(false);
+      return;
+    }
+    setShops(prev => prev.map(s => s.shop_id === archiveTarget.shop_id ? { ...s, is_archived: true } : s));
+    closeArchiveDialog();
+    setArchiving(false);
+  }
+
+  function closeArchiveDialog() {
+    setArchiveTarget(null);
+    setArchiveError('');
+    setArchiveBlock(null);
+  }
+
+  async function handleRestore() {
+    if (!restoreTarget) return;
+    setRestoring(true);
+    setRestoreError('');
+    const res = await restoreShop(restoreTarget.shop_id);
+    if (!res.ok) { setRestoreError('فشل الاستعادة: ' + (res.error ?? '')); setRestoring(false); return; }
+    setShops(prev => prev.map(s => s.shop_id === restoreTarget.shop_id ? { ...s, is_archived: false } : s));
+    setRestoreTarget(null);
+    setRestoring(false);
   }
 
   async function handleSuspend() {
@@ -278,16 +321,20 @@ export default function ShopsPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Status chip counts reflect the ACTIVE (non-archived) set; archived has its own count.
+  const active = shops.filter(s => !s.is_archived);
   const statusCounts = {
-    all:       shops.length,
-    published: shops.filter(s => s.status === 'published').length,
-    pending:   shops.filter(s => s.status === 'pending').length,
-    suspended: shops.filter(s => s.status === 'suspended').length,
+    all:       active.length,
+    published: active.filter(s => s.status === 'published').length,
+    pending:   active.filter(s => s.status === 'pending').length,
+    suspended: active.filter(s => s.status === 'suspended').length,
   };
+  const archivedCount = shops.length - active.length;
 
   const storeTypes = ['all', ...Array.from(new Set(shops.map(s => s.Type_of_store).filter(Boolean)))] as string[];
 
   const visible = shops
+    .filter(s => showArchived ? s.is_archived : !s.is_archived)
     .filter(s => statusFilter === 'all' || s.status === statusFilter)
     .filter(s => typeFilter === 'all' || s.Type_of_store === typeFilter)
     .filter(s => !search ||
@@ -359,18 +406,40 @@ export default function ShopsPage() {
         </div>
       )}
 
-      {deleteTarget && (
+      {archiveTarget && (
         <ConfirmDialog
           title="تأكيد حذف المتجر"
-          message={<>هل أنت متأكد من حذف المتجر <strong>{deleteTarget.name}</strong>؟</>}
-          warning={deleteTarget.product_count > 0
-            ? `تحذير: يحتوي هذا المتجر على ${deleteTarget.product_count} منتج منشور.`
-            : undefined}
-          confirmLabel="حذف"
-          loading={deleting}
-          error={deleteError}
-          onConfirm={handleDelete}
-          onCancel={() => { setDeleteTarget(null); setDeleteError(''); }}
+          icon="🗑️"
+          message={<>هل أنت متأكد من حذف المتجر <strong>{archiveTarget.name}</strong>؟ لن يظهر للعملاء أو في القوائم الرئيسية، ويمكن استعادته لاحقًا من سلة المحذوفات.</>}
+          warning={
+            archiveBlock
+              ? `تعذّر الحذف: يحتوي هذا المتجر على ${archiveBlock.activeCount} طلب نشط. تأكيد الحذف الآن سيتم رغم وجود طلبات نشطة.`
+              : archiveTarget.product_count > 0
+                ? `يحتوي هذا المتجر على ${archiveTarget.product_count} منتج منشور — لن تظهر للعملاء بعد الحذف.`
+                : undefined
+          }
+          confirmColor="#DC2626"
+          confirmLabel={archiveBlock ? 'حذف رغم الطلبات النشطة' : 'حذف'}
+          reversible
+          loading={archiving}
+          error={archiveError}
+          onConfirm={handleArchive}
+          onCancel={closeArchiveDialog}
+        />
+      )}
+
+      {restoreTarget && (
+        <ConfirmDialog
+          title="تأكيد استعادة المتجر"
+          icon="♻️"
+          message={<>هل تريد استعادة المتجر <strong>{restoreTarget.name}</strong> من سلة المحذوفات؟</>}
+          confirmColor="#16a34a"
+          confirmLabel="استعادة"
+          reversible
+          loading={restoring}
+          error={restoreError}
+          onConfirm={handleRestore}
+          onCancel={() => { setRestoreTarget(null); setRestoreError(''); }}
         />
       )}
 
@@ -494,6 +563,24 @@ export default function ShopsPage() {
             color: '#0F2B4E', outline: 'none', minWidth: 240,
           }}
         />
+
+        {/* Deleted items (soft-deleted) — kept separate from the main status filters */}
+        <button
+          onClick={() => setShowArchived(v => !v)}
+          title="عرض العناصر المحذوفة"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            padding: '5px 13px', borderRadius: 20, border: '1.5px solid',
+            borderColor: showArchived ? '#94A3B8' : '#E2E8F0',
+            background:  showArchived ? '#475569' : '#fff',
+            color:       showArchived ? '#fff' : '#64748B',
+            cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: showArchived ? 700 : 400,
+          }}>
+          🗑️ سلة المحذوفات
+          {archivedCount > 0 && (
+            <span style={{ fontFamily: 'monospace', opacity: 0.8 }}>{archivedCount}</span>
+          )}
+        </button>
       </div>
 
       <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 10 }}>
@@ -690,7 +777,12 @@ export default function ShopsPage() {
                         <div style={{ position: 'relative', display: 'inline-block' }}
                           ref={openMenuId === shop.shop_id ? menuRef : null}>
                           <button
-                            onClick={() => setOpenMenuId(prev => prev === shop.shop_id ? null : shop.shop_id)}
+                            onClick={e => {
+                              if (openMenuId === shop.shop_id) { setOpenMenuId(null); return; }
+                              const r = e.currentTarget.getBoundingClientRect();
+                              setMenuPos({ top: r.bottom + 4, left: r.left });
+                              setOpenMenuId(shop.shop_id);
+                            }}
                             title="المزيد من الإجراءات"
                             style={{
                               width: 32, height: 32, borderRadius: 8,
@@ -704,12 +796,12 @@ export default function ShopsPage() {
                             ···
                           </button>
 
-                          {openMenuId === shop.shop_id && (
+                          {openMenuId === shop.shop_id && menuPos && (
                             <div style={{
-                              position: 'absolute', top: 36, left: 0,
+                              position: 'fixed', top: menuPos.top, left: menuPos.left,
                               background: '#fff', border: '1.5px solid #E2E8F0',
                               borderRadius: 10, boxShadow: '0 6px 24px rgba(0,0,0,0.10)',
-                              zIndex: 100, minWidth: 160, overflow: 'hidden',
+                              zIndex: 1000, minWidth: 160, overflow: 'hidden',
                             }}>
                               {/* Owner details toggle */}
                               {m && (
@@ -773,13 +865,23 @@ export default function ShopsPage() {
 
                               <div style={{ height: 1, background: '#F1F5F9', margin: '2px 0' }} />
 
-                              <button
-                                onClick={() => { setOpenMenuId(null); setDeleteTarget(shop); setDeleteError(''); }}
-                                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', border: 'none', background: 'none', color: '#DC2626', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: 700, textAlign: 'right' }}
-                                onMouseEnter={e => (e.currentTarget.style.background = '#FEF2F2')}
-                                onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                                <span>🗑️</span> حذف
-                              </button>
+                              {shop.is_archived ? (
+                                <button
+                                  onClick={() => { setOpenMenuId(null); setRestoreTarget(shop); setRestoreError(''); }}
+                                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', border: 'none', background: 'none', color: '#15803D', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: 700, textAlign: 'right' }}
+                                  onMouseEnter={e => (e.currentTarget.style.background = '#F0FDF4')}
+                                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                                  <span>♻️</span> استعادة
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => { setOpenMenuId(null); setArchiveTarget(shop); setArchiveError(''); setArchiveBlock(null); }}
+                                  style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', border: 'none', background: 'none', color: '#DC2626', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: 700, textAlign: 'right' }}
+                                  onMouseEnter={e => (e.currentTarget.style.background = '#FEF2F2')}
+                                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                                  <span>🗑️</span> حذف
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>

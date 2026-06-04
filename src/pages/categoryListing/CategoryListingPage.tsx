@@ -87,7 +87,8 @@ export default function CategoryListingPage() {
         if (hasDynamic) {
           const { data: shopProductRows } = await supabase
             .from('products').select('id')
-            .in('shop_id', selectedShopIds).eq('isPublish', true);
+            .in('shop_id', selectedShopIds).eq('isPublish', true)
+            .not('is_deleted', 'eq', true).not('is_archived', 'eq', true);
           const shopProductIds = (shopProductRows ?? []).map((r: { id: string }) => r.id);
 
           for (const [filterId, values] of activeFilterEntries) {
@@ -127,7 +128,9 @@ export default function CategoryListingPage() {
           .from('products')
           .select('id, title, description, price, image_urls, stock_Quantity')
           .in('shop_id', selectedShopIds)
-          .eq('isPublish', true);
+          .eq('isPublish', true)
+          .not('is_deleted', 'eq', true)
+          .not('is_archived', 'eq', true);
 
         if (matchingIds !== null) query = query.in('id', matchingIds.slice(0, 500));
         if (generalFilters.priceMin) query = query.gte('price', parseFloat(generalFilters.priceMin));

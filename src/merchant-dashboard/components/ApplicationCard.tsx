@@ -100,6 +100,19 @@ export const AppIcons = {
       <path d="M9 6V4h6v2" />
     </svg>
   ),
+  archive: (
+    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="3" width="20" height="5" rx="1" />
+      <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+      <line x1="10" y1="12" x2="14" y2="12" />
+    </svg>
+  ),
+  restore: (
+    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 12a9 9 0 1 0 9-9" />
+      <polyline points="3 4 3 12 11 12" />
+    </svg>
+  ),
   pdf: (
     <svg width="26" height="26" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -314,7 +327,12 @@ export interface ApplicationCardProps {
   onApprove: () => void;
   onReject: () => void;
   onWithdraw: () => void;
-  onDelete: () => void;
+  /** Archive the application (recoverable). Replaces the old hard-delete. */
+  onArchive: () => void;
+  /** Restore from the archive. Required when isArchived is true. */
+  onRestore?: () => void;
+  /** When true, the card is showing an archived application. */
+  isArchived?: boolean;
   onLightbox?: (url: string) => void;
 }
 
@@ -324,7 +342,7 @@ export default function ApplicationCard(props: ApplicationCardProps) {
     location, phone, email,
     contactItems, detailItems, description, documents,
     createdAt, loading,
-    onApprove, onReject, onWithdraw, onDelete, onLightbox,
+    onApprove, onReject, onWithdraw, onArchive, onRestore, isArchived, onLightbox,
   } = props;
 
   const [expanded, setExpanded] = useState(false);
@@ -449,28 +467,37 @@ export default function ApplicationCard(props: ApplicationCardProps) {
 
           {/* Review actions */}
           <div className="ad-row-actions">
-            {status !== 'approved' && (
-              <button type="button" className="ad-app-btn ad-app-btn--approve" disabled={loading} onClick={onApprove}>
-                {AppIcons.check}
-                موافقة
+            {isArchived ? (
+              <button type="button" className="ad-app-btn ad-app-btn--approve" disabled={loading} onClick={onRestore}>
+                {AppIcons.restore}
+                {loading ? '...' : 'استعادة'}
               </button>
+            ) : (
+              <>
+                {status !== 'approved' && (
+                  <button type="button" className="ad-app-btn ad-app-btn--approve" disabled={loading} onClick={onApprove}>
+                    {AppIcons.check}
+                    موافقة
+                  </button>
+                )}
+                {status === 'approved' && (
+                  <button type="button" className="ad-app-btn ad-app-btn--withdraw" disabled={loading} onClick={onWithdraw}>
+                    {AppIcons.undo}
+                    {loading ? '...' : 'سحب الموافقة'}
+                  </button>
+                )}
+                {status !== 'rejected' && (
+                  <button type="button" className="ad-app-btn ad-app-btn--reject" disabled={loading} onClick={onReject}>
+                    {AppIcons.cross}
+                    رفض
+                  </button>
+                )}
+                <button type="button" className="ad-app-btn ad-app-btn--delete-outline" disabled={loading} onClick={onArchive}>
+                  {AppIcons.trash}
+                  حذف
+                </button>
+              </>
             )}
-            {status === 'approved' && (
-              <button type="button" className="ad-app-btn ad-app-btn--withdraw" disabled={loading} onClick={onWithdraw}>
-                {AppIcons.undo}
-                {loading ? '...' : 'سحب الموافقة'}
-              </button>
-            )}
-            {status !== 'rejected' && (
-              <button type="button" className="ad-app-btn ad-app-btn--reject" disabled={loading} onClick={onReject}>
-                {AppIcons.cross}
-                رفض
-              </button>
-            )}
-            <button type="button" className="ad-app-btn ad-app-btn--delete-outline" disabled={loading} onClick={onDelete}>
-              {AppIcons.trash}
-              حذف
-            </button>
           </div>
         </div>
       )}

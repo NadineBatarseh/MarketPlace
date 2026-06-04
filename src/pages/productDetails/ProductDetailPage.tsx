@@ -480,6 +480,8 @@ const ProductDetailPage: React.FC = () => {
             .from("products")
             .select("id")
             .eq("isPublish", true)
+            .not("is_deleted", "eq", true)
+            .not("is_archived", "eq", true)
             .limit(1)
             .maybeSingle();
 
@@ -500,6 +502,8 @@ const ProductDetailPage: React.FC = () => {
           .select("id, title, description, price, discount_pct, stock_Quantity, shop_id, image_urls")
           .eq("id", productId)
           .eq("isPublish", true)
+          .not("is_deleted", "eq", true)
+          .not("is_archived", "eq", true)
           .single();
 
         if (pErr) throw pErr;

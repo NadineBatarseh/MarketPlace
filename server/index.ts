@@ -17,6 +17,8 @@ import productCRUDRouter from "./routes/productCRUDRouter.js";
 import supabaseProductWebhookRouter from "./routes/supabaseProductWebhookRouter.js";
 import instagramAuthRouter from "./routes/instagramAuthRouter.js";
 import applicationUploadRouter from "./routes/applicationUploadRouter.js";
+import adminArchiveRouter from "./routes/adminArchiveRouter.js";
+import { requireAdmin } from "./middleware/requireAdmin.js";
 import { logisticsRouter, bootstrapLogistics } from "./logistics/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -521,6 +523,8 @@ app.use("/api/webhooks/supabase-products", supabaseProductWebhookRouter);
 
 /* ---------- LOGISTICS ---------- */
 app.use('/api/logistics', logisticsRouter);
+
+app.use('/api/admin', adminArchiveRouter);
 
 /* ---------- DEBUG (remove after fixing) ---------- */
 
@@ -1059,7 +1063,7 @@ app.get("/auth/meta", (_req: Request, res: Response) => {
 
 /* ---------- ADMIN: shop owner info (service-role, bypasses RLS) ---------- */
 
-app.get("/api/admin/shop-owners", async (req: Request, res: Response) => {
+app.get("/api/admin/shop-owners", requireAdmin, async (req: Request, res: Response) => {
   const raw = req.query.merchantIds as string | undefined;
   if (!raw) return res.json({ ok: true, owners: {} });
 

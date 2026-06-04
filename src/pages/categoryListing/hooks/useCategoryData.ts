@@ -46,11 +46,14 @@ export function useCategoryData(categoryId: string): Result {
       if (cancelled || !catData) return;
       setCategory(catData as CategoryInfo);
 
-      // 2. Stores in this category
+      // 2. Stores in this category — exclude archived and suspended shops from public view.
+      // (status is filtered with neq so legacy quote-wrapped values can't hide live shops.)
       const { data: shopData } = await supabase
         .from('shops')
         .select('shop_id, name, shopLogo')
-        .eq('Type_of_store', catData.label);
+        .eq('Type_of_store', catData.label)
+        .neq('status', 'suspended')
+        .not('is_archived', 'eq', true);
 
       if (cancelled) return;
       const shopList = (shopData ?? []) as { shop_id: string; name: string; shopLogo: string | null }[];
@@ -58,7 +61,7 @@ export function useCategoryData(categoryId: string): Result {
 
       // 3. Product IDs (for counts + color variants)
       const { data: productRows } = shopIds.length > 0
-        ? await supabase.from('products').select('id, shop_id').in('shop_id', shopIds).eq('isPublish', true)
+        ? await supabase.from('products').select('id, shop_id').in('shop_id', shopIds).eq('isPublish', true).not('is_deleted', 'eq', true).not('is_archived', 'eq', true)
         : { data: [] };
 
       if (cancelled) return;
