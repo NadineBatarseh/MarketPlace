@@ -13,6 +13,7 @@ import OrderHistoryPage from './pages/orderHistory/OrderHistoryPage';
 import OrderTrackingPage from './pages/orderTrackingPage/OrderTrackingPage';
 import MetaConnectPage from './pages/MetaConnectPage';
 import PrivacyPolicyPage from './pages/privacy/PrivacyPolicyPage';
+import PaytabsReturnPage from './pages/payment/PaytabsReturnPage';
 
 
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
@@ -114,6 +115,7 @@ export default function App() {
               <Route path="/favorites" element={<RoleGuard allowedRoles={['customer']}><CustomerLayout><Favorite /></CustomerLayout></RoleGuard>} />
               <Route path="/orders" element={<RoleGuard allowedRoles={['customer']}><CustomerLayout><OrderHistoryPage /></CustomerLayout></RoleGuard>} />
               <Route path="/orders/:orderId" element={<RoleGuard allowedRoles={['customer']}><CustomerLayout><OrderTrackingPage /></CustomerLayout></RoleGuard>} />
+              <Route path="/payment/paytabs/return" element={<RoleGuard allowedRoles={['customer']}><CustomerLayout><PaytabsReturnPage /></CustomerLayout></RoleGuard>} />
 
               {/* Merchant only */}
               <Route path="/merchant-dashboard" element={<RoleGuard allowedRoles={['merchant']}><MerchantDashboard /></RoleGuard>} />

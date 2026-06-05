@@ -3,11 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useShop } from '../../context/ShopContext';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import supabase from '../../lib/supabase';
-import { insertTrackingEvent } from '../../lib/trackingEvents';
 import Topbar from '../../components/Topbar';
 import './CheckoutPage.css';
 
-type PaymentMethod = 'visa' | 'paypal' | null;
+type PaymentMethod = 'paytabs' | 'cod' | null;
 
 export default function CheckoutPage() {
   const { cartItems, removeFromCart, updateCartQty, clearCart } = useShop();
@@ -17,7 +16,6 @@ export default function CheckoutPage() {
   const [contact, setContact] = useState({ firstName: '', lastName: '', email: '', phone: '' });
   const [shipping, setShipping] = useState({ address: '', apartment: '', city: '', postalCode: '' });
   const [payment, setPayment] = useState<PaymentMethod>(null);
-  const [visa, setVisa] = useState({ cardNumber: '', cardHolder: '', expiry: '', cvv: '' });
   const [paying, setPaying]   = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
 
@@ -29,39 +27,55 @@ export default function CheckoutPage() {
     setPaying(true);
     setPayError(null);
     try {
-      // 1. Insert order
-      const { data: orderData, error: ordErr } = await supabase
-        .from('orders')
-        .insert({
-          user_id:     customer.id,
-          status:      'pending',
-          total_price: total,
-        })
-        .select('id')
-        .single();
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      const authHeaders = {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
 
-      if (ordErr || !orderData) throw ordErr ?? new Error('فشل إنشاء الطلب');
-
-      // 2. Insert order_details for active (non-deleted) cart items only
-      const details = activeItems.map(item => ({
-        order_id:   orderData.id,
-        product_id: item.id,
-        qty:        item.quantity,
-        unit_price: item.price,
-      }));
-
-      const { error: detErr } = await supabase.from('order_details').insert(details);
-      if (detErr) throw detErr;
-
-      // 3. Insert the first tracking event — "placed"
-      await insertTrackingEvent(orderData.id, 'placed', customer.displayName ?? 'العميل', {
-        location: `${shipping.city}، فلسطين`,
-        note:     'تم استلام الطلب وتأكيد الدفع',
+      // 1. Create the order server-side (service-role bypasses RLS; prices are
+      //    recomputed from the DB). Send only product_id + qty for active items.
+      const orderResp = await fetch('/api/orders/create', {
+        method:  'POST',
+        headers: authHeaders,
+        body: JSON.stringify({
+          // item.id is a composite cart key (productId__color__size) — send the
+          // real product UUID from item.productId.
+          items:          activeItems.map(item => ({ product_id: String(item.productId), qty: item.quantity })),
+          payment_method: payment,
+          shipping,
+        }),
       });
+      const orderJson = await orderResp.json().catch(() => ({}));
+      if (!orderResp.ok || !orderJson.ok || !orderJson.order_id) {
+        throw new Error(orderJson.error || 'فشل إنشاء الطلب');
+      }
+      const orderId = orderJson.order_id;
 
-      // 4. Clear cart and navigate to tracking page
+      // 2. Branch on the selected payment method
+      if (payment === 'paytabs') {
+        // Online card payment — hand off to the PayTabs Hosted Payment Page.
+        const resp = await fetch('/api/payments/paytabs/create', {
+          method:  'POST',
+          headers: authHeaders,
+          body: JSON.stringify({ order_id: orderId, contact, shipping }),
+        });
+        const json = await resp.json().catch(() => ({}));
+        if (!resp.ok || !json.ok || !json.redirect_url) {
+          throw new Error(json.error || 'تعذر بدء عملية الدفع عبر PayTabs');
+        }
+
+        // Remember which order we're paying so the return page can verify it.
+        localStorage.setItem('paytabs_pending_order_id', String(orderId));
+        clearCart();
+        window.location.href = json.redirect_url; // → PayTabs Hosted Payment Page
+        return;
+      }
+
+      // Cash on Delivery — order already marked 'cod' server-side; go to tracking.
       clearCart();
-      navigate(`/orders/${orderData.id}`);
+      navigate(`/orders/${orderId}`);
     } catch (e: unknown) {
       setPayError(e instanceof Error ? e.message : 'حدث خطأ أثناء معالجة الدفع');
     } finally {
@@ -145,53 +159,33 @@ export default function CheckoutPage() {
             <div className="co-payment-options">
               <button
                 type="button"
-                className={`co-pay-opt ${payment === 'visa' ? 'active' : ''}`}
-                onClick={() => setPayment('visa')}
+                className={`co-pay-opt ${payment === 'paytabs' ? 'active' : ''}`}
+                onClick={() => setPayment('paytabs')}
               >
                 <span className="co-pay-icon">💳</span>
-                <span>فيزا / بطاقة ائتمان<br /><small>Visa / Credit Card</small></span>
+                <span>الدفع التجريبي عبر PayTabs<br /><small>PayTabs Test Payment</small></span>
               </button>
               <button
                 type="button"
-                className={`co-pay-opt ${payment === 'paypal' ? 'active' : ''}`}
-                onClick={() => setPayment('paypal')}
+                className={`co-pay-opt ${payment === 'cod' ? 'active' : ''}`}
+                onClick={() => setPayment('cod')}
               >
-                <span className="co-pay-icon">🅿️</span>
-                <span>باي بال<br /><small>PayPal</small></span>
+                <span className="co-pay-icon">💵</span>
+                <span>الدفع عند الاستلام<br /><small>Cash on Delivery</small></span>
               </button>
             </div>
 
-            {payment === 'visa' && (
-              <div className="co-visa-fields">
-                <div className="co-field">
-                  <label>رقم البطاقة — Card Number</label>
-                  <input placeholder="1234 5678 9012 3456" maxLength={19} value={visa.cardNumber}
-                    onChange={e => setVisa(v => ({ ...v, cardNumber: e.target.value }))} />
-                </div>
-                <div className="co-field">
-                  <label>الاسم على البطاقة — Cardholder Name</label>
-                  <input placeholder="Full name as on card" value={visa.cardHolder}
-                    onChange={e => setVisa(v => ({ ...v, cardHolder: e.target.value }))} />
-                </div>
-                <div className="co-row">
-                  <div className="co-field">
-                    <label>تاريخ الانتهاء — Expiry Date</label>
-                    <input placeholder="MM / YY" maxLength={5} value={visa.expiry}
-                      onChange={e => setVisa(v => ({ ...v, expiry: e.target.value }))} />
-                  </div>
-                  <div className="co-field">
-                    <label>رمز الأمان — CVV</label>
-                    <input placeholder="123" maxLength={3} value={visa.cvv}
-                      onChange={e => setVisa(v => ({ ...v, cvv: e.target.value }))} />
-                  </div>
-                </div>
+            {payment === 'paytabs' && (
+              <div className="co-paypal-msg">
+                <p>سيتم تحويلك إلى صفحة الدفع الآمنة الخاصة بـ PayTabs لإتمام عملية الدفع (وضع الاختبار).</p>
+                <p><small>You will be redirected to the secure PayTabs page to complete your payment (test mode).</small></p>
               </div>
             )}
 
-            {payment === 'paypal' && (
+            {payment === 'cod' && (
               <div className="co-paypal-msg">
-                <p>سيتم تحويلك إلى PayPal لإتمام الدفع بعد تأكيد الطلب.</p>
-                <p><small>You will be redirected to PayPal to complete your payment.</small></p>
+                <p>ستدفع قيمة الطلب نقداً عند استلامه. سيتم تأكيد طلبك مباشرة.</p>
+                <p><small>You will pay in cash upon delivery. Your order will be confirmed immediately.</small></p>
               </div>
             )}
           </section>

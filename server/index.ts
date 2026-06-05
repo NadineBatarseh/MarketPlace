@@ -18,6 +18,8 @@ import supabaseProductWebhookRouter from "./routes/supabaseProductWebhookRouter.
 import instagramAuthRouter from "./routes/instagramAuthRouter.js";
 import applicationUploadRouter from "./routes/applicationUploadRouter.js";
 import adminArchiveRouter from "./routes/adminArchiveRouter.js";
+import paytabsRouter from "./routes/paytabsRouter.js";
+import ordersRouter from "./routes/ordersRouter.js";
 import { requireAdmin } from "./middleware/requireAdmin.js";
 import { logisticsRouter, bootstrapLogistics } from "./logistics/index.js";
 
@@ -40,6 +42,8 @@ app.use(cors({
 app.use("/webhook", express.raw({ type: "application/json" }), webhookRouter);
 
 app.use(express.json({ limit: '10mb' }));
+// PayTabs posts its browser `return` redirect as application/x-www-form-urlencoded.
+app.use(express.urlencoded({ extended: true }));
 
 /* ---------- HELPERS ---------- */
 
@@ -525,6 +529,12 @@ app.use("/api/webhooks/supabase-products", supabaseProductWebhookRouter);
 app.use('/api/logistics', logisticsRouter);
 
 app.use('/api/admin', adminArchiveRouter);
+
+/* ---------- ORDERS (server-authoritative placement) ---------- */
+app.use('/api/orders', ordersRouter);
+
+/* ---------- PAYTABS PAYMENTS (Hosted Payment Page — Test Mode) ---------- */
+app.use('/api/payments/paytabs', paytabsRouter);
 
 /* ---------- DEBUG (remove after fixing) ---------- */
 
