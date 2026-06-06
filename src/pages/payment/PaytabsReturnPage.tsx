@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import supabase from '../../lib/supabase';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
+import { useShop } from '../../context/ShopContext';
 import Topbar from '../../components/Topbar';
 import './PaytabsReturnPage.css';
 
@@ -23,6 +24,7 @@ export default function PaytabsReturnPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { customer, isLoading: authLoading } = useCustomerAuth();
+  const { removeItemsFromCart } = useShop();
 
   const [view, setView] = useState<View>('loading');
   const [orderId, setOrderId] = useState<string | null>(null);
@@ -61,6 +63,14 @@ export default function PaytabsReturnPage() {
 
         localStorage.removeItem('paytabs_pending_order_id');
         if (json.payment_status === 'paid') {
+          // Payment confirmed — now (and only now) clear the items that were
+          // actually paid for, leaving the rest of the cart untouched.
+          try {
+            const stashed = localStorage.getItem('paytabs_pending_item_ids');
+            const ids: string[] = stashed ? JSON.parse(stashed) : [];
+            if (Array.isArray(ids) && ids.length > 0) removeItemsFromCart(ids);
+          } catch { /* ignore malformed stash */ }
+          localStorage.removeItem('paytabs_pending_item_ids');
           setView('paid');
         } else if (json.payment_status === 'failed') {
           setView('failed');
@@ -78,7 +88,7 @@ export default function PaytabsReturnPage() {
     })();
 
     return () => { cancelled = true; };
-  }, [authLoading, customer, params, navigate]);
+  }, [authLoading, customer, params, navigate, removeItemsFromCart]);
 
   return (
     <div className="ptr-page" dir="rtl">

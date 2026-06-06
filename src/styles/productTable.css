@@ -3,9 +3,10 @@
    ══════════════════════════════════════════ */
 
 :root {
-  --pt-primary:      #1a1a2e;
-  --pt-accent:       #e8572a;
-  --pt-accent-light: #fff0eb;
+  --pt-primary:      var(--color-title);     /* dark green — titles, totals */
+  --pt-accent:       var(--color-primary);   /* brand green — prices, CTAs */
+  --pt-accent-dark:  var(--color-primary-dark);
+  --pt-accent-light: var(--color-primary-light);
   --pt-surface:      var(--color-surface);
   --pt-surface-2:    var(--color-bg);
   --pt-surface-3:    #f0ede8;
@@ -387,7 +388,7 @@
   background: var(--pt-accent);
   border-color: var(--pt-accent);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(232,87,42,.3);
+  box-shadow: 0 4px 12px rgba(19,101,64,.3);
 }
 .pt-btn-add-cart.added {
   background: #2e7d32;
@@ -624,9 +625,9 @@
   letter-spacing: .3px;
 }
 .pt-btn-checkout:hover {
-  background: #c94420;
+  background: var(--pt-accent-dark);
   transform: translateY(-1px);
-  box-shadow: 0 8px 24px rgba(232,87,42,.35);
+  box-shadow: 0 8px 24px rgba(19,101,64,.35);
 }
 
 /* ══════════════ EMPTY STATE ══════════════ */
@@ -663,7 +664,7 @@
   transition: all .2s;
 }
 .pt-btn-shop:hover {
-  background: #c94420;
+  background: var(--pt-accent-dark);
   transform: translateY(-1px);
 }
 

@@ -14,6 +14,7 @@ import OrderTrackingPage from './pages/orderTrackingPage/OrderTrackingPage';
 import MetaConnectPage from './pages/MetaConnectPage';
 import PrivacyPolicyPage from './pages/privacy/PrivacyPolicyPage';
 import PaytabsReturnPage from './pages/payment/PaytabsReturnPage';
+import ProfileSettingsPage from './pages/profile/ProfileSettingsPage';
 
 
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
@@ -113,6 +114,7 @@ export default function App() {
               <Route path="/cart" element={<RoleGuard allowedRoles={['customer']}><CustomerLayout><Cart /></CustomerLayout></RoleGuard>} />
               <Route path="/checkout" element={<RoleGuard allowedRoles={['customer']}><CustomerLayout><CheckoutPage /></CustomerLayout></RoleGuard>} />
               <Route path="/favorites" element={<RoleGuard allowedRoles={['customer']}><CustomerLayout><Favorite /></CustomerLayout></RoleGuard>} />
+              <Route path="/profile" element={<RoleGuard allowedRoles={['customer']}><CustomerLayout><ProfileSettingsPage /></CustomerLayout></RoleGuard>} />
               <Route path="/orders" element={<RoleGuard allowedRoles={['customer']}><CustomerLayout><OrderHistoryPage /></CustomerLayout></RoleGuard>} />
               <Route path="/orders/:orderId" element={<RoleGuard allowedRoles={['customer']}><CustomerLayout><OrderTrackingPage /></CustomerLayout></RoleGuard>} />
               <Route path="/payment/paytabs/return" element={<RoleGuard allowedRoles={['customer']}><CustomerLayout><PaytabsReturnPage /></CustomerLayout></RoleGuard>} />

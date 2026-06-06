@@ -759,3 +759,25 @@
   .ot-sup-btn         { width: 100%; justify-content: center; }
   .ot-vline-wrap      { padding: 8px 12px 12px; }
 }
+
+/* ── Delivery address card ──────────────────────────────────────────────────── */
+.ot-address-body {
+  padding: 16px 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ot-address-name {
+  font-weight: 700;
+  color: var(--title);
+  margin-bottom: 2px;
+}
+.ot-address-line {
+  font-size: 14px;
+  color: var(--muted);
+}
+.ot-address-phone {
+  width: fit-content;
+  color: var(--p);
+  font-weight: 600;
+}

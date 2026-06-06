@@ -33,11 +33,23 @@ interface OrderDetail {
   product: Product | null;
 }
 
+interface ShippingAddress {
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  apartment: string | null;
+  city: string | null;
+  postalCode: string | null;
+}
+
 interface Order {
   id: number;
   total_price: number | null;
   status: string | null;
   created_at: string;
+  shipping_address: ShippingAddress | null;
   order_details: OrderDetail[];
 }
 
@@ -184,7 +196,7 @@ export default function OrderTrackingPage() {
       try {
         const { data: orderData, error: ordErr } = await supabase
           .from('orders')
-          .select('id, total_price, status, created_at')
+          .select('id, total_price, status, created_at, shipping_address')
           .eq('id', orderId)
           .eq('user_id', customer!.id)
           .single();
@@ -218,6 +230,7 @@ export default function OrderTrackingPage() {
           total_price: orderData.total_price,
           status:      orderData.status,
           created_at:  orderData.created_at,
+          shipping_address: (orderData as any).shipping_address ?? null,
           order_details: (detailsData ?? []).map((d: any) => ({
             id:             d.id,
             product_id:     d.product_id,
@@ -311,6 +324,9 @@ export default function OrderTrackingPage() {
 
         {/* ── 1. Summary Card ── */}
         <SummaryCard order={order} navigate={navigate} />
+
+        {/* ── Delivery address (hidden for orders predating the snapshot) ── */}
+        <ShippingAddressCard address={order.shipping_address} />
 
         {/* ── 2. Progress Dashboard ── */}
         {order.status !== 'cancelled'
@@ -413,6 +429,44 @@ function SummaryCard({ order, navigate }: { order: Order; navigate: ReturnType<t
           </svg>
           جميع طلباتي
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Delivery Address Card ───────────────────────────────────────────────────────
+
+function ShippingAddressCard({ address }: { address: ShippingAddress | null }) {
+  // Orders placed before the shipping_address column existed have no snapshot —
+  // render nothing rather than an empty card.
+  if (!address) return null;
+
+  const fullName = [address.firstName, address.lastName].filter(Boolean).join(' ').trim();
+  // Compose the street line from address + apartment when present.
+  const streetLine = [address.address, address.apartment].filter(Boolean).join('، ');
+  // City + postal code on one line.
+  const cityLine = [address.city, address.postalCode].filter(Boolean).join('، ');
+
+  // If the snapshot is entirely empty (all nulls), there's nothing useful to show.
+  if (!fullName && !streetLine && !cityLine && !address.phone) return null;
+
+  return (
+    <div className="ot-address-card ot-card">
+      <div className="ot-section-title">
+        <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+          <circle cx="12" cy="9" r="2.5"/>
+        </svg>
+        عنوان التوصيل
+      </div>
+
+      <div className="ot-address-body">
+        {fullName   && <div className="ot-address-name">{fullName}</div>}
+        {streetLine && <div className="ot-address-line">{streetLine}</div>}
+        {cityLine   && <div className="ot-address-line">{cityLine}</div>}
+        {address.phone && (
+          <div className="ot-address-line ot-address-phone" dir="ltr">{address.phone}</div>
+        )}
       </div>
     </div>
   );

@@ -20,6 +20,7 @@ import applicationUploadRouter from "./routes/applicationUploadRouter.js";
 import adminArchiveRouter from "./routes/adminArchiveRouter.js";
 import paytabsRouter from "./routes/paytabsRouter.js";
 import ordersRouter from "./routes/ordersRouter.js";
+import profileRouter from "./routes/profileRouter.js";
 import { requireAdmin } from "./middleware/requireAdmin.js";
 import { logisticsRouter, bootstrapLogistics } from "./logistics/index.js";
 
@@ -532,6 +533,9 @@ app.use('/api/admin', adminArchiveRouter);
 
 /* ---------- ORDERS (server-authoritative placement) ---------- */
 app.use('/api/orders', ordersRouter);
+
+/* ---------- CUSTOMER PROFILE (profile + default shipping address) ---------- */
+app.use('/api/profile', profileRouter);
 
 /* ---------- PAYTABS PAYMENTS (Hosted Payment Page — Test Mode) ---------- */
 app.use('/api/payments/paytabs', paytabsRouter);

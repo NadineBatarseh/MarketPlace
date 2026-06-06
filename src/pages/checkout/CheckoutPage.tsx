@@ -1,7 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useShop } from '../../context/ShopContext';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
+import {
+  fetchProfile,
+  saveProfile,
+  emptyProfile,
+  profilesEqual,
+  type ProfileData,
+} from '../../lib/profile';
 import supabase from '../../lib/supabase';
 import Topbar from '../../components/Topbar';
 import './CheckoutPage.css';
@@ -9,15 +16,60 @@ import './CheckoutPage.css';
 type PaymentMethod = 'paytabs' | 'cod' | null;
 
 export default function CheckoutPage() {
-  const { cartItems, removeFromCart, updateCartQty, clearCart } = useShop();
+  const { cartItems, removeFromCart, updateCartQty, removeItemsFromCart } = useShop();
   const { customer } = useCustomerAuth();
   const navigate     = useNavigate();
 
-  const [contact, setContact] = useState({ firstName: '', lastName: '', email: '', phone: '' });
-  const [shipping, setShipping] = useState({ address: '', apartment: '', city: '', postalCode: '' });
+  // ── Profile-backed shipping form (Phase 2) ────────────────────────────
+  // formData    : the LIVE form the user edits.
+  // originalData: an immutable snapshot of what we auto-filled from the saved
+  //               profile. We compare formData against it to detect edits.
+  const [formData, setFormData]         = useState<ProfileData>(emptyProfile());
+  const [originalData, setOriginalData] = useState<ProfileData>(emptyProfile());
+
+  // Email is owned by the auth account, not the profile — kept as its own field.
+  const [email, setEmail] = useState(customer?.email ?? '');
+
+  // When the form differs from the saved profile, offer to save it as default.
+  const [saveAsDefault, setSaveAsDefault] = useState(false);
+
   const [payment, setPayment] = useState<PaymentMethod>(null);
   const [paying, setPaying]   = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
+
+  // ── Auto-fill: pull the saved profile once when the page opens ─────────
+  useEffect(() => {
+    if (!customer) return; // checkout is customer-gated, but stay defensive
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const profile = await fetchProfile();
+        if (cancelled) return;
+        setFormData(profile);
+        setOriginalData(profile); // baseline for change detection
+      } catch {
+        // No saved profile / network issue → leave the form blank; not fatal.
+      }
+      if (!cancelled && customer.email) setEmail(customer.email);
+    })();
+
+    return () => { cancelled = true; };
+  }, [customer]);
+
+  // Change detection: true the moment ANY monitored field diverges from the
+  // originally fetched profile. Recomputed every render — cheap (7 string ==).
+  const hasChanges = !profilesEqual(formData, originalData);
+
+  // If the user reverts every edit back to the saved values, the checkbox
+  // disappears again — so also clear its checked state to avoid a hidden "on".
+  useEffect(() => {
+    if (!hasChanges && saveAsDefault) setSaveAsDefault(false);
+  }, [hasChanges, saveAsDefault]);
+
+  // One-liner field updater for every shipping/contact input.
+  const update = (field: keyof ProfileData) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setFormData((prev) => ({ ...prev, [field]: e.target.value }));
 
   const handlePay = async () => {
     if (!customer) { navigate('/login'); return; }
@@ -26,6 +78,28 @@ export default function CheckoutPage() {
 
     setPaying(true);
     setPayError(null);
+
+    // Build the contact + shipping payloads the order/payment APIs expect from
+    // the profile-shaped form.
+    const contact  = { firstName: formData.firstName, lastName: formData.lastName, email, phone: formData.phone };
+    const shipping = {
+      address:    formData.street,
+      apartment:  formData.apartment,
+      city:       formData.city,
+      postalCode: formData.postalCode,
+    };
+
+    // Phase 2 — save on submit: if the user edited their details AND ticked the
+    // box, persist the new profile IN PARALLEL with placing the order. This is
+    // best-effort: a profile-save failure must never block the purchase, so we
+    // swallow its error and only log it.
+    const profileSave =
+      saveAsDefault && hasChanges
+        ? saveProfile(formData)
+            .then(() => setOriginalData(formData)) // new baseline once saved
+            .catch((err) => console.error('[checkout] profile save failed:', err))
+        : Promise.resolve();
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
@@ -45,6 +119,7 @@ export default function CheckoutPage() {
           items:          activeItems.map(item => ({ product_id: String(item.productId), qty: item.quantity })),
           payment_method: payment,
           shipping,
+          contact, // persisted with the order as the shipping-address snapshot
         }),
       });
       const orderJson = await orderResp.json().catch(() => ({}));
@@ -66,15 +141,23 @@ export default function CheckoutPage() {
           throw new Error(json.error || 'تعذر بدء عملية الدفع عبر PayTabs');
         }
 
-        // Remember which order we're paying so the return page can verify it.
+        // Remember which order we're paying — plus the exact cart items in it —
+        // so the return page can clear ONLY the paid-for items, and only once
+        // the payment is actually confirmed. Do NOT clear the cart here: the
+        // customer hasn't paid yet and may abandon the PayTabs page.
         localStorage.setItem('paytabs_pending_order_id', String(orderId));
-        clearCart();
+        localStorage.setItem(
+          'paytabs_pending_item_ids',
+          JSON.stringify(activeItems.map(item => item.id)),
+        );
         window.location.href = json.redirect_url; // → PayTabs Hosted Payment Page
         return;
       }
 
-      // Cash on Delivery — order already marked 'cod' server-side; go to tracking.
-      clearCart();
+      // Cash on Delivery — order already marked 'cod' server-side; the order is
+      // confirmed now, so clear only the purchased items from the cart.
+      removeItemsFromCart(activeItems.map(item => item.id));
+      await profileSave; // let the parallel profile save settle before leaving
       navigate(`/orders/${orderId}`);
     } catch (e: unknown) {
       setPayError(e instanceof Error ? e.message : 'حدث خطأ أثناء معالجة الدفع');
@@ -105,24 +188,24 @@ export default function CheckoutPage() {
             <div className="co-row">
               <div className="co-field">
                 <label>الاسم الأول</label>
-                <input placeholder="أدخل الاسم الأول" value={contact.firstName}
-                  onChange={e => setContact(c => ({ ...c, firstName: e.target.value }))} />
+                <input placeholder="أدخل الاسم الأول" value={formData.firstName}
+                  onChange={update('firstName')} />
               </div>
               <div className="co-field">
                 <label>الاسم الأخير</label>
-                <input placeholder="أدخل الاسم الأخير" value={contact.lastName}
-                  onChange={e => setContact(c => ({ ...c, lastName: e.target.value }))} />
+                <input placeholder="أدخل الاسم الأخير" value={formData.lastName}
+                  onChange={update('lastName')} />
               </div>
             </div>
             <div className="co-field">
               <label>البريد الإلكتروني</label>
-              <input type="email" placeholder="example@email.com" value={contact.email}
-                onChange={e => setContact(c => ({ ...c, email: e.target.value }))} />
+              <input type="email" placeholder="example@email.com" value={email}
+                onChange={e => setEmail(e.target.value)} />
             </div>
             <div className="co-field">
               <label>رقم الهاتف</label>
-              <input type="tel" placeholder="+966 5x xxx xxxx" value={contact.phone}
-                onChange={e => setContact(c => ({ ...c, phone: e.target.value }))} />
+              <input type="tel" placeholder="+970 5x xxx xxxx" value={formData.phone}
+                onChange={update('phone')} />
             </div>
           </section>
 
@@ -131,26 +214,39 @@ export default function CheckoutPage() {
             <h2 className="co-section-title">التوصيل والشحن</h2>
             <div className="co-field">
               <label>العنوان</label>
-              <input placeholder="اسم الشارع ورقم المنزل" value={shipping.address}
-                onChange={e => setShipping(s => ({ ...s, address: e.target.value }))} />
+              <input placeholder="اسم الشارع ورقم المنزل" value={formData.street}
+                onChange={update('street')} />
             </div>
             <div className="co-field">
               <label>الشقة / الدور (اختياري)</label>
-              <input placeholder="رقم الشقة أو الدور" value={shipping.apartment}
-                onChange={e => setShipping(s => ({ ...s, apartment: e.target.value }))} />
+              <input placeholder="رقم الشقة أو الدور" value={formData.apartment}
+                onChange={update('apartment')} />
             </div>
             <div className="co-row">
               <div className="co-field">
                 <label>المدينة</label>
-                <input placeholder="مثال: الرياض" value={shipping.city}
-                  onChange={e => setShipping(s => ({ ...s, city: e.target.value }))} />
+                <input placeholder="مثال: رام الله" value={formData.city}
+                  onChange={update('city')} />
               </div>
               <div className="co-field">
                 <label>الرمز البريدي</label>
-                <input placeholder="12345" value={shipping.postalCode}
-                  onChange={e => setShipping(s => ({ ...s, postalCode: e.target.value }))} />
+                <input placeholder="12345" value={formData.postalCode}
+                  onChange={update('postalCode')} />
               </div>
             </div>
+
+            {/* Dynamic "save as default" checkbox — only rendered once the user
+                has changed something vs. their saved profile (hasChanges). */}
+            {hasChanges && (
+              <label className="co-save-default">
+                <input
+                  type="checkbox"
+                  checked={saveAsDefault}
+                  onChange={e => setSaveAsDefault(e.target.checked)}
+                />
+                <span>حفظ هذا العنوان كعنوان افتراضي في حسابي للطلبات القادمة</span>
+              </label>
+            )}
           </section>
 
           {/* Payment */}

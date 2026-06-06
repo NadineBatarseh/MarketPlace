@@ -322,3 +322,12 @@
   justify-content: center;
   margin-top: 8px;
 }
+
+/* Compact destination line on the order card */
+.oh-ship-to {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

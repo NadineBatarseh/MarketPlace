@@ -255,6 +255,15 @@ export default function Topbar({
                     🏠 لوحة التحكم
                   </button>
                 )}
+                {isCustomer && (
+                  <button
+                    type="button"
+                    className="topbar-dropdown-item"
+                    onClick={() => { navigate('/profile'); setDropdownOpen(false); }}
+                  >
+                    👤 إعدادات الملف الشخصي
+                  </button>
+                )}
                 <button
                   type="button"
                   className="topbar-dropdown-item"

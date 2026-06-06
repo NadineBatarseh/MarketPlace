@@ -25,11 +25,45 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 interface IncomingItem { product_id: string; qty: number }
 
+interface IncomingContact {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+}
+
+interface IncomingShipping {
+  address?: string;
+  apartment?: string;
+  city?: string;
+  postalCode?: string;
+}
+
+/** Trim a string; return null for empty/missing so the snapshot stays clean. */
+function clean(v: unknown): string | null {
+  return typeof v === 'string' && v.trim() ? v.trim() : null;
+}
+
 router.post('/create', requireCustomer, async (req: Request, res: Response) => {
-  const { items, payment_method, shipping } = req.body as {
+  const { items, payment_method, shipping, contact } = req.body as {
     items?: IncomingItem[];
     payment_method?: 'paytabs' | 'cod';
-    shipping?: { city?: string };
+    shipping?: IncomingShipping;
+    contact?: IncomingContact;
+  };
+
+  // Snapshot of WHERE this order ships, frozen at purchase time (stored as JSONB
+  // on the order). The address is legitimately client-supplied — unlike prices,
+  // which are always recomputed from the DB below.
+  const shippingAddress = {
+    firstName:  clean(contact?.firstName),
+    lastName:   clean(contact?.lastName),
+    phone:      clean(contact?.phone),
+    email:      clean(contact?.email),
+    address:    clean(shipping?.address),
+    apartment:  clean(shipping?.apartment),
+    city:       clean(shipping?.city),
+    postalCode: clean(shipping?.postalCode),
   };
 
   if (!Array.isArray(items) || items.length === 0) {
@@ -80,6 +114,7 @@ router.post('/create', requireCustomer, async (req: Request, res: Response) => {
       status: 'pending',
       total_price: total,
       payment_status: payment_method === 'cod' ? 'cod' : 'unpaid',
+      shipping_address: shippingAddress,
     })
     .select('id')
     .single();

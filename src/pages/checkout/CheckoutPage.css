@@ -162,6 +162,33 @@
 
 .co-paypal-msg small { color: var(--co-muted); }
 
+/* ── Save-as-default checkbox (appears only when the form is edited) ── */
+.co-save-default {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  background: var(--co-green-light);
+  border: 1.5px solid #b7dcc3;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--co-green-dark);
+  cursor: pointer;
+  line-height: 1.6;
+  animation: fadeIn 0.2s ease;
+}
+
+.co-save-default input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  accent-color: var(--co-green);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 /* ── Summary Box ── */
 .co-summary-side {
   position: sticky;

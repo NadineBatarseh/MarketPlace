@@ -26,11 +26,23 @@ interface OrderDetail {
   product: Product | null;
 }
 
+interface ShippingAddress {
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  apartment: string | null;
+  city: string | null;
+  postalCode: string | null;
+}
+
 interface Order {
   id: number;
   total_price: number | null;
   status: string | null;
   created_at: string;
+  shipping_address: ShippingAddress | null;
   order_details: OrderDetail[];
 }
 
@@ -113,7 +125,7 @@ export default function OrderHistoryPage() {
         // Step 1: fetch orders for this user
         const { data: ordersData, error: ordErr } = await supabase
           .from('orders')
-          .select('id, total_price, status, created_at')
+          .select('id, total_price, status, created_at, shipping_address')
           .eq('user_id', customer!.id)
           .order('created_at', { ascending: false });
         if (ordErr) throw ordErr;
@@ -155,6 +167,7 @@ export default function OrderHistoryPage() {
           total_price: o.total_price,
           status:      o.status,
           created_at:  o.created_at,
+          shipping_address: (o as any).shipping_address ?? null,
           order_details: (detailsByOrder.get(o.id) ?? []).map((d: any) => ({
             id:             d.id,
             product_id:     d.product_id,
@@ -314,6 +327,12 @@ function OrderCard({ order, idx }: { order: Order; idx: number }) {
   const totalQty  = items.reduce((s, d) => s + (d.qty ?? 1), 0);
   const subText   = `${totalQty} قطعة`;
 
+  // Compact destination line (city + street) — empty for orders with no snapshot.
+  const addr   = order.shipping_address;
+  const shipTo = addr
+    ? [addr.city, addr.address].filter(Boolean).join('، ')
+    : '';
+
   const showTrack = cfg.step > 0 && order.status !== 'cancelled';
   const pct       = Math.round((cfg.step / (STEPS.length - 1)) * 100);
 
@@ -368,6 +387,9 @@ function OrderCard({ order, idx }: { order: Order; idx: number }) {
         <div className="oh-order-info">
           <div className="oh-product-name">{summary}</div>
           <div className="oh-product-sub">{subText}</div>
+          {shipTo && (
+            <div className="oh-product-sub oh-ship-to" title={shipTo}>📍 {shipTo}</div>
+          )}
         </div>
       </div>
 
