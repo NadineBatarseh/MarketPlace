@@ -17,6 +17,9 @@ export interface ProfileData {
   street: string;     // street name + house number (main address line)
   apartment: string;  // apartment / floor (optional)
   postalCode: string;
+  // Exact delivery pin captured from the Address Book map. null = no pin yet.
+  latitude: number | null;
+  longitude: number | null;
 }
 
 // snake_case shape exchanged with the API (matches the customer_profiles table).
@@ -28,14 +31,20 @@ interface ApiProfile {
   street?: string | null;
   apartment?: string | null;
   postal_code?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 /** A fully-blank profile — safe defaults so inputs are always controlled. */
 export function emptyProfile(): ProfileData {
-  return { firstName: '', lastName: '', phone: '', city: '', street: '', apartment: '', postalCode: '' };
+  return {
+    firstName: '', lastName: '', phone: '', city: '', street: '', apartment: '',
+    postalCode: '', latitude: null, longitude: null,
+  };
 }
 
-/** API (snake_case, nullable) → component (camelCase, always strings). */
+/** API (snake_case, nullable) → component (camelCase). Text always strings;
+ *  coordinates stay numeric (or null when unset). */
 function fromApi(api: ApiProfile | null | undefined): ProfileData {
   return {
     firstName:  api?.first_name  ?? '',
@@ -45,6 +54,8 @@ function fromApi(api: ApiProfile | null | undefined): ProfileData {
     street:     api?.street      ?? '',
     apartment:  api?.apartment   ?? '',
     postalCode: api?.postal_code ?? '',
+    latitude:   api?.latitude  ?? null,
+    longitude:  api?.longitude ?? null,
   };
 }
 
@@ -58,6 +69,8 @@ function toApi(p: ProfileData): ApiProfile {
     street:      p.street,
     apartment:   p.apartment,
     postal_code: p.postalCode,
+    latitude:    p.latitude,
+    longitude:   p.longitude,
   };
 }
 

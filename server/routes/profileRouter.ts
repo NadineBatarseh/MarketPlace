@@ -16,9 +16,9 @@ import { requireCustomer } from '../middleware/requireCustomer.js';
  */
 const router = Router();
 
-// The fields a client is allowed to set. email/role live on public.Users and are
-// intentionally NOT editable here; user_id/timestamps are server-controlled.
-const EDITABLE_FIELDS = [
+// Text fields a client is allowed to set. email/role live on public.Users and
+// are intentionally NOT editable here; user_id/timestamps are server-controlled.
+const TEXT_FIELDS = [
   'first_name',
   'last_name',
   'phone',
@@ -28,11 +28,22 @@ const EDITABLE_FIELDS = [
   'postal_code',
 ] as const;
 
-type ProfileField = (typeof EDITABLE_FIELDS)[number];
-type ProfilePayload = Partial<Record<ProfileField, string | null>>;
+// Numeric fields (the delivery map pin). Handled separately from text because
+// they need range validation, not string-trimming.
+const COORD_FIELDS = ['latitude', 'longitude'] as const;
+
+type TextField = (typeof TEXT_FIELDS)[number];
+type CoordField = (typeof COORD_FIELDS)[number];
+
+// Columns selected/returned to the client.
+const SELECT = [...TEXT_FIELDS, ...COORD_FIELDS].join(', ');
+
+type ProfilePayload = Partial<
+  Record<TextField, string | null> & Record<CoordField, number | null>
+>;
 
 /** Empty profile shape returned when the user has no row yet (first visit). */
-function emptyProfile(): Record<ProfileField, string> {
+function emptyProfile(): ProfilePayload {
   return {
     first_name: '',
     last_name: '',
@@ -41,14 +52,19 @@ function emptyProfile(): Record<ProfileField, string> {
     street: '',
     apartment: '',
     postal_code: '',
+    latitude: null,
+    longitude: null,
   };
 }
+
+/** Valid WGS-84 ranges, mirroring the DB check constraint. */
+const COORD_RANGE: Record<CoordField, number> = { latitude: 90, longitude: 180 };
 
 // ── GET /api/profile ──────────────────────────────────────────────────
 router.get('/', requireCustomer, async (req: Request, res: Response) => {
   const { data, error } = await supabase
     .from('customer_profiles')
-    .select('first_name, last_name, phone, city, street, apartment, postal_code')
+    .select(SELECT)
     .eq('user_id', req.authUserId)
     .maybeSingle(); // no row yet is normal → null, not an error
 
@@ -64,10 +80,25 @@ router.put('/', requireCustomer, async (req: Request, res: Response) => {
 
   // Whitelist: copy only known fields, trim strings, coerce empty → null.
   const updates: ProfilePayload = {};
-  for (const field of EDITABLE_FIELDS) {
+  for (const field of TEXT_FIELDS) {
     if (field in body) {
       const raw = body[field];
       updates[field] = typeof raw === 'string' ? raw.trim() || null : null;
+    }
+  }
+
+  // Coordinates: accept a finite number in range, or null to clear the pin.
+  // Anything else is rejected so a bad client can't poison the delivery routing.
+  for (const field of COORD_FIELDS) {
+    if (field in body) {
+      const raw = body[field];
+      if (raw === null) {
+        updates[field] = null;
+      } else if (typeof raw === 'number' && Number.isFinite(raw) && Math.abs(raw) <= COORD_RANGE[field]) {
+        updates[field] = raw;
+      } else {
+        return res.status(400).json({ ok: false, error: `Invalid ${field}` });
+      }
     }
   }
 
@@ -81,7 +112,7 @@ router.put('/', requireCustomer, async (req: Request, res: Response) => {
   const { data, error } = await supabase
     .from('customer_profiles')
     .upsert({ user_id: req.authUserId, ...updates }, { onConflict: 'user_id' })
-    .select('first_name, last_name, phone, city, street, apartment, postal_code')
+    .select(SELECT)
     .single();
 
   if (error) return res.status(500).json({ ok: false, error: error.message });
