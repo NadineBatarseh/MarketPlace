@@ -186,48 +186,29 @@ export default function CategoryListingPage() {
       <Topbar />
       <StoreNav />
 
-      {/* ── Category Hero ── matches store-hero layout ── */}
-      <section className="store-hero cat-hero-section">
+      <div className="cat-page" dir="rtl">
 
-        {/* RIGHT: title + subtitle */}
-        <div className="sh-identity">
-          <div className="sh-name-group">
-            <div className="sh-name">
-              {dataLoading ? '...' : (category?.label ?? '')}
-            </div>
-            <div className="sh-desc">اكتشف المنتجات والمتاجر المتوفرة ضمن هذه الفئة</div>
-          </div>
+      {/* ── Category Hero ── per-category banner from Supabase ── */}
+      <section className="cat-hero">
+        <div className="cat-hero-bg" aria-hidden="true">
+          {(category?.hero_image_url || category?.image_url) && (
+            <img
+              className="cat-hero-img"
+              src={category.hero_image_url || category.image_url}
+              alt=""
+            />
+          )}
+          <div className="cat-hero-fade" />
         </div>
-
-        {/* CENTER: stats */}
-        {!dataLoading && (
-          <div className="sh-stats">
-            <div className="sh-stat">
-              <svg className="sh-stat-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                <polyline points="9 22 9 12 15 12 15 22" />
-              </svg>
-              <span className="sh-stat-value">{stores.length}</span>
-              <span className="sh-stat-label">متجر</span>
-            </div>
-
-            <span className="sh-stat-divider" />
-
-            <div className="sh-stat">
-              <svg className="sh-stat-icon" viewBox="0 0 24 24" fill="currentColor">
-                <polygon points="12,3 22,8 12,13 2,8" opacity="0.7"/>
-                <polygon points="2,8 12,13 12,21 2,16"/>
-                <polygon points="22,8 12,13 12,21 22,16" opacity="0.85"/>
-              </svg>
-              <span className="sh-stat-value">{total}</span>
-              <span className="sh-stat-label">منتج</span>
-            </div>
-          </div>
-        )}
-
-        {/* LEFT: placeholder to balance layout */}
-        <div className="sh-actions" />
-
+        <div className="cat-hero-content">
+          <h1 className="cat-hero-title">
+            {dataLoading ? '...' : (category?.label ?? '')}
+          </h1>
+          <p className="cat-hero-desc">
+            {category?.description?.trim() ||
+              'اكتشف المنتجات والمتاجر المتوفرة ضمن هذه الفئة'}
+          </p>
+        </div>
       </section>
 
       <div className="page-body">
@@ -262,6 +243,7 @@ export default function CategoryListingPage() {
           onToggleWishlist={toggleWishlist}
           onAddToCart={addToCart}
         />
+      </div>
       </div>
 
       <Toast message={toast} visible={toastVisible} />

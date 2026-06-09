@@ -13,6 +13,10 @@ export interface CategoryInfo {
   id: string;
   label: string;
   image_url: string;
+  /** Optional landscape banner for the category hero; falls back to image_url. */
+  hero_image_url?: string | null;
+  /** Optional marketing description shown in the category hero. */
+  description?: string | null;
 }
 
 interface Result {
@@ -37,9 +41,11 @@ export function useCategoryData(categoryId: string): Result {
 
     async function load() {
       // 1. Category info
+      // Select '*' so the optional `description` column is included when present
+      // without breaking on databases where it hasn't been added yet.
       const { data: catData } = await supabase
         .from('categories')
-        .select('id, label, image_url')
+        .select('*')
         .eq('id', categoryId)
         .single();
 

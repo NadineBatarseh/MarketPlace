@@ -3,6 +3,7 @@ import LogisticsSettingsPage from '../../pages/admin/logistics/LogisticsSettings
 import BatchMonitorPage from '../../pages/admin/BatchMonitorPage';
 import CouriersPage from '../../pages/admin/CouriersPage';
 import ShopsPage from '../../pages/admin/ShopsPage';
+import CategoryImagesPage from '../../pages/admin/CategoryImagesPage';
 import AdminSentMessages from '../../pages/admin/AdminSentMessages';
 import emailjs from '@emailjs/browser';
 import supabase from '../../lib/supabase';
@@ -83,7 +84,7 @@ interface HubWorkerApp {
 }
 
 type FilterTab = 'all' | 'pending' | 'approved' | 'rejected';
-type Section = 'merchant' | 'delivery' | 'hubworker' | 'batches' | 'logistics' | 'couriers' | 'shops' | 'messages';
+type Section = 'merchant' | 'delivery' | 'hubworker' | 'batches' | 'logistics' | 'couriers' | 'shops' | 'categories' | 'messages';
 
 interface BatchConfigForm {
   max_driver_capacity: number;
@@ -1030,6 +1031,19 @@ export default function AdminDashboard() {
             <SidebarItem
               icon={
                 <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <path d="M21 15l-5-5L5 21" />
+                </svg>
+              }
+              label="صور الفئات"
+              active={activeSection === 'categories'}
+              onClick={() => setActiveSection('categories')}
+            />
+
+            <SidebarItem
+              icon={
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                   <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
                   <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
                 </svg>
@@ -1195,7 +1209,7 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {activeSection !== 'batches' && activeSection !== 'logistics' && activeSection !== 'couriers' && activeSection !== 'shops' && activeSection !== 'messages' && (loading ? (
+          {activeSection !== 'batches' && activeSection !== 'logistics' && activeSection !== 'couriers' && activeSection !== 'shops' && activeSection !== 'categories' && activeSection !== 'messages' && (loading ? (
             <div className="ad-state" role="status" aria-live="polite">
               <span className="ad-state-spin" aria-hidden="true" />
               <div className="ad-state-title">جاري تحميل الطلبات…</div>
@@ -1421,6 +1435,11 @@ export default function AdminDashboard() {
           {/* ── Shops section ── */}
           {activeSection === 'shops' && (
             <ShopsPage />
+          )}
+
+          {/* ── Category images section ── */}
+          {activeSection === 'categories' && (
+            <CategoryImagesPage />
           )}
 
           {/* ── Logistics settings section ── */}

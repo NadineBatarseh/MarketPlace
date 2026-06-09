@@ -1,0 +1,188 @@
+import { useState, useEffect, useRef } from 'react';
+import supabase from '../../lib/supabase';
+import './CategoryImagesPage.css';
+
+interface CategoryRow {
+  id: string;
+  label: string;
+  image_url: string | null;
+  hero_image_url: string | null;
+}
+
+const BUCKET = 'category-images';
+
+export default function CategoryImagesPage() {
+  const [categories, setCategories] = useState<CategoryRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  /** id of the category currently uploading, so we can show a per-card spinner */
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  async function load() {
+    setLoading(true);
+    setError('');
+    const { data, error: err } = await supabase
+      .from('categories')
+      .select('id, label, image_url, hero_image_url')
+      .order('label', { ascending: true });
+    if (err) setError('تعذّر تحميل الفئات: ' + err.message);
+    else setCategories((data ?? []) as CategoryRow[]);
+    setLoading(false);
+  }
+
+  useEffect(() => { load(); }, []);
+
+  async function handleFile(cat: CategoryRow, file: File) {
+    if (!file.type.startsWith('image/')) {
+      setError('يرجى اختيار ملف صورة صالح');
+      return;
+    }
+    setError('');
+    setUploadingId(cat.id);
+    setSavedId(null);
+    try {
+      // Remove the previous hero (if it lived in our bucket) so we don't orphan files.
+      const prevPath = cat.hero_image_url?.split(`/${BUCKET}/`)[1];
+
+      const ext = file.name.split('.').pop() || 'jpg';
+      const path = `${cat.id}/hero_${Date.now()}.${ext}`;
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from(BUCKET)
+        .upload(path, file, { upsert: true });
+      if (uploadErr) throw uploadErr;
+
+      const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(uploadData.path);
+      const publicUrl = urlData.publicUrl;
+
+      // .select() so we can confirm a row actually changed. An RLS-blocked update
+      // returns no error AND no rows — without this check we'd falsely report success.
+      const { data: updated, error: updateErr } = await supabase
+        .from('categories')
+        .update({ hero_image_url: publicUrl })
+        .eq('id', cat.id)
+        .select('id');
+      if (updateErr) throw updateErr;
+      if (!updated || updated.length === 0) {
+        throw new Error('لم يتم الحفظ — لا تملك صلاحية تعديل الفئات (تحقّق من سياسات RLS).');
+      }
+
+      if (prevPath) await supabase.storage.from(BUCKET).remove([prevPath]);
+
+      setCategories(prev =>
+        prev.map(c => (c.id === cat.id ? { ...c, hero_image_url: publicUrl } : c)),
+      );
+      setSavedId(cat.id);
+    } catch (e) {
+      setError('تعذّر رفع الصورة: ' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setUploadingId(null);
+    }
+  }
+
+  async function handleRemove(cat: CategoryRow) {
+    setError('');
+    setUploadingId(cat.id);
+    try {
+      const prevPath = cat.hero_image_url?.split(`/${BUCKET}/`)[1];
+      const { data: updated, error: updateErr } = await supabase
+        .from('categories')
+        .update({ hero_image_url: null })
+        .eq('id', cat.id)
+        .select('id');
+      if (updateErr) throw updateErr;
+      if (!updated || updated.length === 0) {
+        throw new Error('لم يتم الحفظ — لا تملك صلاحية تعديل الفئات (تحقّق من سياسات RLS).');
+      }
+      if (prevPath) await supabase.storage.from(BUCKET).remove([prevPath]);
+      setCategories(prev =>
+        prev.map(c => (c.id === cat.id ? { ...c, hero_image_url: null } : c)),
+      );
+    } catch (e) {
+      setError('تعذّر حذف الصورة: ' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setUploadingId(null);
+    }
+  }
+
+  return (
+    <div className="cat-img-admin" dir="rtl">
+      <div className="cat-img-head">
+        <div>
+          <h1 className="cat-img-title">صور الفئات</h1>
+          <p className="cat-img-subtitle">
+            ارفع صورة الغلاف (البانر) التي تظهر أعلى صفحة كل فئة. الصورة العريضة (أفقية) تعطي أفضل نتيجة.
+          </p>
+        </div>
+        <button className="cat-img-refresh" onClick={load} disabled={loading}>↻ تحديث</button>
+      </div>
+
+      {error && <div className="cat-img-error">{error}</div>}
+
+      {loading ? (
+        <div className="cat-img-state">جاري تحميل الفئات…</div>
+      ) : categories.length === 0 ? (
+        <div className="cat-img-state">لا توجد فئات.</div>
+      ) : (
+        <div className="cat-img-grid">
+          {categories.map(cat => {
+            const hero = cat.hero_image_url || cat.image_url;
+            const busy = uploadingId === cat.id;
+            return (
+              <div key={cat.id} className="cat-img-card">
+                <div className="cat-img-preview">
+                  {hero ? (
+                    <img src={hero} alt={cat.label} />
+                  ) : (
+                    <div className="cat-img-placeholder">لا توجد صورة</div>
+                  )}
+                  {busy && <div className="cat-img-overlay"><span className="cat-img-spin" /></div>}
+                  {!cat.hero_image_url && cat.image_url && (
+                    <span className="cat-img-badge">صورة افتراضية (الغلاف)</span>
+                  )}
+                </div>
+
+                <div className="cat-img-body">
+                  <div className="cat-img-label">{cat.label}</div>
+                  {savedId === cat.id && <div className="cat-img-saved">✓ تم الحفظ</div>}
+
+                  <input
+                    ref={el => { fileInputs.current[cat.id] = el; }}
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    onChange={e => {
+                      const f = e.target.files?.[0];
+                      if (f) handleFile(cat, f);
+                      e.target.value = '';
+                    }}
+                  />
+
+                  <div className="cat-img-actions">
+                    <button
+                      className="cat-img-btn"
+                      disabled={busy}
+                      onClick={() => fileInputs.current[cat.id]?.click()}
+                    >
+                      {cat.hero_image_url ? 'تغيير الصورة' : 'رفع صورة'}
+                    </button>
+                    {cat.hero_image_url && (
+                      <button
+                        className="cat-img-btn cat-img-btn--ghost"
+                        disabled={busy}
+                        onClick={() => handleRemove(cat)}
+                      >
+                        حذف
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
