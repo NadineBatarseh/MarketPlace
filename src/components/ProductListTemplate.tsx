@@ -37,15 +37,6 @@ export default function ProductListTemplate({
       <div className="pt-page">
       {/* ── CONTENT ── */}
       <div className="pt-wrapper">
-        {/* Breadcrumb */}
-        {/* <nav className="pt-breadcrumb" aria-label="breadcrumb">
-          <a href="/">الرئيسية</a>
-          <span className="pt-sep">›</span>
-          <a href="/store">المتجر</a>
-          <span className="pt-sep">›</span>
-          <span className="pt-current">{title}</span>
-        </nav> */}
-
         {/* Heading */}
         <h1 className="pt-page-title">
           {title}

@@ -176,15 +176,26 @@ export default function CheckoutPage() {
   return (
     <div className="co-page" dir="rtl">
       <Topbar />
-      <h1 className="co-page-title">إتمام الطلب</h1>
-      <div className="co-wrap">
+      <div className="co-shell">
+        <nav className="co-breadcrumb">
+          <a onClick={() => navigate('/home')}>الرئيسية</a>
+          <span className="material-symbols-outlined">chevron_left</span>
+          <a onClick={() => navigate('/cart')}>السلة</a>
+          <span className="material-symbols-outlined">chevron_left</span>
+          <span className="current">إتمام الطلب</span>
+        </nav>
+        <h1 className="co-page-title">إتمام الطلب</h1>
+        <div className="co-wrap">
 
         {/* ── RIGHT: Form ── */}
         <div className="co-form-side">
 
           {/* Contact Info */}
           <section className="co-section">
-            <h2 className="co-section-title">معلومات التواصل</h2>
+            <h2 className="co-section-title">
+              <span className="material-symbols-outlined">person</span>
+              معلومات التواصل
+            </h2>
             <div className="co-row">
               <div className="co-field">
                 <label>الاسم الأول</label>
@@ -211,7 +222,10 @@ export default function CheckoutPage() {
 
           {/* Delivery */}
           <section className="co-section">
-            <h2 className="co-section-title">التوصيل والشحن</h2>
+            <h2 className="co-section-title">
+              <span className="material-symbols-outlined">local_shipping</span>
+              التوصيل والشحن
+            </h2>
             <div className="co-field">
               <label>العنوان</label>
               <input placeholder="اسم الشارع ورقم المنزل" value={formData.street}
@@ -251,23 +265,26 @@ export default function CheckoutPage() {
 
           {/* Payment */}
           <section className="co-section">
-            <h2 className="co-section-title">الدفع</h2>
+            <h2 className="co-section-title">
+              <span className="material-symbols-outlined">payments</span>
+              الدفع
+            </h2>
             <div className="co-payment-options">
               <button
                 type="button"
                 className={`co-pay-opt ${payment === 'paytabs' ? 'active' : ''}`}
                 onClick={() => setPayment('paytabs')}
               >
-                <span className="co-pay-icon">💳</span>
-                <span>الدفع التجريبي عبر PayTabs<br /><small>PayTabs Test Payment</small></span>
+                <span className="material-symbols-outlined co-pay-icon">credit_card</span>
+                <span>الدفع التجريبي عبر PayTabs<small>PayTabs Test Payment</small></span>
               </button>
               <button
                 type="button"
                 className={`co-pay-opt ${payment === 'cod' ? 'active' : ''}`}
                 onClick={() => setPayment('cod')}
               >
-                <span className="co-pay-icon">💵</span>
-                <span>الدفع عند الاستلام<br /><small>Cash on Delivery</small></span>
+                <span className="material-symbols-outlined co-pay-icon">local_atm</span>
+                <span>الدفع عند الاستلام<small>Cash on Delivery</small></span>
               </button>
             </div>
 
@@ -290,7 +307,10 @@ export default function CheckoutPage() {
         {/* ── LEFT: Order Summary ── */}
         <div className="co-summary-side">
           <div className="co-summary-box">
-            <h2 className="co-summary-title">ملخص الطلب</h2>
+            <h2 className="co-summary-title">
+              <span className="material-symbols-outlined">receipt_long</span>
+              ملخص الطلب
+            </h2>
 
             {cartItems.length === 0 ? (
               <p className="co-empty">السلة فارغة</p>
@@ -298,7 +318,8 @@ export default function CheckoutPage() {
               <>
                 {hasDeleted && (
                   <div className="co-deleted-warning">
-                    ⚠️ بعض المنتجات في سلتك لم تعد متاحة وستُستثنى من الطلب
+                    <span className="material-symbols-outlined">warning</span>
+                    بعض المنتجات في سلتك لم تعد متاحة وستُستثنى من الطلب
                   </div>
                 )}
                 <ul className="co-items">
@@ -307,20 +328,28 @@ export default function CheckoutPage() {
                       <div className="co-item-info">
                         <span className="co-item-name">{item.name}</span>
                         {item.isDeleted ? (
-                          <span className="co-item-deleted-msg">⚠️ تم حذف هذا المنتج من قبل التاجر</span>
+                          <span className="co-item-deleted-msg">
+                            <span className="material-symbols-outlined">warning</span>
+                            تم حذف هذا المنتج من قبل التاجر
+                          </span>
                         ) : (
                           <>
                             <span className="co-item-price">{(item.price * item.quantity).toLocaleString('ar-SA')} ₪</span>
                             <div className="co-qty">
                               <button type="button" onClick={() => updateCartQty(item.id, item.quantity - 1)}
-                                disabled={item.quantity <= 1}>−</button>
+                                disabled={item.quantity <= 1} aria-label="إنقاص">
+                                <span className="material-symbols-outlined">remove</span>
+                              </button>
                               <span>{item.quantity}</span>
-                              <button type="button" onClick={() => updateCartQty(item.id, item.quantity + 1)}>+</button>
+                              <button type="button" onClick={() => updateCartQty(item.id, item.quantity + 1)} aria-label="زيادة">
+                                <span className="material-symbols-outlined">add</span>
+                              </button>
                             </div>
                           </>
                         )}
                         <button type="button" className="co-remove" onClick={() => removeFromCart(item.id)}>
-                          🗑 إزالة
+                          <span className="material-symbols-outlined">delete</span>
+                          إزالة
                         </button>
                       </div>
                       {item.image && (
@@ -357,12 +386,23 @@ export default function CheckoutPage() {
             </div>
           </div>
 
-          {payError && <div className="co-pay-error">{payError}</div>}
+          {payError && (
+            <div className="co-pay-error">
+              <span className="material-symbols-outlined">error</span>
+              {payError}
+            </div>
+          )}
           <button type="button" className="co-pay-btn" onClick={handlePay} disabled={paying}>
+            <span className="material-symbols-outlined">lock</span>
             {paying ? 'جارٍ المعالجة…' : 'ادفع الآن'}
           </button>
+          <p className="co-trust">
+            <span className="material-symbols-outlined">verified_user</span>
+            دفع آمن ومشفّر — بياناتك محمية
+          </p>
         </div>
 
+        </div>
       </div>
     </div>
   );

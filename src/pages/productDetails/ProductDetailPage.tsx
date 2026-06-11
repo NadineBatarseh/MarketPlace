@@ -794,7 +794,7 @@ const ProductDetailPage: React.FC = () => {
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-10">
             {/* Gallery — appears on the left in RTL */}
             <div className="order-1 flex flex-col gap-4 lg:order-2">
-              <div className="group relative aspect-square overflow-hidden rounded-2xl border border-gray-200 bg-white">
+              <div className="group relative aspect-square overflow-hidden rounded-lg border border-gray-200 bg-white">
                 <img
                   src={mainImage}
                   alt={safeText(product?.title)}
@@ -810,14 +810,14 @@ const ProductDetailPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={prevImage}
-                      className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 opacity-0 shadow-md transition-opacity hover:bg-white group-hover:opacity-100"
+                      className="absolute right-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 opacity-0 shadow-md transition-opacity hover:bg-white group-hover:opacity-100"
                     >
                       <ChevronRight size={22} />
                     </button>
                     <button
                       type="button"
                       onClick={nextImage}
-                      className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 opacity-0 shadow-md transition-opacity hover:bg-white group-hover:opacity-100"
+                      className="absolute left-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 opacity-0 shadow-md transition-opacity hover:bg-white group-hover:opacity-100"
                     >
                       <ChevronLeft size={22} />
                     </button>
@@ -847,7 +847,7 @@ const ProductDetailPage: React.FC = () => {
                         key={idx}
                         type="button"
                         onClick={() => handleImageChange(idx, img)}
-                        className={`h-20 w-20 shrink-0 overflow-hidden rounded-lg border-2 transition-colors ${activeThumb === idx ? '' : 'border-gray-200'}`}
+                        className={`h-20 w-20 shrink-0 overflow-hidden rounded border-2 transition-colors ${activeThumb === idx ? '' : 'border-gray-200'}`}
                         style={activeThumb === idx ? { borderColor: GREEN } : {}}
                       >
                         <img src={img} alt={`صورة ${idx + 1}`} className="h-full w-full object-cover" />
@@ -868,55 +868,58 @@ const ProductDetailPage: React.FC = () => {
             </div>
 
             {/* Product info — appears on the right in RTL */}
-            <div className="order-2 flex flex-col gap-5 lg:order-1">
-              {/* Shop tag */}
-              <div className="flex items-center gap-2">
-                <div
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold"
-                  style={{ backgroundColor: `${GREEN}1a`, color: GREEN }}
-                >
-                  {shopName?.trim()?.[0] ?? '🏪'}
+            <div className="order-2 flex flex-col gap-6 lg:order-1">
+              {/* Title group — shop tag, title and rating sit tightly together (gap-sm = 8px) */}
+              <div className="flex flex-col gap-2">
+                {/* Shop tag */}
+                <div className="flex items-center gap-2 mb-2">
+                  <div
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold"
+                    style={{ backgroundColor: `${GREEN}1a`, color: GREEN }}
+                  >
+                    {shopName?.trim()?.[0] ?? '🏪'}
+                  </div>
+                  <button
+                    type="button"
+                    className="text-sm font-bold hover:underline"
+                    style={{ color: GREEN }}
+                    onClick={() => { if (product?.shop_id) navigate(`/store/${product.shop_id}`); }}
+                  >
+                    {safeText(shopName)}
+                  </button>
+                  <span className="rounded bg-gray-100 px-2 py-0.5 text-[10px] text-gray-600">موثوق</span>
                 </div>
-                <button
-                  type="button"
-                  className="text-sm font-bold hover:underline"
-                  style={{ color: GREEN }}
-                  onClick={() => { if (product?.shop_id) navigate(`/store/${product.shop_id}`); }}
-                >
-                  {safeText(shopName)}
-                </button>
-                <span className="rounded bg-gray-100 px-2 py-0.5 text-[10px] text-gray-600">موثوق</span>
+
+                {/* Title — headline-lg = 32px / 600 */}
+                <h1 className="text-[28px] font-bold leading-tight md:text-[32px] md:leading-[40px]" style={{ color: GREEN }}>
+                  {safeText(product?.title)}
+                </h1>
+
+                {/* Rating */}
+                <div className="flex items-center gap-4">
+                  <div className="flex">{renderStars(ratingAvg ?? 0, 20)}</div>
+                  <span className="text-sm text-gray-500">
+                    {ratingAvg !== null ? ratingAvg.toFixed(1) : NOT_FOUND} ({reviewsCount} تقييم)
+                  </span>
+                </div>
               </div>
 
-              {/* Title */}
-              <h1 className="text-2xl font-bold leading-snug md:text-3xl" style={{ color: GREEN }}>
-                {safeText(product?.title)}
-              </h1>
-
-              {/* Rating */}
-              <div className="flex items-center gap-3">
-                <div className="flex">{renderStars(ratingAvg ?? 0, 20)}</div>
-                <span className="text-sm text-gray-500">
-                  {ratingAvg !== null ? ratingAvg.toFixed(1) : NOT_FOUND} ({reviewsCount} تقييم)
-                </span>
-              </div>
-
-              {/* Price */}
-              <div className="flex flex-wrap items-end gap-3">
-                <span className="text-3xl font-bold md:text-4xl" style={{ color: GREEN }}>
+              {/* Price — display-lg = 48px / 700 / -0.02em */}
+              <div className="flex flex-wrap items-baseline gap-4">
+                <span className="text-[40px] font-bold leading-none tracking-tight md:text-[48px]" style={{ color: GREEN }}>
                   {discountedPrice !== null
                     ? discountedPrice.toFixed(2)
                     : (displayPrice ?? NOT_FOUND)} ₪
                 </span>
                 {discountValue !== null && product?.price != null && (
-                  <span className="text-lg text-gray-400 line-through">{product.price} ₪</span>
+                  <span className="text-2xl text-gray-500 line-through">{product.price} ₪</span>
                 )}
               </div>
 
               {/* Stock */}
               <div className="flex items-center gap-2">
                 <span
-                  className={`h-2.5 w-2.5 rounded-full ${stockState === 'in' ? 'bg-green-500' : stockState === 'out' ? 'bg-red-500' : 'bg-gray-400'}`}
+                  className={`h-2 w-2 rounded-full ${stockState === 'in' ? 'bg-green-500' : stockState === 'out' ? 'bg-red-500' : 'bg-gray-400'}`}
                 />
                 <span
                   className={`text-sm font-bold ${stockState === 'in' ? 'text-green-600' : stockState === 'out' ? 'text-red-600' : 'text-gray-500'}`}
@@ -933,7 +936,7 @@ const ProductDetailPage: React.FC = () => {
 
               {/* Variants */}
               {variants.length > 0 && (
-                <div className="flex flex-col gap-5 border-t border-gray-200 pt-5">
+                <div className="flex flex-col gap-6">
                   {hasColors && (
                     <div className="flex flex-col gap-2">
                       <span className="text-sm font-bold">
@@ -942,7 +945,7 @@ const ProductDetailPage: React.FC = () => {
                           {selectedColor ? parseColorEntry(selectedColor).name : 'اختر اللون'}
                         </span>
                       </span>
-                      <div className="flex flex-wrap gap-3">
+                      <div className="flex flex-wrap gap-4">
                         {uniqueColors.map(color => {
                           const { name, hex } = parseColorEntry(color);
                           const active = selectedColor === color;
@@ -953,7 +956,7 @@ const ProductDetailPage: React.FC = () => {
                               title={name}
                               aria-label={name}
                               onClick={() => { setSelectedColor(color); setSelectedSize(null); }}
-                              className="h-8 w-8 rounded-full border border-gray-300 transition"
+                              className="h-8 w-8 rounded-xl border border-gray-300 transition"
                               style={{
                                 backgroundColor: hex,
                                 outline: active ? `2px solid ${GREEN}` : 'none',
@@ -972,7 +975,7 @@ const ProductDetailPage: React.FC = () => {
                         المقاس:{' '}
                         <span className="font-normal text-gray-500">{selectedSize ?? 'اختر المقاس'}</span>
                       </span>
-                      <div className="flex flex-wrap gap-3">
+                      <div className="flex flex-wrap gap-4">
                         {sizesToShow.map(size => {
                           const available = isSizeAvailable(size);
                           const active = selectedSize === size;
@@ -983,7 +986,7 @@ const ProductDetailPage: React.FC = () => {
                               disabled={!available}
                               onClick={() => available && setSelectedSize(size)}
                               title={!available ? 'نفد المخزون' : size}
-                              className={`rounded-full border px-5 py-2 text-sm transition-all ${active ? 'text-white' : 'hover:border-[#064e3b]'} ${!available ? 'cursor-not-allowed bg-gray-100 opacity-40' : ''}`}
+                              className={`rounded-xl border px-6 py-2 text-sm transition-all ${active ? 'text-white' : 'hover:border-[#064e3b]'} ${!available ? 'cursor-not-allowed bg-gray-100 opacity-40' : ''}`}
                               style={active ? { backgroundColor: GREEN, borderColor: GREEN } : { borderColor: '#d1d5db' }}
                             >
                               {size}
@@ -1000,11 +1003,11 @@ const ProductDetailPage: React.FC = () => {
               )}
 
               {/* Actions */}
-              <div className="flex flex-col gap-4 border-t border-gray-200 pt-5">
+              <div className="flex flex-col gap-4 border-t border-gray-200 pt-6">
                 {/* Quantity */}
                 <div className="flex items-center gap-4">
                   <span className="text-sm font-bold">الكمية:</span>
-                  <div className="flex items-center overflow-hidden rounded-lg border border-gray-300">
+                  <div className="flex items-center overflow-hidden rounded-lg border border-gray-300 bg-gray-50">
                     <button type="button" onClick={() => updateQty(-1)} className="p-2 transition-colors hover:bg-gray-100">
                       <Minus size={18} />
                     </button>
@@ -1021,11 +1024,11 @@ const ProductDetailPage: React.FC = () => {
                 </div>
 
                 {/* Buttons */}
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                   <button
                     type="button"
                     onClick={addToCart}
-                    className="flex items-center justify-center gap-2 rounded-xl py-3.5 font-bold text-white transition-opacity hover:opacity-90 md:col-span-2"
+                    className="flex items-center justify-center gap-2 rounded-lg py-4 font-bold text-white transition-opacity hover:opacity-90 md:col-span-2"
                     style={{ backgroundColor: GREEN }}
                   >
                     <ShoppingCart size={20} /> أضف إلى السلة
@@ -1033,17 +1036,17 @@ const ProductDetailPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleBuyNow}
-                    className="rounded-xl border-2 py-3.5 font-bold transition-colors hover:bg-[#064e3b]/5"
+                    className="rounded-lg border-2 py-4 font-bold transition-colors hover:bg-[#064e3b]/5"
                     style={{ borderColor: GREEN, color: GREEN }}
                   >
                     شراء الآن
                   </button>
-                  <div className="flex gap-3">
+                  <div className="flex gap-4">
                     <button
                       type="button"
                       onClick={toggleFav}
                       title="أضف للمفضلة"
-                      className={`flex flex-1 items-center justify-center rounded-xl border transition-colors ${isFav ? 'border-red-200 bg-red-50' : 'border-gray-200 hover:bg-gray-100'}`}
+                      className={`flex flex-1 items-center justify-center rounded-lg border transition-colors ${isFav ? 'border-red-200 bg-red-50' : 'border-gray-200 hover:bg-gray-100'}`}
                     >
                       <Heart size={20} className={isFav ? 'fill-red-500 text-red-500' : 'text-gray-600'} />
                     </button>
@@ -1052,12 +1055,12 @@ const ProductDetailPage: React.FC = () => {
                         type="button"
                         title="مشاركة"
                         onClick={() => setShowShareMenu(prev => !prev)}
-                        className="flex h-full w-full items-center justify-center rounded-xl border border-gray-200 transition-colors hover:bg-gray-100"
+                        className="flex h-full w-full items-center justify-center rounded-lg border border-gray-200 transition-colors hover:bg-gray-100"
                       >
                         <Share2 size={20} className="text-gray-600" />
                       </button>
                       {showShareMenu && (
-                        <div className="absolute bottom-full left-0 z-20 mb-2 w-44 rounded-xl border border-gray-200 bg-white p-2 shadow-xl">
+                        <div className="absolute bottom-full left-0 z-20 mb-2 w-44 rounded-lg border border-gray-200 bg-white p-2 shadow-xl">
                           {shareOptions.map(opt => (
                             <button
                               key={opt.label}
@@ -1079,7 +1082,7 @@ const ProductDetailPage: React.FC = () => {
               </div>
 
               {/* Delivery / trust card */}
-              <div className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-4">
+              <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white" style={{ color: GREEN }}>
                     <Truck size={20} />
@@ -1105,7 +1108,7 @@ const ProductDetailPage: React.FC = () => {
 
           {/* TABS SECTION */}
           <section className="mt-16">
-            <div className="flex gap-8 overflow-x-auto border-b border-gray-200">
+            <div className="flex gap-10 overflow-x-auto border-b border-gray-200">
               {[
                 { key: 'desc', label: 'الوصف' },
                 { key: 'specs', label: 'المواصفات' },
@@ -1115,7 +1118,7 @@ const ProductDetailPage: React.FC = () => {
                   key={t.key}
                   type="button"
                   onClick={() => setActiveTab(t.key)}
-                  className={`whitespace-nowrap pb-3 text-lg font-bold transition-colors md:text-xl ${activeTab === t.key ? '' : 'text-gray-400 hover:text-[#064e3b]'}`}
+                  className={`whitespace-nowrap pb-4 text-xl font-bold transition-colors md:text-2xl ${activeTab === t.key ? '' : 'text-gray-400 hover:text-[#064e3b]'}`}
                   style={activeTab === t.key ? { color: GREEN, borderBottom: `2px solid ${GREEN}` } : {}}
                 >
                   {t.label}
@@ -1123,10 +1126,10 @@ const ProductDetailPage: React.FC = () => {
               ))}
             </div>
 
-            <div className="py-8">
+            <div className="py-10">
               {/* Description */}
               {activeTab === 'desc' && (
-                <div className="max-w-none leading-relaxed text-gray-600">
+                <div className="max-w-none text-lg leading-relaxed text-gray-600">
                   <p className="whitespace-pre-line">{safeText(product?.description)}</p>
                 </div>
               )}
@@ -1136,7 +1139,7 @@ const ProductDetailPage: React.FC = () => {
                 attributes.length === 0 ? (
                   <p className="text-gray-500">المواصفات غير متوفرة حالياً</p>
                 ) : (
-                  <table className="w-full table-fixed border-collapse overflow-hidden rounded-xl border border-gray-200">
+                  <table className="w-full table-fixed border-collapse overflow-hidden rounded-lg border border-gray-200">
                     <tbody>
                       {attributes.map((attr, i) => (
                         <tr key={i} className={i % 2 === 0 ? 'bg-gray-50' : ''}>
@@ -1153,14 +1156,14 @@ const ProductDetailPage: React.FC = () => {
 
               {/* Reviews */}
               {activeTab === 'reviews' && (
-                <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+                <div className="grid grid-cols-1 gap-10 lg:grid-cols-3">
                   {/* Summary column */}
                   <div className="flex flex-col gap-4">
                     <div className="flex flex-col items-center gap-2 rounded-2xl border border-gray-200 bg-white p-6">
-                      <span className="text-5xl font-bold leading-none" style={{ color: GREEN }}>
+                      <span className="text-[64px] font-bold leading-none" style={{ color: GREEN }}>
                         {ratingAvg !== null ? ratingAvg.toFixed(1) : '—'}
                       </span>
-                      <div className="flex">{renderStars(ratingAvg ?? 0, 24)}</div>
+                      <div className="flex">{renderStars(ratingAvg ?? 0, 28)}</div>
                       <span className="text-sm text-gray-500">بناءً على {reviewsCount} تقييم</span>
                     </div>
                     <div className="flex flex-col gap-2">
@@ -1168,11 +1171,11 @@ const ProductDetailPage: React.FC = () => {
                         const pct = reviewsCount ? ((ratingDist[star] ?? 0) / reviewsCount) * 100 : 0;
                         return (
                           <div key={star} className="flex items-center gap-2">
-                            <span className="w-4 text-sm">{star}</span>
+                            <span className="w-4 text-xs">{star}</span>
                             <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-200">
                               <div className="h-full bg-amber-500" style={{ width: `${pct}%` }} />
                             </div>
-                            <span className="w-10 text-left text-sm text-gray-500">{Math.round(pct)}%</span>
+                            <span className="w-8 text-left text-xs text-gray-500">{Math.round(pct)}%</span>
                           </div>
                         );
                       })}
@@ -1289,7 +1292,7 @@ const ProductDetailPage: React.FC = () => {
                     ) : (
                       reviews.map(r => (
                         <div key={r.id} className="border-b border-gray-200 pb-6">
-                          <div className="mb-3 flex items-start justify-between">
+                          <div className="mb-4 flex items-start justify-between">
                             <div className="flex items-center gap-3">
                               <div
                                 className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 font-bold"
@@ -1306,9 +1309,9 @@ const ProductDetailPage: React.FC = () => {
                             </div>
                             <div className="flex">{renderStars(r.rating, 18)}</div>
                           </div>
-                          {r.review_text && <p className="mb-3 text-gray-600">{r.review_text}</p>}
+                          {r.review_text && <p className="mb-4 text-gray-600">{r.review_text}</p>}
                           {Array.isArray(r.image_urls) && r.image_urls.length > 0 && (
-                            <div className="mb-3 flex flex-wrap gap-2">
+                            <div className="mb-4 flex flex-wrap gap-2">
                               {r.image_urls.map((url: string, idx: number) => (
                                 <img
                                   key={idx}
@@ -1321,9 +1324,9 @@ const ProductDetailPage: React.FC = () => {
                             </div>
                           )}
                           {r.reply && (
-                            <div className="mt-3 rounded-xl bg-gray-50 p-4">
-                              <p className="mb-1 text-sm font-bold" style={{ color: GREEN }}>رد المتجر:</p>
-                              <p className="text-sm text-gray-600">{r.reply.reply_text}</p>
+                            <div className="mt-4 rounded-lg bg-gray-50 p-4">
+                              <p className="mb-1 text-xs font-bold" style={{ color: GREEN }}>رد المتجر:</p>
+                              <p className="text-xs text-gray-600">{r.reply.reply_text}</p>
                             </div>
                           )}
                         </div>
@@ -1346,7 +1349,7 @@ const ProductDetailPage: React.FC = () => {
                     <div
                       key={p.id}
                       onClick={() => navigate(`/product/${p.id}`)}
-                      className="group cursor-pointer overflow-hidden rounded-2xl border border-gray-200 bg-white transition-shadow hover:shadow-lg"
+                      className="group cursor-pointer overflow-hidden rounded-lg border border-gray-200 bg-white transition-shadow hover:shadow-lg"
                     >
                       <div className="aspect-square overflow-hidden bg-gray-50">
                         {img ? (

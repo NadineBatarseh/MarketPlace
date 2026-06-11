@@ -4,6 +4,8 @@ import Topbar from '../../components/Topbar';
 import supabase from '../../lib/supabase';
 import { useShop } from '../../context/ShopContext';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
+import { getProductBadge } from '../../lib/productBadge';
+import '../../lib/productBadge.css';
 import './HomePage.css';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -31,6 +33,8 @@ interface Product {
   price: number | null;
   image_urls: string[] | null;
   discount_pct: number | null;
+  stock_Quantity: number | null;
+  created_at: string | null;
   shop_id: string;
 }
 
@@ -181,7 +185,7 @@ function StoresSection({ stores, loading }: { stores: Store[]; loading: boolean 
           <p className="hp-empty">لا توجد متاجر حالياً</p>
         ) : (
           <div className="hp-store-grid">
-            {stores.map(s => <StoreCard key={s.shop_id} store={s} />)}
+            {stores.slice(0, STORES_INITIAL).map(s => <StoreCard key={s.shop_id} store={s} />)}
           </div>
         )}
       </div>
@@ -196,11 +200,27 @@ function ProductCard({ product }: { product: Product }) {
   const { addToCart, isInCart, toggleFavorite, isFavorited } = useShop();
   const { customer } = useCustomerAuth();
   const isCustomer = customer?.role === 'customer';
-  const img = product.image_urls?.[0] ?? '';
+  const images = product.image_urls?.filter(Boolean) ?? [];
+  const hasMultiple = images.length > 1;
+  const [idx, setIdx] = useState(0);
+  const img = images[0] ?? '';
   const inCart = isInCart(product.id);
   const origPrice = product.discount_pct && product.price != null
     ? Math.round(product.price / (1 - product.discount_pct / 100))
     : null;
+
+  const goPrev = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIdx(i => (i - 1 + images.length) % images.length);
+  };
+  const goNext = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIdx(i => (i + 1) % images.length);
+  };
+  const goDot = (e: React.MouseEvent, i: number) => {
+    e.stopPropagation();
+    setIdx(i);
+  };
 
   const onCart = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -215,6 +235,7 @@ function ProductCard({ product }: { product: Product }) {
   };
 
   const faved = isFavorited(product.id);
+  const badge = getProductBadge(product);
 
   return (
     <div className="hp-prod-card" onClick={() => navigate(`/product/${product.id}`)}>
@@ -224,25 +245,36 @@ function ProductCard({ product }: { product: Product }) {
           <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
         </svg>
       </button>
-      {/* Badges */}
-      <div className="hp-prod-card__badges">
-        {product.discount_pct != null ? (
-          <span className="hp-prod-badge hp-prod-badge--disc">خصم {product.discount_pct}%</span>
-        ) : (
-          <span className="hp-prod-badge hp-prod-badge--new">جديد</span>
-        )}
-      </div>
 
-      {/* Image */}
+      {/* Image + carousel */}
       <div className="hp-prod-card__img-wrap">
-        {img
-          ? <img src={img} alt={product.title} className="hp-prod-card__img" loading="lazy" />
+        {badge && <span className={`pbadge pbadge--${badge.kind}`}>{badge.text}</span>}
+        {images.length > 0
+          ? <img src={images[idx]} alt={product.title} className="hp-prod-card__img" loading="lazy" />
           : <div className="hp-prod-card__img-ph">
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5">
                 <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
               </svg>
             </div>
         }
+
+        {hasMultiple && (
+          <>
+            <button type="button" className="hp-prod-card__arrow hp-prod-card__arrow--prev" onClick={goPrev} aria-label="صورة سابقة">‹</button>
+            <button type="button" className="hp-prod-card__arrow hp-prod-card__arrow--next" onClick={goNext} aria-label="صورة تالية">›</button>
+            <div className="hp-prod-card__dots">
+              {images.map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  className={`hp-prod-card__dot${i === idx ? ' hp-prod-card__dot--on' : ''}`}
+                  onClick={e => goDot(e, i)}
+                  aria-label={`صورة ${i + 1}`}
+                />
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Info */}
@@ -380,7 +412,7 @@ export default function HomePage() {
       setLoadingStores(false);
     })();
 
-    supabase.from('products_with_avg_rating').select('id,title,price,image_urls,discount_pct,shop_id')
+    supabase.from('products_with_avg_rating').select('id,title,price,image_urls,discount_pct,stock_Quantity,created_at,shop_id')
       .eq('isPublish', true).order('avg_rating', { ascending: false, nullsFirst: false }).limit(20)
       .then(({ data }) => { if (data) setProducts(data); setLoadingProds(false); });
   }, []);

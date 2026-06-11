@@ -126,7 +126,7 @@ export default function CategoryListingPage() {
 
         let query = supabase
           .from('products')
-          .select('id, title, description, price, image_urls, stock_Quantity')
+          .select('id, title, description, price, image_urls, stock_Quantity, discount_pct, created_at')
           .in('shop_id', selectedShopIds)
           .eq('isPublish', true)
           .not('is_deleted', 'eq', true)

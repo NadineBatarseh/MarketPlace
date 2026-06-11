@@ -48,7 +48,7 @@ export function useCategoryProducts(shopIds: string[]): Result {
 
       let query = supabase
         .from('products')
-        .select('id, title, description, price, image_urls, stock_Quantity', { count: 'exact' })
+        .select('id, title, description, price, image_urls, stock_Quantity, discount_pct, created_at', { count: 'exact' })
         .in('shop_id', shopIds)
         .eq('isPublish', true)
         .not('is_deleted', 'eq', true)

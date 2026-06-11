@@ -19,4 +19,6 @@ export interface Product {
   price: number | null;
   image_urls: string[] | null;
   stock_Quantity: number | null;
+  discount_pct?: number | null;
+  created_at?: string | null;
 }

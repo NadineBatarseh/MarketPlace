@@ -1,12 +1,18 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Topbar from '../../components/Topbar';
+import '../singleStore/storePage.css';
+import '../categoryListing/categoryListing.css';
 import './StoreListPage.css';
 import { supabase } from '../../lib/supabase';
 
 /**
  * Explore Local Stores
  * ---------------------
+ * Re-skinned to mirror the Category Listing page: faded hero, a left filter
+ * rail (reusing the category `sp-*` sidebar classes) and a white toolbar on
+ * the beige / green palette. Layout/aesthetic is scoped under `.cat-page`.
+ *
  * Field mapping (design field -> shops table column):
  *   store_name   -> name
  *   category     -> Type_of_store
@@ -31,7 +37,7 @@ interface StoreItem {
 
 type SortKey = 'newest' | 'popular' | 'az';
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 9;
 
 export default function StoreListPage() {
   const [stores, setStores] = useState<StoreItem[]>([]);
@@ -141,6 +147,8 @@ export default function StoreListPage() {
   // Reset pagination whenever filters change.
   useEffect(() => { setVisible(PAGE_SIZE); }, [search, category, city, sort]);
 
+  const hasActiveFilters = !!(search || category || city);
+
   const clearFilters = () => {
     setSearch('');
     setCategory('');
@@ -150,173 +158,259 @@ export default function StoreListPage() {
 
   const shown = filtered.slice(0, visible);
 
+  // Active filter chips shown above the rail sections.
+  const chips: { key: string; label: string; onRemove: () => void }[] = [];
+  if (search) chips.push({ key: 'q', label: `"${search}"`, onRemove: () => setSearch('') });
+  if (category) chips.push({ key: 'cat', label: category, onRemove: () => setCategory('') });
+  if (city) chips.push({ key: 'city', label: city, onRemove: () => setCity('') });
+
   return (
-    <div className="els" dir="rtl">
+    <div className="cat-page els" dir="rtl">
       <Topbar />
 
-      {/* Hero */}
-      <section className="els-hero">
-        <div className="els-hero-inner">
-          <h1>استكشف المتاجر المحلية</h1>
-          <p>
+      {/* ── Hero — faded banner fading into the page surface ── */}
+      <section className="cat-hero">
+        <div className="cat-hero-bg" aria-hidden="true">
+          <div className="cat-hero-fade" />
+        </div>
+        <div className="cat-hero-content">
+          <h1 className="cat-hero-title">استكشف المتاجر المحلية</h1>
+          <p className="cat-hero-desc">
             اكتشف المتاجر المحلية الموثوقة وتصفح منتجاتها بسهولة. ادعم مجتمعك من خلال
             التسوق من الأعمال المملوكة بشكل مستقل.
           </p>
         </div>
       </section>
 
-      {/* Filter bar */}
-      <section className="els-filters">
-        <div className="els-filters-inner">
-          <div className="els-search">
-            <svg className="els-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8" />
-              <path d="m21 21-4.35-4.35" />
-            </svg>
-            <input
-              type="text"
-              placeholder="ابحث عن المتاجر..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
-          </div>
-
-          <div className="els-selects">
-            <select className="els-select" value={category} onChange={e => setCategory(e.target.value)}>
-              <option value="">الفئة</option>
-              {categories.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <select className="els-select" value={city} onChange={e => setCity(e.target.value)}>
-              <option value="">المدينة</option>
-              {cities.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <select className="els-select" value={sort} onChange={e => setSort(e.target.value as SortKey)}>
-              <option value="newest">الأحدث</option>
-              <option value="popular">الأكثر شهرة</option>
-              <option value="az">أبجدياً</option>
-            </select>
-          </div>
-        </div>
-      </section>
-
-      {/* Grid */}
-      <section className="els-grid-section">
-        {loading && (
-          <div className="els-grid">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="els-skel-card">
-                <div className="els-skel els-skel-cover" />
-                <div className="els-skel els-skel-line w70" />
-                <div className="els-skel els-skel-line w45" />
-                <div className="els-skel els-skel-line w100" />
-                <div className="els-skel els-skel-line w100" />
-                <div className="els-skel els-skel-btn" />
-              </div>
-            ))}
-          </div>
-        )}
-
-        {!loading && error && <p className="els-error">{error}</p>}
-
-        {!loading && !error && filtered.length === 0 && (
-          <div className="els-empty">
-            <div className="els-empty-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 9l1-5h16l1 5" />
-                <path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9" />
-                <path d="M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0" />
+      <div className="page-body">
+        {/* ── Filter rail ── */}
+        <aside className="sidebar-panel">
+          <div className="sp-header">
+            <span className="sp-header-title">
+              <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
+                <line x1="4" y1="6" x2="20" y2="6" /><line x1="8" y1="12" x2="16" y2="12" /><line x1="11" y1="18" x2="13" y2="18" />
               </svg>
-            </div>
-            <h3>لم يتم العثور على متاجر</h3>
-            <p>لم نتمكن من العثور على أي متاجر تطابق بحثك أو عوامل التصفية. حاول تعديل معاييرك.</p>
-            <button className="els-btn" style={{ width: 'auto', padding: '12px 32px' }} onClick={clearFilters}>
-              مسح كل عوامل التصفية
-            </button>
+              الفلاتر
+            </span>
+            {hasActiveFilters && (
+              <button type="button" className="sp-clear-all" onClick={clearFilters}>مسح الكل</button>
+            )}
           </div>
-        )}
 
-        {!loading && !error && filtered.length > 0 && (
-          <>
+          {chips.length > 0 && (
+            <div className="sp-active-chips">
+              {chips.map(chip => (
+                <span key={chip.key} className="sp-chip">
+                  {chip.label}
+                  <button type="button" className="sp-chip-x" onClick={chip.onRemove}>×</button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Search */}
+          <div className="sp-section">
+            <div className="sp-section-header" style={{ cursor: 'default', paddingBottom: 12 }}>
+              <span className="sp-section-title">بحث</span>
+            </div>
+            <div className="els-side-search">
+              <svg className="els-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.35-4.35" />
+              </svg>
+              <input
+                type="text"
+                placeholder="ابحث عن المتاجر..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Category */}
+          {categories.length > 0 && (
+            <div className="sp-section">
+              <div className="sp-section-header" style={{ cursor: 'default' }}>
+                <span className="sp-section-title">الفئة</span>
+              </div>
+              <div className="sp-check-list">
+                {categories.map(c => {
+                  const active = category === c;
+                  return (
+                    <label key={c} className={`sp-check-item${active ? ' sp-check-item--active' : ''}`}>
+                      <input
+                        type="radio"
+                        className="sp-check-input"
+                        checked={active}
+                        onChange={() => setCategory(active ? '' : c)}
+                      />
+                      <span className={`sp-check-box sp-check-box--radio${active ? ' sp-check-box--on' : ''}`}>
+                        {active && <span className="sp-radio-dot" />}
+                      </span>
+                      <span className="sp-check-label">{c}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* City */}
+          {cities.length > 0 && (
+            <div className="sp-section">
+              <div className="sp-section-header" style={{ cursor: 'default' }}>
+                <span className="sp-section-title">المدينة</span>
+              </div>
+              <div className="sp-check-list">
+                {cities.map(c => {
+                  const active = city === c;
+                  return (
+                    <label key={c} className={`sp-check-item${active ? ' sp-check-item--active' : ''}`}>
+                      <input
+                        type="radio"
+                        className="sp-check-input"
+                        checked={active}
+                        onChange={() => setCity(active ? '' : c)}
+                      />
+                      <span className={`sp-check-box sp-check-box--radio${active ? ' sp-check-box--on' : ''}`}>
+                        {active && <span className="sp-radio-dot" />}
+                      </span>
+                      <span className="sp-check-label">{c}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </aside>
+
+        {/* ── Content ── */}
+        <section className="products-section">
+          {/* Toolbar */}
+          <div className="products-toolbar">
+            <span className="label">
+              {loading ? 'جاري التحميل…' : `${filtered.length} متجر`}
+            </span>
+            <div className="toolbar-right">
+              <select
+                className="sort-select"
+                value={sort}
+                onChange={e => setSort(e.target.value as SortKey)}
+                aria-label="ترتيب المتاجر"
+              >
+                <option value="newest">الأحدث</option>
+                <option value="popular">الأكثر شهرة</option>
+                <option value="az">أبجدياً</option>
+              </select>
+            </div>
+          </div>
+
+          {loading && (
             <div className="els-grid">
-              {shown.map(store => (
-                <article key={store.shop_id} className="els-card">
-                  {/* Cover + logo */}
-                  <div className="els-cover">
-                    {store.shopLogo ? (
-                      <img src={store.shopLogo} alt={store.name} loading="lazy" />
-                    ) : (
-                      <div className="els-cover-placeholder">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M3 9l1-5h16l1 5" />
-                          <path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9" />
-                          <path d="M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0" />
-                        </svg>
-                      </div>
-                    )}
-                    <div className="els-logo">
-                      {store.shopLogo ? (
-                        <img src={store.shopLogo} alt={`${store.name} logo`} loading="lazy" />
-                      ) : (
-                        <div className="els-logo-fallback">{store.name.charAt(0).toUpperCase()}</div>
-                      )}
-                    </div>
-                  </div>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="els-skel-card">
+                  <div className="els-skel els-skel-cover" />
+                  <div className="els-skel els-skel-line w70" />
+                  <div className="els-skel els-skel-line w45" />
+                  <div className="els-skel els-skel-line w100" />
+                  <div className="els-skel els-skel-line w100" />
+                  <div className="els-skel els-skel-btn" />
+                </div>
+              ))}
+            </div>
+          )}
 
-                  {/* Body */}
-                  <div className="els-body">
-                    <div className="els-head">
-                      <div>
-                        <h3 className="els-name">{store.name}</h3>
-                        {store.category && <p className="els-category">{store.category}</p>}
-                      </div>
+          {!loading && error && <p className="els-error">{error}</p>}
+
+          {!loading && !error && filtered.length === 0 && (
+            <div className="els-empty">
+              <div className="els-empty-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 9l1-5h16l1 5" />
+                  <path d="M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9" />
+                  <path d="M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0" />
+                </svg>
+              </div>
+              <h3>لم يتم العثور على متاجر</h3>
+              <p>لم نتمكن من العثور على أي متاجر تطابق بحثك أو عوامل التصفية. حاول تعديل معاييرك.</p>
+              <button className="els-btn" style={{ width: 'auto', padding: '12px 32px' }} onClick={clearFilters}>
+                مسح كل عوامل التصفية
+              </button>
+            </div>
+          )}
+
+          {!loading && !error && filtered.length > 0 && (
+            <>
+              <div className="els-grid">
+                {shown.map(store => (
+                  <article
+                    key={store.shop_id}
+                    className="els-card"
+                    onClick={() => navigate(`/stores/${store.shop_id}`)}
+                  >
+                    {/* Image canvas (beige) — mirrors the category product card */}
+                    <div className="els-img-wrap">
+                      {store.shopLogo ? (
+                        <img src={store.shopLogo} alt={store.name} loading="lazy" />
+                      ) : (
+                        <div className="els-img-fallback">
+                          <span>{store.name.charAt(0).toUpperCase()}</span>
+                        </div>
+                      )}
                       <span className={`els-badge ${store.is_open ? 'els-badge--open' : 'els-badge--closed'}`}>
                         {store.is_open ? 'مفتوح' : 'مغلق'}
                       </span>
                     </div>
 
-                    <div className="els-meta">
-                      {store.city && (
-                        <>
-                          <svg className="els-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                            <circle cx="12" cy="10" r="3" />
-                          </svg>
-                          <span>{store.city}</span>
-                        </>
-                      )}
-                      {store.city && store.avg_rating != null && <span className="els-dot">•</span>}
-                      {store.avg_rating != null && (
-                        <>
-                          <svg className="els-star" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                          </svg>
-                          <span className="els-rating-val">{store.avg_rating}</span>
-                        </>
-                      )}
+                    {/* Body */}
+                    <div className="els-body">
+                      <h3 className="els-name">{store.name}</h3>
+                      {store.category && <p className="els-category">{store.category}</p>}
+
+                      <div className="els-meta">
+                        {store.city && (
+                          <>
+                            <svg className="els-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                              <circle cx="12" cy="10" r="3" />
+                            </svg>
+                            <span>{store.city}</span>
+                          </>
+                        )}
+                        {store.city && store.avg_rating != null && <span className="els-dot">•</span>}
+                        {store.avg_rating != null && (
+                          <>
+                            <svg className="els-star" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                            </svg>
+                            <span className="els-rating-val">{store.avg_rating}</span>
+                          </>
+                        )}
+                      </div>
+
+                      <p className="els-desc">
+                        {store.description || 'متجر محلي على سوق لينك.'}
+                      </p>
+
+                      <button className="els-btn" onClick={() => navigate(`/stores/${store.shop_id}`)}>
+                        عرض المتجر
+                      </button>
                     </div>
-
-                    <p className="els-desc">
-                      {store.description || 'متجر محلي على سوق لينك.'}
-                    </p>
-
-                    <button className="els-btn" onClick={() => navigate(`/stores/${store.shop_id}`)}>
-                      عرض المتجر
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-
-            {visible < filtered.length && (
-              <div className="els-more">
-                <button className="els-more-btn" onClick={() => setVisible(v => v + PAGE_SIZE)}>
-                  تحميل المزيد من المتاجر
-                </button>
+                  </article>
+                ))}
               </div>
-            )}
-          </>
-        )}
-      </section>
+
+              {visible < filtered.length && (
+                <div className="els-more">
+                  <button className="els-more-btn" onClick={() => setVisible(v => v + PAGE_SIZE)}>
+                    تحميل المزيد من المتاجر
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </section>
+      </div>
 
       {/* Footer */}
       <footer className="els-footer">

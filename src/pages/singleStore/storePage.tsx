@@ -112,7 +112,7 @@ export default function StorePage({ shopId }: Props) {
 
         let query = supabase
           .from('products')
-          .select('id, title, description, price, image_urls, stock_Quantity')
+          .select('id, title, description, price, image_urls, stock_Quantity, discount_pct, created_at')
           .eq('shop_id', shopId)
           .eq('isPublish', true)
           .not('is_deleted', 'eq', true)

@@ -143,7 +143,7 @@ router.get('/', async (req: Request, res: Response) => {
   //   Using type:'websearch' would call websearch_to_tsquery, which ignores :*.
   let dbQuery = supabase
     .from('products')
-    .select('id, shop_id, title, description, price, image_urls, stock_Quantity, shops(name, location)', { count: 'exact' })
+    .select('id, shop_id, title, description, price, image_urls, stock_Quantity, discount_pct, created_at, shops(name, location)', { count: 'exact' })
     .textSearch('search_vector', ftsQuery, { config: 'simple' })
     .eq('isPublish', true);
 

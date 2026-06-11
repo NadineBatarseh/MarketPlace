@@ -1,257 +1,159 @@
 /* ════════════════════════════════════════════════
    استكشف المتاجر المحلية — سوق لينك
-   صفحة عربية بالكامل، الاتجاه من اليمين لليسار (RTL)
-   بخط Tajawal لمطابقة باقي التطبيق.
-   Design system: DESIGN.md (Souq Green #0F3D2E)
+   صفحة عربية بالكامل (RTL)، أُعيد تصميمها لتطابق صفحة الفئة:
+   هيرو متلاشٍ، شريط فلاتر جانبي، وبطاقات على خلفية بيج/أخضر.
+   التخطيط العام يأتي من storePage.css + categoryListing.css
+   (مُنطّقة تحت .cat-page)؛ هذا الملف يخصّ بطاقات المتاجر فقط.
    ════════════════════════════════════════════════ */
 
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
 
 .els {
-  /* ── Local design tokens ── */
-  --els-primary:        #0F3D2E;  /* Souq Green — buttons, branding */
-  --els-primary-dark:   #0a2e22;  /* hover / pressed */
-  --els-tint:           #E8F5EE;  /* soft green — hover, badges */
-  --els-bg:             #F7F9F8;  /* page background */
-  --els-surface:        #FFFFFF;  /* cards */
-  --els-border:         #E5E7EB;  /* card / input borders */
-  --els-title:          #1F2937;  /* headlines */
-  --els-text:           #374151;  /* body text */
-  --els-muted:          #6B7280;  /* metadata, helper text */
-  --els-star:           #F59E0B;  /* rating star */
+  /* ── Local design tokens — aligned to the category (beige/green) palette ── */
+  --els-primary:        #064e3b;  /* editorial dark green — buttons, branding */
+  --els-primary-dark:   #003527;  /* hover / pressed */
+  --els-tint:           #e8f1ec;  /* soft green — hover, badges */
+  --els-bg:             #f7f7f2;  /* soft beige page surface */
+  --els-surface:        #ffffff;  /* cards */
+  --els-border:         #ebe9e2;  /* card / input borders */
+  --els-title:          #191c1b;  /* headlines */
+  --els-text:           #191c1b;  /* body text */
+  --els-muted:          #5b615c;  /* metadata, helper text */
+  --els-star:           #f59e0b;  /* rating star */
 
-  direction: rtl;
-  text-align: right;
   font-family: 'Tajawal', system-ui, sans-serif;
-  background: var(--els-bg);
-  color: var(--els-text);
-  min-height: 100vh;
 }
 
 .els *,
 .els *::before,
 .els *::after { box-sizing: border-box; }
 
-.els-container {
-  max-width: 1280px;
-  margin: 0 auto;
-}
-
-/* ── Hero ── */
-.els-hero {
-  background: var(--els-surface);
-  padding: 40px 32px;
-  border-bottom: 1px solid var(--els-border);
-}
-.els-hero-inner { max-width: 1280px; margin: 0 auto; }
-.els-hero h1 {
-  font-size: 40px;
-  line-height: 1.1;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--els-primary);
-  margin: 0 0 8px;
-}
-.els-hero p {
-  font-size: 16px;
-  line-height: 1.6;
-  color: var(--els-muted);
-  max-width: 640px;
-  margin: 0;
-}
-
-/* ── Filter bar (sticky) ── */
-.els-filters {
-  position: sticky;
-  top: 68px; /* sits under the fixed 68px Topbar */
-  z-index: 30;
-  background: rgba(247, 249, 248, 0.85);
-  backdrop-filter: blur(8px);
-  padding: 16px 32px;
-  border-bottom: 1px solid var(--els-border);
-}
-.els-filters-inner {
-  max-width: 1280px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 16px;
-}
-.els-search {
+/* ── Sidebar search box (inside the filter rail) ── */
+.els-side-search {
   position: relative;
-  flex: 1 1 auto;
-  min-width: 0;
 }
-.els-search .els-search-icon {
+.els-side-search .els-search-icon {
   position: absolute;
   right: 12px;
   top: 50%;
   transform: translateY(-50%);
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   color: var(--els-muted);
   pointer-events: none;
 }
-.els-search input {
+.els-side-search input {
   width: 100%;
-  padding: 10px 40px 10px 14px;
+  padding: 10px 36px 10px 12px;
   border: 1px solid var(--els-border);
   border-radius: 8px;
   background: var(--els-surface);
-  font-size: 14px;
+  font-family: inherit;
+  font-size: 13.5px;
   color: var(--els-text);
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
-.els-search input::placeholder { color: var(--els-muted); }
-.els-search input:focus {
+.els-side-search input::placeholder { color: var(--els-muted); }
+.els-side-search input:focus {
   border-color: var(--els-primary);
-  box-shadow: 0 0 0 2px rgba(15, 61, 46, 0.12);
+  box-shadow: 0 0 0 2px rgba(6, 78, 59, 0.12);
 }
 
-.els-selects { display: flex; gap: 8px; flex-wrap: nowrap; }
-.els-select {
-  appearance: none;
-  -webkit-appearance: none;
-  padding: 10px 14px 10px 34px;
-  border: 1px solid var(--els-border);
-  border-radius: 8px;
-  background-color: var(--els-surface);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: left 12px center;
-  font-size: 14px;
-  font-family: inherit;
-  color: var(--els-text);
-  cursor: pointer;
-  outline: none;
-  transition: border-color 0.15s;
-}
-.els-select:focus { border-color: var(--els-primary); }
-
-/* ── Grid ── */
-.els-grid-section { padding: 40px 32px; }
+/* ── Grid (sits inside the narrower content column) ── */
 .els-grid {
-  max-width: 1280px;
-  margin: 0 auto;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 24px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
 }
 
-/* ── Card ── */
+/* ── Card — mirrors the category product card (.product-card) ── */
 .els-card {
   background: var(--els-surface);
-  border: 1px solid var(--els-border);
+  border: none;
   border-radius: 12px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  transition: transform 0.3s ease, box-shadow 0.3s ease, background-color 0.3s ease;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
 }
 .els-card:hover {
   transform: translateY(-4px);
-  box-shadow: 0 12px 32px rgba(15, 61, 46, 0.10);
-  background-color: var(--els-tint);
+  box-shadow: 0 14px 34px rgba(0, 53, 39, 0.12);
 }
 
-.els-cover {
+/* Beige image canvas — same surface as the product image wrap */
+.els-img-wrap {
   position: relative;
-  height: 128px;
-  width: 100%;
   overflow: hidden;
+  width: 100%;
+  aspect-ratio: 4.5 / 4;
+  background: #f1ece3;
 }
-.els-cover img {
+.els-img-wrap img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.5s ease;
+  transition: transform 0.4s ease;
 }
-.els-card:hover .els-cover img { transform: scale(1.05); }
-.els-cover-placeholder {
+.els-card:hover .els-img-wrap img { transform: scale(1.05); }
+.els-img-fallback {
   width: 100%;
   height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #154d3a, #0F3D2E);
 }
-.els-cover-placeholder svg { width: 40px; height: 40px; color: rgba(255, 255, 255, 0.5); }
+.els-img-fallback span {
+  font-size: 44px;
+  font-weight: 800;
+  color: var(--els-primary);
+  opacity: 0.55;
+}
 
-.els-logo {
+/* Open/closed pill floats on the image (like the product wishlist/badge) */
+.els-badge {
   position: absolute;
-  bottom: -24px;
-  right: 16px;
-  width: 52px;
-  height: 52px;
-  padding: 2px;
-  background: var(--els-surface);
-  border-radius: 50%;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
-}
-.els-logo img,
-.els-logo-fallback {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid var(--els-surface);
-}
-.els-logo-fallback {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--els-primary);
-  color: #fff;
+  top: 10px;
+  right: 10px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
   font-weight: 700;
-  font-size: 18px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.12);
 }
+.els-badge--open  { background: var(--els-primary); color: #fff; }
+.els-badge--closed { background: #fff; color: #6b7280; }
 
 .els-body {
-  padding: 32px 16px 16px;
+  padding: 12px 14px 14px;
   display: flex;
   flex-direction: column;
   flex-grow: 1;
 }
-.els-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 4px;
-}
 .els-name {
-  font-size: 18px;
+  font-size: 14px;
   line-height: 1.4;
-  font-weight: 600;
-  color: var(--els-primary);
+  font-weight: 700;
+  color: var(--els-ink, #191c1b);
   margin: 0;
 }
 .els-category {
-  font-size: 14px;
+  font-size: 12px;
   color: var(--els-muted);
-  margin: 2px 0 0;
+  margin: 3px 0 0;
 }
-
-.els-badge {
-  flex-shrink: 0;
-  padding: 4px 10px;
-  border-radius: 9999px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-}
-.els-badge--open  { background: var(--els-tint); color: #1b5e20; }
-.els-badge--closed { background: #F3F4F6; color: #6B7280; }
 
 .els-meta {
   display: flex;
   align-items: center;
   gap: 4px;
-  margin: 8px 0;
-  font-size: 14px;
+  margin: 7px 0;
+  font-size: 12.5px;
   color: var(--els-muted);
 }
 .els-meta svg { width: 16px; height: 16px; flex-shrink: 0; }
@@ -261,25 +163,26 @@
 .els-dot { color: var(--els-border); margin: 0 2px; }
 
 .els-desc {
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 12px;
+  line-height: 1.55;
   color: var(--els-muted);
-  margin: 0 0 20px;
+  margin: 0 0 12px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
+/* Button mirrors the product card's .add-to-cart */
 .els-btn {
   margin-top: auto;
   width: 100%;
-  padding: 12px;
+  padding: 9px;
   border: none;
   border-radius: 8px;
   background: var(--els-primary);
   color: #fff;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
@@ -289,8 +192,7 @@
 
 /* ── Load more ── */
 .els-more {
-  max-width: 1280px;
-  margin: 40px auto 0;
+  margin: 32px auto 0;
   text-align: center;
 }
 .els-more-btn {
@@ -311,7 +213,7 @@
 .els-empty {
   max-width: 480px;
   margin: 0 auto;
-  padding: 72px 16px;
+  padding: 56px 16px;
   text-align: center;
 }
 .els-empty-icon {
@@ -326,9 +228,9 @@
 }
 .els-empty-icon svg { width: 44px; height: 44px; color: var(--els-primary); }
 .els-empty h3 {
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--els-primary);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--els-primary-dark);
   margin: 0 0 8px;
 }
 .els-empty p {
@@ -348,11 +250,11 @@
 .els-skel-card {
   background: var(--els-surface);
   border: 1px solid var(--els-border);
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
   padding: 16px;
 }
-.els-skel { background: #eef1f0; border-radius: 8px; animation: els-pulse 1.4s ease-in-out infinite; }
+.els-skel { background: #efece4; border-radius: 8px; animation: els-pulse 1.4s ease-in-out infinite; }
 .els-skel-cover { height: 128px; margin: -16px -16px 28px; border-radius: 0; }
 .els-skel-line { height: 14px; margin-bottom: 10px; }
 .els-skel-line.w70 { width: 70%; }
@@ -409,19 +311,14 @@
 .els-footer nav a:hover { color: var(--els-primary); text-decoration: underline; }
 
 /* ── Responsive ── */
-@media (max-width: 1024px) {
-  .els-grid { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 1100px) {
+  .els-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
 }
-@media (max-width: 768px) {
-  .els-hero h1 { font-size: 28px; }
-  .els-filters-inner { flex-direction: column; align-items: stretch; }
-  .els-selects { flex-wrap: wrap; }
-  .els-select { flex: 1 1 30%; }
+@media (max-width: 900px) {
+  /* Stack the rail above the grid (matches the category page behaviour). */
+  .els-grid { grid-template-columns: repeat(2, 1fr); }
   .els-footer-inner { grid-template-columns: 1fr; gap: 24px; }
 }
 @media (max-width: 560px) {
   .els-grid { grid-template-columns: 1fr; }
-  .els-hero { padding: 28px 16px; }
-  .els-filters { padding: 12px 16px; }
-  .els-grid-section { padding: 24px 16px; }
 }
