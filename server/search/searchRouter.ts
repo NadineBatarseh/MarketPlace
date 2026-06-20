@@ -3,6 +3,8 @@ import type { Request, Response } from 'express';
 import { supabase } from '../supabase.js';
 import { expandQueryDynamic } from './dynamicSynonyms.js';
 import { isSentenceQuery, preprocessQuery } from './queryPreprocessor.js';
+import { normalizeArabic } from './normalizeArabic.js';
+import { correctQuery } from './spellCorrect.js';
 
 const router = Router();
 
@@ -32,8 +34,10 @@ function buildFtsQuery(terms: string[]): string | null {
   const parts: string[] = [];
   const seen = new Set<string>();
 
-  for (const term of terms) {
-    const trimmed = term.trim();
+  for (const rawTerm of terms) {
+    // Normalize each lexeme the SAME way the index is normalized
+    // (souq_normalize / normalizeArabic) so query terms match stored lexemes.
+    const trimmed = normalizeArabic(rawTerm).trim();
     if (trimmed.length < 2) continue;
 
     // Multi-word term: split on whitespace and add each word individually.
@@ -54,8 +58,10 @@ function buildFtsQuery(terms: string[]): string | null {
     seen.add(trimmed);
     parts.push(`'${sanitiseLexeme(trimmed)}'`);
 
-    // For Arabic words ≥ 5 chars, also emit a :* prefix variant to cover
-    // morphological inflections not in the synonym dictionary.
+    // Last-resort fallback: for Arabic words ≥ 5 chars, also emit a :* prefix
+    // variant for inflections not covered by normalization or the synonym
+    // dictionary. Normalization + curated/Groq synonyms + the trigram fuzzy tier
+    // now do the heavy lifting, so this prefix is secondary.
     // Minimum prefix length 4 avoids overly broad matches.
     const isArabic = /[\u0600-\u06FF]/.test(trimmed);
     if (isArabic && trimmed.length >= 5) {
@@ -90,14 +96,45 @@ function buildFtsQuery(terms: string[]): string | null {
  * Algorithm:
  *   1. Expand the raw query using the synonym dictionary.
  *   2. Optionally enrich with Claude Haiku for sentence queries.
- *   3. Build a to_tsquery OR expression from all expanded terms,
- *      with :* prefix variants for Arabic morphological coverage.
- *   4. Execute FTS via .textSearch() against the pre-built search_vector
- *      GIN-indexed column (see supabase/migrations/001_add_fts_index.sql).
- *   5. Apply optional shop / price filters.
- *   6. Fetch a wider window, then score in JS (title match +2, desc +1).
- *   7. Sort by score descending, slice the requested page.
+ *   3. Build a to_tsquery OR expression from all expanded terms (normalized via
+ *      normalizeArabic so lexemes match the normalized search_vector), with a
+ *      secondary :* prefix variant for long Arabic words.
+ *   4. Call the search_products() RPC, which does tiered matching, ts_rank_cd +
+ *      business-signal ranking, trigram fuzzy fallback (typo tolerance), the
+ *      shop/price/city filters, and pagination — all in one DB scan.
+ *      (see supabase/migrations/search_products_rpc.sql)
+ *   5. Reshape rows to the response contract (nest shop fields under `shops`).
  */
+/**
+ * GET /api/search/suggestions
+ *
+ * Lightweight autocomplete for the header search box. Returns distinct product
+ * titles matching the partial query (normalized prefix / contains / trigram
+ * fuzzy), ranked by closeness. Powered by the search_suggestions() RPC.
+ *
+ * Query params: q (partial string), limit (default 8, max 10)
+ * Response: { ok, suggestions: string[] }
+ */
+router.get('/suggestions', async (req: Request, res: Response) => {
+  const rawQuery = (req.query.q as string ?? '').trim();
+  const limit    = Math.min(10, Math.max(1, parseInt(req.query.limit as string) || 8));
+  const qNorm    = normalizeArabic(rawQuery);
+
+  if (qNorm.length < 2) {
+    return res.json({ ok: true, suggestions: [] });
+  }
+
+  const { data, error } = await supabase.rpc('search_suggestions', { q_norm: qNorm, p_limit: limit });
+
+  if (error) {
+    console.error('[/api/search/suggestions] RPC error:', error);
+    return res.status(500).json({ ok: false, error: error.message, suggestions: [] });
+  }
+
+  const suggestions = ((data ?? []) as { suggestion: string }[]).map(r => r.suggestion);
+  return res.json({ ok: true, suggestions });
+});
+
 router.get('/', async (req: Request, res: Response) => {
   const rawQuery = (req.query.q as string ?? '').trim();
 
@@ -114,12 +151,22 @@ router.get('/', async (req: Request, res: Response) => {
   const citiesRaw  = req.query.cities as string | undefined;
   const cities     = citiesRaw ? citiesRaw.split(',').map(c => c.trim()).filter(Boolean) : [];
 
-  // 1 & 2. Expand query with synonyms + optional LLM preprocessing for sentences
+  // 1, 2 & 3. Spell-correct typos to real catalog words, then expand synonyms on
+  //   BOTH the original and the corrected query (so a misspelled word still pulls
+  //   the right word's synonyms), plus optional LLM sentence terms.
   let llmTerms: string[] = [];
   if (isSentenceQuery(rawQuery) && process.env.ANTHROPIC_API_KEY) {
     llmTerms = await preprocessQuery(rawQuery);
   }
-  const terms = [...new Set([...await expandQueryDynamic(rawQuery), ...llmTerms])];
+
+  const { corrected, changed } = await correctQuery(rawQuery);
+  if (changed) console.log('[/api/search] spell-corrected:', rawQuery, '→', corrected);
+
+  const [baseExpansion, correctedExpansion] = await Promise.all([
+    expandQueryDynamic(rawQuery),
+    changed ? expandQueryDynamic(corrected) : Promise.resolve<string[]>([]),
+  ]);
+  const terms = [...new Set([...baseExpansion, ...correctedExpansion, ...llmTerms])];
 
   if (terms.length === 0) {
     return res.json({ ok: true, products: [], total: 0, page, limit, query: rawQuery, terms });
@@ -130,76 +177,52 @@ router.get('/', async (req: Request, res: Response) => {
   console.log('[/api/search] terms:', terms);
 
   const ftsQuery = buildFtsQuery(terms);
-  console.log('[/api/search] ftsQuery:', ftsQuery);
+  const qNorm    = normalizeArabic(rawQuery);
+  console.log('[/api/search] ftsQuery:', ftsQuery, '| qNorm:', qNorm);
 
-  if (!ftsQuery) {
-    // All terms were < 2 chars — return empty rather than throw a tsquery error
+  if (!ftsQuery && !qNorm) {
+    // Nothing matchable (all terms < 2 chars and empty normalized query) —
+    // return empty rather than calling the RPC with no criteria.
     return res.json({ ok: true, products: [], total: 0, page, limit, query: rawQuery, terms });
   }
 
-  // 4 & 5. Build base query with FTS + optional filters.
-  //   No `type` option → PostgREST uses the `fts` operator → to_tsquery(config, query).
-  //   This preserves the :* prefix operators in ftsQuery.
-  //   Using type:'websearch' would call websearch_to_tsquery, which ignores :*.
-  let dbQuery = supabase
-    .from('products')
-    .select('id, shop_id, title, description, price, image_urls, stock_Quantity, discount_pct, created_at, shops(name, location)', { count: 'exact' })
-    .textSearch('search_vector', ftsQuery, { config: 'simple' })
-    .eq('isPublish', true);
-
-  if (shopId)           dbQuery = dbQuery.eq('shop_id', shopId);
-  if (!isNaN(minPrice)) dbQuery = dbQuery.gte('price', minPrice);
-  if (!isNaN(maxPrice)) dbQuery = dbQuery.lte('price', maxPrice);
-
-  if (cities.length > 0) {
-    const { data: matchingShops } = await supabase
-      .from('shops')
-      .select('shop_id')
-      .in('location', cities);
-
-    if (!matchingShops || matchingShops.length === 0) {
-      return res.json({ ok: true, products: [], total: 0, page, limit, query: rawQuery, terms });
-    }
-    dbQuery = dbQuery.in('shop_id', matchingShops.map(s => s.shop_id));
-  }
-
-  // Fetch a wider window to allow JS-side relevance ranking, then paginate
-  const fetchCap = Math.min(300, offset + limit * 4);
-  dbQuery = dbQuery.range(0, fetchCap - 1);
-
-  const { data, error, count } = await dbQuery;
+  // 4 & 5 & 6. Single RPC does matching + ranking + fuzzy fallback + filters +
+  //   pagination in one DB scan (see supabase/migrations/search_products_rpc.sql):
+  //     - tier 1: FTS hit on the weighted search_vector, ranked by ts_rank_cd
+  //       plus business signals (exact-title, in-stock, discount, recency).
+  //     - tier 2: trigram fuzzy hit on the title (typo tolerance), always ranked
+  //       below tier 1.
+  //   total_count is a window count so `total` stays accurate for pagination.
+  const { data, error } = await supabase.rpc('search_products', {
+    q_query:     ftsQuery ?? '',
+    q_norm:      qNorm,
+    p_shop_id:   shopId ?? null,
+    p_min_price: isNaN(minPrice) ? null : minPrice,
+    p_max_price: isNaN(maxPrice) ? null : maxPrice,
+    p_cities:    cities.length > 0 ? cities : null,
+    p_limit:     limit,
+    p_offset:    offset,
+  });
 
   if (error) {
-    console.error('[/api/search] Supabase error:', error);
+    console.error('[/api/search] Supabase RPC error:', error);
     return res.status(500).json({ ok: false, error: error.message });
   }
 
-  // 6. Score and rank in JS — title match +2, description match +1
-  const lowerTerms = terms.map(t => t.toLowerCase());
+  const rows  = (data ?? []) as any[];
+  const total = rows.length > 0 ? Number(rows[0].total_count) : 0;
 
-  const scored = (data ?? []).map(product => {
-    const titleText = (product.title ?? '').toLowerCase();
-    const descText  = (product.description ?? '').toLowerCase();
-
-    let score = 0;
-    for (const term of lowerTerms) {
-      if (titleText.includes(term)) score += 2;
-      if (descText.includes(term))  score += 1;
-    }
-    return { ...product, _score: score };
-  });
-
-  scored.sort((a, b) => b._score - a._score);
-
-  // 7. Paginate on the ranked set, strip internal score field
-  const paginated = scored
-    .slice(offset, offset + limit)
-    .map(({ _score, ...p }) => p);
+  // Reshape to the existing response contract: nest shop fields under `shops`,
+  // drop the ranking/internal columns so the frontend needs no changes.
+  const products = rows.map(({ shop_name, shop_location, rank, match_tier, total_count, ...p }) => ({
+    ...p,
+    shops: { name: shop_name, location: shop_location },
+  }));
 
   return res.json({
     ok:       true,
-    products: paginated,
-    total:    count ?? scored.length,
+    products,
+    total,
     page,
     limit,
     query:    rawQuery,

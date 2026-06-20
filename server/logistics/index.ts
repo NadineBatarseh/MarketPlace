@@ -4,6 +4,7 @@ import { startBackgroundJobs } from './phases/phase7_backgroundJobs.js';
 import { handleBreakdown } from './phases/phase9_breakdownHandling.js';
 import { tryAddShipmentsToBatch } from './phases/phase8_inTransitAdditions.js';
 import { sequenceIntraCityTasks } from './phases/phase10_intraCitySequencing.js';
+import { prefetchPairs } from './distanceProvider.js';
 import { atomicAssign } from './driverAssignment.js';
 import { autoAssignUnbatchedShipments } from './phases/phase0a_autoAssignUnbatched.js';
 import { supabase } from '../supabase.js';
@@ -76,7 +77,7 @@ logisticsRouter.post('/add-shipments', async (req: Request, res: Response) => {
 // â”€â”€ POST /api/logistics/sequence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Compute intra-city stop sequence for a courier arriving at a city (Phase 10)
 // Body: { tasks, entry_point, initial_volume }
-logisticsRouter.post('/sequence', (req: Request, res: Response) => {
+logisticsRouter.post('/sequence', async (req: Request, res: Response) => {
   const { tasks, entry_point, initial_volume } = req.body;
 
   if (!tasks || !entry_point) {
@@ -85,6 +86,12 @@ logisticsRouter.post('/sequence', (req: Request, res: Response) => {
   }
 
   try {
+    // Warm the road-distance cache for every stop the sequencer will evaluate, so the
+    // (synchronous) greedy + 2-opt run on real road distances. A prefetch failure is
+    // non-fatal: getRoadDistanceKm falls back to Haversine.
+    const locations = [entry_point, ...tasks.map((t: { location: unknown }) => t.location)];
+    await prefetchPairs(locations as any);
+
     const sequence = sequenceIntraCityTasks(tasks, entry_point, initial_volume ?? 0);
     res.json({ success: true, sequence });
   } catch (err) {

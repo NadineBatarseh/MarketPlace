@@ -42,6 +42,44 @@ export function tokeniseQuery(raw: string): string[] {
   ];
 }
 
+// ── Catalog validation ────────────────────────────────────────────────────────
+//
+// LLM-generated synonyms are only stored if they actually match a product in the
+// catalog. This stops hallucinated/irrelevant synonyms from ever persisting and
+// being reused. The original keyword is always kept regardless.
+
+const SYNONYM_TTL_MS = 60 * 24 * 60 * 60 * 1000; // 60 days
+// Characters that would break a PostgREST .or() ilike filter — if a candidate
+// contains any, we can't safely probe it, so we keep it rather than risk a 400.
+const FILTER_UNSAFE = /[,()%*\\]/;
+
+async function catalogHasMatch(term: string): Promise<boolean> {
+  const t = term.trim();
+  if (t.length < 2) return false;
+  if (FILTER_UNSAFE.test(t)) return true; // can't safely probe — keep it
+  try {
+    const { count, error } = await supabase
+      .from('products')
+      .select('id', { count: 'exact', head: true })
+      .eq('isPublish', true)
+      .or(`title.ilike.%${t}%,description.ilike.%${t}%`);
+    if (error) return true; // on probe error, don't drop the candidate
+    return (count ?? 0) > 0;
+  } catch {
+    return true;
+  }
+}
+
+/** Drop synonyms that match zero products; always keep `keep`. */
+async function validateAgainstCatalog(candidates: string[], keep: string): Promise<string[]> {
+  const checked = await Promise.all(
+    candidates.map(async (c) => ({ c, ok: c === keep ? true : await catalogHasMatch(c) }))
+  );
+  const validated = checked.filter(r => r.ok).map(r => r.c);
+  if (!validated.includes(keep)) validated.unshift(keep);
+  return validated;
+}
+
 // ── Core function ─────────────────────────────────────────────────────────────
 
 export async function getExpandedKeywords(userKeyword: string): Promise<string[]> {
@@ -49,10 +87,10 @@ export async function getExpandedKeywords(userKeyword: string): Promise<string[]
   if (key.length < 2) return [userKeyword];
 
   try {
-    // Step 2: Check DB cache
+    // Step 2: Check DB cache (with governance fields)
     const { data, error: dbErr } = await supabase
       .from('search_synonyms')
-      .select('similar_words')
+      .select('similar_words, status, source, expires_at, usage_count')
       .eq('keyword', key)
       .maybeSingle();
 
@@ -61,13 +99,36 @@ export async function getExpandedKeywords(userKeyword: string): Promise<string[]
       throw dbErr;
     }
 
-    // Step 3: Cache hit — return without calling Groq
     if (data) {
-      console.log(`[dynamicSynonyms] Cache HIT for "${key}":`, data.similar_words);
-      return data.similar_words;
-    }
+      // Rejected = blocklist: never reuse or regenerate. Fall back to raw keyword.
+      if (data.status === 'rejected') {
+        console.log(`[dynamicSynonyms] "${key}" is rejected — using raw keyword only`);
+        return [key];
+      }
 
-    console.log(`[dynamicSynonyms] Cache MISS for "${key}" — calling Groq...`);
+      // Curated rows never expire; Groq rows past their TTL are re-generated.
+      const expired =
+        data.source !== 'curated' &&
+        data.expires_at != null &&
+        new Date(data.expires_at).getTime() < Date.now();
+
+      // Step 3: Fresh cache hit — return without calling Groq, bump usage stats.
+      if (!expired) {
+        console.log(`[dynamicSynonyms] Cache HIT for "${key}":`, data.similar_words);
+        supabase
+          .from('search_synonyms')
+          .update({ usage_count: (data.usage_count ?? 0) + 1, last_used_at: new Date().toISOString() })
+          .eq('keyword', key)
+          .then(({ error }) => {
+            if (error) console.warn('[dynamicSynonyms] usage bump failed:', error.message);
+          });
+        return data.similar_words;
+      }
+
+      console.log(`[dynamicSynonyms] Cache EXPIRED for "${key}" — regenerating via Groq...`);
+    } else {
+      console.log(`[dynamicSynonyms] Cache MISS for "${key}" — calling Groq...`);
+    }
 
     // Guard: no API key
     if (!process.env.GROQ_API_KEY) {
@@ -137,21 +198,34 @@ Output: {"singular":"حذاء","plural":"أحذية","dialect_palestinian":["ج�
 
     if (synonyms.length === 0) synonyms = [key];
     if (!synonyms.includes(key)) synonyms.unshift(key);
-    console.log(`[dynamicSynonyms] Final synonyms for "${key}":`, synonyms);
 
-    // Step 5: Save to DB — fire-and-forget
+    // Step 5: Validate against the catalog — drop synonyms that match no product
+    // so hallucinated/irrelevant terms never persist. The keyword is always kept.
+    const validated = await validateAgainstCatalog(synonyms, key);
+    console.log(`[dynamicSynonyms] Validated synonyms for "${key}":`, validated);
+
+    // Step 6: Save to DB — upsert (regeneration overwrites an expired row).
+    //   Tagged source='groq' with a TTL so it gets re-validated later. Curated
+    //   and rejected rows never reach this path, so they are never clobbered.
     supabase
       .from('search_synonyms')
-      .insert({ keyword: key, similar_words: synonyms })
+      .upsert({
+        keyword: key,
+        similar_words: validated,
+        source: 'groq',
+        status: 'active',
+        expires_at: new Date(Date.now() + SYNONYM_TTL_MS).toISOString(),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'keyword' })
       .then(({ error }) => {
-        if (error && error.code !== '23505') {
-          console.warn('[dynamicSynonyms] DB insert failed:', error.message);
-        } else if (!error) {
+        if (error) {
+          console.warn('[dynamicSynonyms] DB upsert failed:', error.message);
+        } else {
           console.log(`[dynamicSynonyms] Saved "${key}" to search_synonyms`);
         }
       });
 
-    return synonyms;
+    return validated;
 
   } catch (err) {
     console.warn('[dynamicSynonyms] Error, falling back to raw keyword:', (err as Error).message);

@@ -18,6 +18,7 @@ import supabaseProductWebhookRouter from "./routes/supabaseProductWebhookRouter.
 import instagramAuthRouter from "./routes/instagramAuthRouter.js";
 import applicationUploadRouter from "./routes/applicationUploadRouter.js";
 import adminArchiveRouter from "./routes/adminArchiveRouter.js";
+import synonymsAdminRouter from "./routes/synonymsAdminRouter.js";
 import paytabsRouter from "./routes/paytabsRouter.js";
 import ordersRouter from "./routes/ordersRouter.js";
 import profileRouter from "./routes/profileRouter.js";
@@ -530,6 +531,9 @@ app.use("/api/webhooks/supabase-products", supabaseProductWebhookRouter);
 app.use('/api/logistics', logisticsRouter);
 
 app.use('/api/admin', adminArchiveRouter);
+
+/* ---------- SEARCH SYNONYMS ADMIN (review / approve / reject) ---------- */
+app.use('/api/admin/synonyms', synonymsAdminRouter);
 
 /* ---------- ORDERS (server-authoritative placement) ---------- */
 app.use('/api/orders', ordersRouter);
