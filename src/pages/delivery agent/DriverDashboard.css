@@ -255,6 +255,15 @@
 .dd-sidebar-item-icon { display: flex; align-items: center; flex-shrink: 0; color: inherit; }
 .dd-sidebar-item-icon svg { stroke: currentColor; }
 .dd-sidebar-item-label { flex: 1; }
+.dd-sidebar-badge {
+  margin-right: auto;
+  background: #2563eb;
+  color: #fff;
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 800;
+}
 
 .dd-sidebar-item:hover {
   background: rgba(255,255,255,0.07);

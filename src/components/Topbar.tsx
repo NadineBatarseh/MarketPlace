@@ -7,6 +7,7 @@ import { useCustomerAuth } from '../context/CustomerAuthContext';
 import MerchantLoginModal from '../merchant-dashboard/components/MerchantLoginModal';
 import ChangePasswordModal from './ChangePasswordModal';
 import SearchInput from './SearchInput';
+import { fetchUnreadOrderNotifications } from '../lib/orderNotifications';
 
 interface Props {
   searchQuery?: string;
@@ -32,6 +33,19 @@ export default function Topbar({
   const { cartCount, favCount } = useShop();
   const { merchant, logout: merchantLogout } = useMerchantAuth();
   const { customer, logout: customerLogout } = useCustomerAuth();
+
+  // Unread order-tracking-update count (driver delivered / admin resolved a
+  // delay report / etc.) — refetched on every navigation so it stays current
+  // after the customer reads updates on the tracking page.
+  const [unreadOrderUpdates, setUnreadOrderUpdates] = useState(0);
+  useEffect(() => {
+    if (!customer) { setUnreadOrderUpdates(0); return; }
+    let cancelled = false;
+    fetchUnreadOrderNotifications(customer.id).then(res => {
+      if (!cancelled) setUnreadOrderUpdates(res.total);
+    });
+    return () => { cancelled = true; };
+  }, [customer, pathname]);
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [merchantModalOpen, setMerchantModalOpen] = useState(false);
@@ -239,6 +253,7 @@ export default function Topbar({
               onClick={() => navigate('/orders')}
               title="الطلبات"
             >
+              {unreadOrderUpdates > 0 && <div className="badge">{unreadOrderUpdates}</div>}
               <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
                 <path d="M18 8h1a4 4 0 0 1 0 8h-1" /><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" />
                 <line x1="6" y1="1" x2="6" y2="4" /><line x1="10" y1="1" x2="10" y2="4" /><line x1="14" y1="1" x2="14" y2="4" />

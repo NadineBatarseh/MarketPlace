@@ -10,6 +10,7 @@ import {
   type SplitPayoutEntity,
 } from '../lib/paytabs.js';
 import { PC } from '../lib/paymentConfig.js';
+import type { PaymentStatus } from '../../shared/status.js';
 import { createShipmentsForOrder } from '../lib/shipments.js';
 import { decryptSecret } from '../lib/payoutCrypto.js';
 
@@ -364,9 +365,12 @@ async function applyPaymentResult(tranRef: string): Promise<ApplyOutcome> {
   if (approved) {
     if (payment.status !== 'paid') {
       await supabase.from('payments').update({ status: 'paid' }).eq('id', payment.id);
+      // orders.status stays untouched here — it tracks delivery lifecycle only,
+      // payment outcome belongs in orders.payment_status.
+      const paidStatus: PaymentStatus = 'paid';
       await supabase
         .from('orders')
-        .update({ status: 'confirmed', payment_status: 'paid', paid_at: new Date().toISOString() })
+        .update({ payment_status: paidStatus, paid_at: new Date().toISOString() })
         .eq('id', orderId);
 
       // Best-effort tracking event — never block the payment flow on it.
@@ -394,12 +398,14 @@ async function applyPaymentResult(tranRef: string): Promise<ApplyOutcome> {
     return { status: 'paid', orderId };
   }
 
-  // Declined / failed — never downgrade an already-paid order.
+  // Declined / failed — never downgrade an already-paid order. orders.status
+  // is left as 'pending'; only payment_status reflects the failure.
   if (payment.status !== 'paid') {
     await supabase.from('payments').update({ status: 'failed' }).eq('id', payment.id);
+    const failedStatus: PaymentStatus = 'failed';
     await supabase
       .from('orders')
-      .update({ status: 'payment_failed', payment_status: 'failed' })
+      .update({ payment_status: failedStatus })
       .eq('id', orderId);
   }
   return { status: 'failed', orderId };

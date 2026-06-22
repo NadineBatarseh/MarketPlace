@@ -1,11 +1,5 @@
-export type ShipmentStatus =
-  | 'available'
-  | 'delayed'
-  | 'batched'
-  | 'reserved'
-  | 'picked_up'
-  | 'delivered'
-  | 'stranded';
+import type { ShipmentStatus } from '../../shared/status.js';
+export type { ShipmentStatus };
 
 export type BatchStatus =
   | 'pending_assignment'

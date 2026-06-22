@@ -1,21 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import supabase from '../../lib/supabase';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import Topbar from '../../components/Topbar';
 import StoreNav from '../../components/StoreNav';
+import type { ShipmentStatus } from '../../../shared/status';
+import { CUSTOMER_NOTIFICATION_EVENT_TYPES, type TrackingEventType } from '../../../shared/trackingEvents';
+import { confirmShipmentReceived, reportShipmentDelay } from '../../lib/trackingEvents';
+import { markOrderNotificationsSeen } from '../../lib/orderNotifications';
 import './OrderTrackingPage.css';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-
-interface TrackingEvent {
-  id: number;
-  step: string;
-  triggered_by: string | null;
-  note: string | null;
-  location: string | null;
-  created_at: string;
-}
 
 interface Product {
   id: string;
@@ -24,13 +19,36 @@ interface Product {
   price: number | null;
 }
 
+interface Shop {
+  shop_id: string;
+  name: string;
+}
+
+interface Shipment {
+  id: string;
+  order_detail_id: number;
+  status: ShipmentStatus;
+  created_at: string;
+  picked_up_at: string | null;
+  delivered_at: string | null;
+  deadline: string | null;
+  /** created_at of this shipment's 'customer_confirmed' tracking event, if any. */
+  confirmedAt: string | null;
+}
+
 interface OrderDetail {
   id: number;
   product_id: string | null;
+  shop_id: string | null;
   qty: number | null;
   unit_price: number | null;
-  package_status: string | null;
   product: Product | null;
+  shop: Shop | null;
+  shipment: Shipment | null;
+  /** Customer already submitted a 'customer_confirmed' event for this shipment. */
+  confirmedByCustomer: boolean;
+  /** Customer has an unresolved 'delay_reported' event for this shipment. */
+  delayReportOpen: boolean;
 }
 
 interface ShippingAddress {
@@ -48,124 +66,168 @@ interface Order {
   id: number;
   total_price: number | null;
   status: string | null;
+  payment_status: string | null;
   created_at: string;
   shipping_address: ShippingAddress | null;
   order_details: OrderDetail[];
 }
 
-// ── Constants ──────────────────────────────────────────────────────────────────
-
-const TRACK_STEPS = [
-  {
-    key: 'placed',
-    label: 'تم الطلب',
-    icon: (
-      <svg width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-        <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
-        <rect x="9" y="3" width="6" height="4" rx="1"/>
-        <path d="m9 12 2 2 4-4"/>
-      </svg>
-    ),
-  },
-  {
-    key: 'confirmed',
-    label: 'تم التأكيد',
-    icon: (
-      <svg width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-        <path d="m9 11 3 3L22 4"/>
-      </svg>
-    ),
-  },
-  {
-    key: 'shipping',
-    label: 'في الطريق',
-    icon: (
-      <svg width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-        <rect x="1" y="3" width="15" height="13" rx="1"/>
-        <path d="M16 8h4l3 5v3h-7V8z"/>
-        <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
-      </svg>
-    ),
-  },
-  {
-    key: 'delivered',
-    label: 'تم التوصيل',
-    icon: (
-      <svg width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-        <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-        <path d="M9 22V12h6v10"/>
-      </svg>
-    ),
-  },
-];
-
-// DB status → current step index (0-based; -1 = cancelled)
-const STATUS_STEP: Record<string, number> = {
-  pending:            0,   // just paid — order placed, not yet collected
-  pending_collection: 1,
-  delivering:         2,
-  completed:          3,
-  cancelled:          -1,
-};
-
-// Status → display label
-const STATUS_LABEL: Record<string, string> = {
-  pending_collection: 'في المخزن',
-  delivering:         'في الطريق إليك',
-  completed:          'تم التوصيل',
-  cancelled:          'ملغي',
-};
-
-// Status → badge class
-const STATUS_CLASS: Record<string, string> = {
-  pending_collection: 'ot-badge--processing',
-  delivering:         'ot-badge--shipping',
-  completed:          'ot-badge--delivered',
-  cancelled:          'ot-badge--cancelled',
-};
-
-// Status → hero message
-const STATUS_MESSAGE: Record<string, string> = {
-  pending_collection: 'طلبك في المخزن 📦',
-  delivering:         'طلبك في الطريق إليك 🚚',
-  completed:          'تم توصيل طلبك بنجاح 🎉',
-  cancelled:          'تم إلغاء الطلب',
-};
-
-// Status → ETA text (illustrative — replace with real data when available)
-const STATUS_ETA: Record<string, string | null> = {
-  pending_collection: 'متوقع خلال 1–2 يوم عمل',
-  delivering:         'اليوم بين 17:00 – 20:00',
-  completed:          null,
-  cancelled:          null,
-};
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatOrderId(id: number) {
   return `#SQ-${String(id).padStart(5, '0')}`;
 }
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('ar-EG', {
-    month: 'long', day: 'numeric', year: 'numeric',
-  });
+function fmtDate(d: Date) {
+  return d.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+function fmtTime(d: Date) {
+  return d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', hour12: true });
 }
+
+function fmtShort(d: Date) {
+  return d.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long' });
+}
+
+function addH(d: Date, h: number): Date {
+  return new Date(d.getTime() + h * 3_600_000);
+}
+
+function isToday(d: Date): boolean {
+  const n = new Date();
+  return d.getDate() === n.getDate() && d.getMonth() === n.getMonth() && d.getFullYear() === n.getFullYear();
+}
+
+// Mirrors OrderHistoryPage.tsx's getOrderProgress() exactly, so the order-level
+// timeline reads identically on both pages.
+// Steps: 0=تم الطلب  1=قيد المعالجة  2=تم الاستلام  3=قيد التوصيل
+// isConfirmed (step 4, "اكتمل الطلب") is tracked separately from isCompleted:
+// isCompleted means every shipment is 'delivered'; isConfirmed means every
+// shipment additionally has a 'customer_confirmed' tracking event — the order
+// is only ever fully done once the customer has confirmed every product.
+interface OrderProgress { step: number; isCompleted: boolean; isConfirmed: boolean; }
+
+function getOrderProgress(order: Order): OrderProgress {
+  const shipments = order.order_details.map(d => d.shipment).filter((s): s is Shipment => !!s);
+  const shipmentStatuses = shipments.map(s => s.status);
+  const isConfirmed = shipments.length > 0 && shipments.every(s => !!s.confirmedAt);
+
+  if (shipmentStatuses.length > 0 && shipmentStatuses.every(s => s === 'delivered')) {
+    return { step: 3, isCompleted: true, isConfirmed };
+  }
+  if (shipmentStatuses.some(s => s === 'picked_up' || s === 'delivered')) {
+    return { step: 3, isCompleted: false, isConfirmed };
+  }
+  if (shipmentStatuses.some(s => s === 'available')) {
+    return { step: 2, isCompleted: false, isConfirmed };
+  }
+  if (order.payment_status === 'paid') {
+    return { step: 1, isCompleted: false, isConfirmed };
+  }
+  return { step: 0, isCompleted: false, isConfirmed };
+}
+
+function earliestShipmentDate(order: Order, statuses: ShipmentStatus[]): Date | null {
+  const times = order.order_details
+    .map(d => d.shipment)
+    .filter((s): s is Shipment => !!s && statuses.includes(s.status))
+    .map(s => new Date(s.created_at).getTime());
+  return times.length ? new Date(Math.min(...times)) : null;
+}
+
+function latestConfirmedAt(order: Order): Date | null {
+  const times = order.order_details
+    .map(d => d.shipment?.confirmedAt)
+    .filter((t): t is string => !!t)
+    .map(t => new Date(t).getTime());
+  return times.length ? new Date(Math.max(...times)) : null;
+}
+
+function earliestPickedUpAt(order: Order): Date | null {
+  const times = order.order_details
+    .map(d => d.shipment?.picked_up_at)
+    .filter((t): t is string => !!t)
+    .map(t => new Date(t).getTime());
+  return times.length ? new Date(Math.min(...times)) : null;
+}
+
+function latestDeliveredAt(order: Order): Date | null {
+  const times = order.order_details
+    .map(d => d.shipment?.delivered_at)
+    .filter((t): t is string => !!t)
+    .map(t => new Date(t).getTime());
+  return times.length ? new Date(Math.max(...times)) : null;
+}
+
+function shipmentToStep(s: ShipmentStatus | null): number {
+  if (!s || s === 'pending') return 0;
+  if (s === 'available' || s === 'delayed') return 1;
+  if (s === 'batched' || s === 'reserved' || s === 'stranded') return 2;
+  if (s === 'picked_up') return 3;
+  if (s === 'delivered') return 4;
+  return 0;
+}
+
+// 0–5 scale for the order completion ring: same as shipmentToStep, but a
+// delivered shipment only reaches the final step (5) once the customer has
+// confirmed it — matching the order-level "اكتمل الطلب" milestone.
+function shipmentToStepWithConfirmation(s: Shipment | null): number {
+  if (!s) return 0;
+  if (s.status === 'delivered') return s.confirmedAt ? 5 : 4;
+  return shipmentToStep(s.status);
+}
+
+// Every product/shipment in the order counts equally, regardless of price or
+// quantity: percent = sum(product steps) / (5 * number of products) * 100.
+function getOrderCompletionPercent(order: Order): number {
+  const details = order.order_details;
+  if (details.length === 0) return 0;
+  const sumSteps = details.reduce((sum, d) => sum + shipmentToStepWithConfirmation(d.shipment), 0);
+  return Math.round((sumSteps / (5 * details.length)) * 100);
+}
+
+// Real predicted-delivery estimate for the header banner — driven by
+// shipments.deadline (the same field the logistics batching engine uses for
+// urgency scoring / sequencing), not by guessing off orders.status.
+interface DeadlineEstimate { earliest: Date; isMultiShipment: boolean; }
+
+function getDeadlineEstimate(order: Order): DeadlineEstimate | null {
+  const shipments = order.order_details.map(d => d.shipment).filter((s): s is Shipment => !!s);
+  const deadlines = shipments.map(s => s.deadline).filter((d): d is string => !!d).map(d => new Date(d));
+  if (deadlines.length === 0) return null;
+
+  const earliest = new Date(Math.min(...deadlines.map(d => d.getTime())));
+  const isMultiShipment = new Set(shipments.map(s => s.id)).size > 1;
+  return { earliest, isMultiShipment };
+}
+
+function getDeliveryWindow(order: Order): { prefix: string; time: string } {
+  const base = new Date(order.created_at);
+  let start: Date;
+  if (order.status === 'delivering') start = addH(new Date(), 2);
+  else if (order.status === 'pending') start = addH(base, 26);
+  else start = addH(base, 50);
+  const end = addH(start, 2);
+  const prefix = isToday(start) ? 'اليوم بين' : `${fmtShort(start)} بين`;
+  return { prefix, time: `${fmtTime(start)} - ${fmtTime(end)}` };
+}
+
+// Same labels/order as OrderHistoryPage.tsx's STEPS — the two timelines must match.
+const ORDER_STEPS = ['تم الطلب', 'قيد المعالجة', 'تم الاستلام', 'قيد التوصيل', 'اكتمل الطلب'];
+const PRODUCT_STEPS = ['تم الطلب', 'جاهز للاستلام', 'في انتظار الاستلام', 'قيد التوصيل', 'تم التسليم'];
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 
 export default function OrderTrackingPage() {
   const { orderId } = useParams<{ orderId: string }>();
-  const navigate     = useNavigate();
+  const navigate    = useNavigate();
   const { customer, isLoading: authLoading } = useCustomerAuth();
 
   const [order, setOrder]     = useState<Order | null>(null);
-  const [events, setEvents]   = useState<TrackingEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
+  const [newUpdates, setNewUpdates] = useState<{ event_type: TrackingEventType; note: string | null }[]>([]);
 
   useEffect(() => {
     if (!authLoading && !customer) navigate('/login');
@@ -176,678 +238,897 @@ export default function OrderTrackingPage() {
     let cancelled = false;
 
     async function load() {
-      setLoading(true);
-      setError(null);
+      setLoading(true); setError(null);
       try {
-        const { data: orderData, error: ordErr } = await supabase
+        const { data: od, error: oe } = await supabase
           .from('orders')
-          .select('id, total_price, status, created_at, shipping_address')
-          .eq('id', orderId)
-          .eq('user_id', customer!.id)
-          .single();
+          .select('id, total_price, status, payment_status, created_at')
+          .eq('id', orderId).eq('user_id', customer!.id).single();
+        if (oe || !od) throw oe ?? new Error('الطلب غير موجود');
 
-        if (ordErr || !orderData) throw ordErr ?? new Error('الطلب غير موجود');
+        const { data: dd, error: de } = await supabase
+          .from('order_details').select('id, order_id, product_id, shop_id, qty, unit_price')
+          .eq('order_id', od.id);
+        if (de) throw de;
 
-        const { data: detailsData, error: detErr } = await supabase
-          .from('order_details')
-          .select('id, order_id, product_id, qty, unit_price, package_status')
-          .eq('order_id', orderData.id);
+        const details   = (dd ?? []) as any[];
+        const detailIds = details.map(d => d.id as number);
+        const prodIds   = [...new Set(details.map(d => d.product_id as string | null).filter(Boolean))] as string[];
+        const shopIds   = [...new Set(details.map(d => d.shop_id    as string | null).filter(Boolean))] as string[];
 
-        if (detErr) throw detErr;
+        const [pr, sr, shr, tr] = await Promise.all([
+          prodIds.length ? supabase.from('products').select('id,title,image_urls,price').in('id', prodIds) : Promise.resolve({ data: [] as any[] }),
+          shopIds.length ? supabase.from('shops').select('shop_id,name').in('shop_id', shopIds)             : Promise.resolve({ data: [] as any[] }),
+          detailIds.length ? supabase.from('shipments').select('id,order_detail_id,status,created_at,picked_up_at,delivered_at,deadline').in('order_detail_id', detailIds) : Promise.resolve({ data: [] as any[] }),
+          supabase.from('order_tracking_events').select('shipment_id,event_type,requires_review,note,customer_seen_at,created_at').eq('order_id', od.id),
+        ]);
 
-        const productIds = [
-          ...new Set(
-            (detailsData ?? []).map((d: any) => d.product_id as string | null).filter(Boolean)
-          ),
-        ] as string[];
+        const pm = new Map<string, Product>(); (pr.data ?? []).forEach((p: Product) => pm.set(p.id, p));
+        const sm = new Map<string, Shop>();    (sr.data ?? []).forEach((s: any)     => sm.set(s.shop_id, s));
 
-        const productMap = new Map<string, Product>();
-        if (productIds.length > 0) {
-          const { data: prods } = await supabase
-            .from('products')
-            .select('id, title, image_urls, price')
-            .in('id', productIds);
-          prods?.forEach((p: Product) => productMap.set(p.id, p));
-        }
+        // shipment_id → flags/timestamps, derived from this order's tracking-event log.
+        const confirmedShipments  = new Set<string>();
+        const openDelayShipments  = new Set<string>();
+        const confirmedAtByShipment = new Map<string, string>();
+        (tr.data ?? []).forEach((e: any) => {
+          if (!e.shipment_id) return;
+          if (e.event_type === 'customer_confirmed') {
+            confirmedShipments.add(e.shipment_id);
+            confirmedAtByShipment.set(e.shipment_id, e.created_at);
+          }
+          if (e.event_type === 'delay_reported' && e.requires_review) openDelayShipments.add(e.shipment_id);
+        });
+
+        const hm = new Map<number, Shipment>();
+        (shr.data ?? []).forEach((s: any) => hm.set(s.order_detail_id as number, {
+          ...s,
+          confirmedAt: confirmedAtByShipment.get(s.id) ?? null,
+        }));
 
         const merged: Order = {
-          id:          orderData.id,
-          total_price: orderData.total_price,
-          status:      orderData.status,
-          created_at:  orderData.created_at,
-          shipping_address: (orderData as any).shipping_address ?? null,
-          order_details: (detailsData ?? []).map((d: any) => ({
-            id:             d.id,
-            product_id:     d.product_id,
-            qty:            d.qty,
-            unit_price:     d.unit_price,
-            package_status: d.package_status,
-            product:        d.product_id ? (productMap.get(d.product_id) ?? null) : null,
-          })),
+          id: od.id, total_price: od.total_price, status: od.status,
+          payment_status: od.payment_status, created_at: od.created_at,
+          order_details: details.map(d => {
+            const shipment = hm.get(d.id) ?? null;
+            return {
+              id: d.id, product_id: d.product_id, shop_id: d.shop_id,
+              qty: d.qty, unit_price: d.unit_price,
+              product:  d.product_id ? (pm.get(d.product_id) ?? null) : null,
+              shop:     d.shop_id    ? (sm.get(d.shop_id)    ?? null) : null,
+              shipment,
+              confirmedByCustomer: shipment ? confirmedShipments.has(shipment.id) : false,
+              delayReportOpen:     shipment ? openDelayShipments.has(shipment.id) : false,
+            };
+          }),
         };
 
-        // fetch real tracking events
-        const { data: eventsData } = await supabase
-          .from('order_tracking_events')
-          .select('id, step, triggered_by, note, location, created_at')
-          .eq('order_id', orderData.id)
-          .order('created_at', { ascending: true });
+        // Unread customer-facing notifications (driver delivered / admin
+        // resolved a delay report / etc.) — captured before marking them
+        // seen, so this page render still shows the banner once.
+        const unseen = (tr.data ?? []).filter((e: any) =>
+          CUSTOMER_NOTIFICATION_EVENT_TYPES.includes(e.event_type) && !e.customer_seen_at
+        );
 
         if (!cancelled) {
           setOrder(merged);
-          setEvents((eventsData ?? []) as TrackingEvent[]);
+          setNewUpdates(unseen.map((e: any) => ({ event_type: e.event_type, note: e.note ?? null })));
         }
+        if (unseen.length > 0) void markOrderNotificationsSeen(od.id);
       } catch (e: unknown) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'حدث خطأ أثناء تحميل الطلب');
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
-
     load();
     return () => { cancelled = true; };
   }, [customer, orderId]);
 
-  // ── Loading ──
-  if (authLoading || loading) {
-    return (
-      <>
-        <Topbar />
-        <StoreNav />
-        <div className="ot-page" dir="rtl">
-          <div className="ot-loading">
-            <div className="ot-spinner" />
-            <span>جارٍ تحميل بيانات الطلب…</span>
-          </div>
-        </div>
-      </>
-    );
-  }
+  if (authLoading || loading) return (
+    <><Topbar /><StoreNav />
+      <div className="ot-page" dir="rtl">
+        <div className="ot-loading"><div className="ot-spinner" /><span>جارٍ تحميل بيانات الطلب…</span></div>
+      </div>
+    </>
+  );
 
-  // ── Error ──
-  if (error || !order) {
-    return (
-      <>
-        <Topbar />
-        <StoreNav />
-        <div className="ot-page" dir="rtl">
-          <div className="ot-empty-state">
-            <div className="ot-empty-icon">
-              <svg width="52" height="52" fill="none" stroke="currentColor" strokeWidth="1.4" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M12 8v4M12 16h.01"/>
-              </svg>
-            </div>
-            <h3>لم يتم العثور على الطلب</h3>
-            <p>{error ?? 'هذا الطلب غير موجود أو لا ينتمي إلى حسابك.'}</p>
-            <button type="button" className="ot-btn ot-btn--primary" onClick={() => navigate('/orders')}>
-              العودة إلى طلباتي
-            </button>
+  if (error || !order) return (
+    <><Topbar /><StoreNav />
+      <div className="ot-page" dir="rtl">
+        <div className="ot-empty-state">
+          <div className="ot-empty-icon">
+            <svg width="52" height="52" fill="none" stroke="currentColor" strokeWidth="1.4" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
+            </svg>
           </div>
+          <h3>لم يتم العثور على الطلب</h3>
+          <p>{error ?? 'هذا الطلب غير موجود أو لا ينتمي إلى حسابك.'}</p>
+          <button type="button" className="ot-btn ot-btn--primary" onClick={() => navigate('/orders')}>العودة إلى طلباتي</button>
         </div>
-      </>
-    );
-  }
+      </div>
+    </>
+  );
+
+  const progress    = getOrderProgress(order);
+  const hasStranded = order.order_details.some(d => d.shipment?.status === 'stranded');
+  const delivery    = getDeliveryWindow(order);
 
   return (
-    <>
-      <Topbar />
-      <StoreNav />
+    <><Topbar /><StoreNav />
       <div className="ot-page" dir="rtl">
 
-        {/* ── Breadcrumb ── */}
-        <div className="ot-breadcrumb">
+        {/* S1: Back */}
+        <div className="ot-back-wrap">
           <button type="button" className="ot-back-btn" onClick={() => navigate('/orders')}>
-            <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
               <path d="m15 18-6-6 6-6"/>
             </svg>
-            طلباتي
+            العودة إلى الطلبات
           </button>
-          <span className="ot-breadcrumb-sep">/</span>
-          <span className="ot-breadcrumb-current">{formatOrderId(order.id)}</span>
         </div>
 
-        {/* ── 1. Summary Card ── */}
-        <SummaryCard order={order} navigate={navigate} />
+        {/* New tracking updates since last visit */}
+        {newUpdates.length > 0 && <NewUpdatesBanner updates={newUpdates} />}
 
-        {/* ── Delivery address (hidden for orders predating the snapshot) ── */}
-        <ShippingAddressCard address={order.shipping_address} />
+        {/* S2: Header card */}
+        <div className="ot-header-card">
+          <div className="ot-hc-right">
+            <div className="ot-hc-order-num">{formatOrderId(order.id)}</div>
+            <div>
+              <div className="ot-hc-date-label">تم إنشاء الطلب</div>
+              <div className="ot-hc-date-val">{fmtDate(new Date(order.created_at))} - {fmtTime(new Date(order.created_at))}</div>
+            </div>
+            <StatusBadge status={order.status ?? 'pending'} />
+          </div>
+          <HeaderDeliveryBanner order={order} />
+        </div>
 
-        {/* ── 2. Progress Dashboard ── */}
-        {order.status !== 'cancelled'
-          ? <ProgressSection order={order} />
-          : <CancelledBanner />
-        }
+        {/* Multi-shipment notice — only when products span >1 merchant/shipment */}
+        <MultiShipmentNotice order={order} />
 
-        {/* ── 3. Vertical Timeline ── */}
-        {order.status !== 'cancelled' && <VerticalTimeline order={order} events={events} />}
+        {/* S3: Timeline card */}
+        <div className="ot-tl-card">
+          <div className="ot-tlc-title">حالة الطلب العامة</div>
+          <OrderTimeline progress={progress} order={order} />
+          <AlertPanel order={order} hasStranded={hasStranded} />
+        </div>
 
-        {/* ── 4. Items ── */}
-        <ItemsSection order={order} navigate={navigate} />
+        {/* S4+S5: Two-column grid */}
+        <div className="ot-main-grid">
+          {/* Sidebar (right) */}
+          <aside className="ot-sidebar">
+            <DeliveryInfoCard order={order} delivery={delivery} />
+            <SummaryCard order={order} />
+          </aside>
 
-        {/* ── 5. Support ── */}
-        <SupportArea order={order} />
+          {/* Products (left) */}
+          <ProductsSection order={order} navigate={navigate} />
+        </div>
 
       </div>
     </>
   );
 }
 
-// ── 1. Summary Card ────────────────────────────────────────────────────────────
+// ── New Updates Banner ──────────────────────────────────────────────────────────
 
-function SummaryCard({ order, navigate }: { order: Order; navigate: ReturnType<typeof useNavigate> }) {
-  const status    = order.status ?? '';
-  const badgeCls  = STATUS_CLASS[status] ?? 'ot-badge--processing';
-  const statusLbl = STATUS_LABEL[status] ?? status;
-  const isCancellable = status === 'pending_collection';
-  const isDelivered   = status === 'completed';
+const UPDATE_MESSAGES: Record<string, { title: string; msg: string }> = {
+  driver_delivered: { title: 'تم تسليم طلبك', msg: 'تم تسليم منتجاتك بنجاح.' },
+  admin_resolved:   { title: 'تم حل بلاغ التأخير', msg: 'قامت الإدارة بمراجعة البلاغ ومعالجة المشكلة.' },
+  customer_confirmed: { title: 'تم تأكيد الاستلام', msg: 'تم تسجيل تأكيدك لاستلام المنتج.' },
+};
+
+function NewUpdatesBanner({ updates }: { updates: { event_type: TrackingEventType; note: string | null }[] }) {
+  const seen = new Set<string>();
+  const unique = updates.filter(u => {
+    if (seen.has(u.event_type)) return false;
+    seen.add(u.event_type);
+    return true;
+  });
 
   return (
-    <div className="ot-summary-card ot-card">
-      {/* Left: order meta */}
-      <div className="ot-summary-left">
-        <div className="ot-summary-top">
-          <span className="ot-order-id">{formatOrderId(order.id)}</span>
-          <span className={`ot-badge ${badgeCls}`}>{statusLbl}</span>
+    <div className="ot-updates-banner">
+      {unique.map(u => {
+        const cfg = UPDATE_MESSAGES[u.event_type];
+        if (!cfg) return null;
+        return (
+          <div key={u.event_type} className="ot-updates-banner-item">
+            <div className="ot-updates-banner-title">{cfg.title}</div>
+            <div className="ot-updates-banner-msg">{cfg.msg}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Multi-Shipment Notice ────────────────────────────────────────────────────────
+// Purely informational — never tied to status. Shown whenever the order's
+// products span more than one merchant or more than one shipment, so the
+// customer isn't confused when items arrive separately.
+
+function MultiShipmentNotice({ order }: { order: Order }) {
+  const shopIds     = new Set(order.order_details.map(d => d.shop_id).filter(Boolean));
+  const shipmentIds = new Set(order.order_details.map(d => d.shipment?.id).filter(Boolean));
+  const isMultiShipment = shopIds.size > 1 || shipmentIds.size > 1;
+  if (!isMultiShipment) return null;
+
+  return (
+    <div className="ot-multi-shipment-card">
+      <div className="ot-msc-icon">📦</div>
+      <div className="ot-msc-text">
+        <div className="ot-msc-title">سيصل طلبك على عدة دفعات</div>
+        <div className="ot-msc-desc">
+          قد يتم توصيل منتجات هذا الطلب بشكل منفصل وفقاً لتوفر المنتجات وخطة التوصيل. سيتم تحديث حالة كل منتج بشكل مستقل حتى اكتمال الطلب بالكامل.
         </div>
-        <div className="ot-summary-meta">
-          <span className="ot-meta-item">
-            <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
-            </svg>
-            {formatDate(order.created_at)}
-          </span>
-          <span className="ot-meta-dot">·</span>
-          <span className="ot-meta-item">
-            <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/>
-            </svg>
-            {order.order_details.length} {order.order_details.length === 1 ? 'منتج' : 'منتجات'}
-          </span>
-          <span className="ot-meta-dot">·</span>
-          <span className="ot-meta-item ot-meta-paid">
-            <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>
-            </svg>
-            مدفوع
-          </span>
-        </div>
-        <div className="ot-summary-total">
-          <span className="ot-total-label">المجموع الكلي</span>
-          <span className="ot-total-val">₪{(order.total_price ?? 0).toFixed(2)}</span>
-        </div>
-      </div>
-
-      {/* Right: action buttons */}
-      <div className="ot-summary-actions">
-        <button type="button" className="ot-action-btn ot-action-btn--primary" onClick={() => window.print()}>
-          <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="7 10 12 15 17 10"/>
-            <line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
-          تحميل الفاتورة
-        </button>
-
-        {!isDelivered && status !== 'cancelled' && (
-          <button type="button" className="ot-action-btn">
-            <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-            </svg>
-            التواصل مع المتجر
-          </button>
-        )}
-
-        {isCancellable && (
-          <button type="button" className="ot-action-btn ot-action-btn--danger">
-            <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/>
-            </svg>
-            إلغاء الطلب
-          </button>
-        )}
-
-        <button type="button" className="ot-action-btn ot-action-btn--ghost" onClick={() => navigate('/orders')}>
-          <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
-            <rect x="9" y="3" width="6" height="4" rx="1"/>
-          </svg>
-          جميع طلباتي
-        </button>
+        <div className="ot-msc-note">يمكنك متابعة حالة كل منتج من خلال الجدول الزمني أدناه.</div>
       </div>
     </div>
   );
 }
 
-// ── Delivery Address Card ───────────────────────────────────────────────────────
+// ── Status Badge ───────────────────────────────────────────────────────────────
 
-function ShippingAddressCard({ address }: { address: ShippingAddress | null }) {
-  // Orders placed before the shipping_address column existed have no snapshot —
-  // render nothing rather than an empty card.
-  if (!address) return null;
+const BADGE_CFG: Record<string, { label: string; variant: string }> = {
+  pending:    { label: 'قيد الانتظار',  variant: 'blue'  },
+  delivering: { label: 'قيد التوصيل', variant: 'blue'  },
+  completed:  { label: 'مكتمل',         variant: 'green' },
+  cancelled:  { label: 'ملغي',          variant: 'red'   },
+};
 
-  const fullName = [address.firstName, address.lastName].filter(Boolean).join(' ').trim();
-  // Compose the street line from address + apartment when present.
-  const streetLine = [address.address, address.apartment].filter(Boolean).join('، ');
-  // City + postal code on one line.
-  const cityLine = [address.city, address.postalCode].filter(Boolean).join('، ');
-
-  // If the snapshot is entirely empty (all nulls), there's nothing useful to show.
-  if (!fullName && !streetLine && !cityLine && !address.phone) return null;
-
+function StatusBadge({ status }: { status: string }) {
+  const cfg = BADGE_CFG[status] ?? BADGE_CFG['pending'];
   return (
-    <div className="ot-address-card ot-card">
-      <div className="ot-section-title">
-        <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-          <circle cx="12" cy="9" r="2.5"/>
+    <div className={`ot-status-badge ot-status-badge--${cfg.variant}`}>
+      {cfg.variant === 'blue' && (
+        <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <rect x="1" y="3" width="15" height="13" rx="1"/>
+          <path d="M16 8h4l3 5v3h-7V8z"/>
+          <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
         </svg>
-        عنوان التوصيل
-      </div>
-
-      <div className="ot-address-body">
-        {fullName   && <div className="ot-address-name">{fullName}</div>}
-        {streetLine && <div className="ot-address-line">{streetLine}</div>}
-        {cityLine   && <div className="ot-address-line">{cityLine}</div>}
-        {address.phone && (
-          <div className="ot-address-line ot-address-phone" dir="ltr">{address.phone}</div>
-        )}
-      </div>
+      )}
+      {cfg.variant === 'green' && (
+        <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+          <path d="m5 12 5 5L20 7"/>
+        </svg>
+      )}
+      {cfg.variant === 'red' && (
+        <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      )}
+      <span>{cfg.label}</span>
     </div>
   );
 }
 
-// ── 2. Progress Section ────────────────────────────────────────────────────────
+// ── Completion Ring ────────────────────────────────────────────────────────────
+// Order-wide completion %, averaged equally across every product/shipment —
+// see getOrderCompletionPercent() above.
 
-function ProgressSection({ order }: { order: Order }) {
-  const status     = order.status ?? '';
-  const activeStep = STATUS_STEP[status] ?? 0;
-  const pct        = Math.round(((activeStep + 1) / TRACK_STEPS.length) * 100);
-  const message    = STATUS_MESSAGE[status] ?? '';
-  const eta        = STATUS_ETA[status];
-
-  // SVG ring maths
-  const R = 40;
-  const circ = 2 * Math.PI * R; // ≈ 251.3
-  const offset = circ * (1 - pct / 100);
+function CompletionRing({ percent }: { percent: number }) {
+  const size   = 72;
+  const stroke = 7;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - percent / 100);
 
   return (
-    <div className="ot-progress-card ot-card">
+    <svg className="ot-ring-svg" width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#DCFCE7" strokeWidth={stroke} />
+      <circle
+        className="ot-ring-progress"
+        cx={size / 2} cy={size / 2} r={radius} fill="none"
+        stroke="#15803D" strokeWidth={stroke} strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+      />
+      <text x="50%" y="50%" textAnchor="middle" dominantBaseline="central" fontSize="17" fontWeight="800" fill="#15803D">
+        {percent}%
+      </text>
+    </svg>
+  );
+}
 
-      {/* Hero row: ring + status + ETA */}
-      <div className="ot-progress-hero">
+// ── Header Delivery Banner ─────────────────────────────────────────────────────
 
-        {/* Circular ring */}
-        <div className="ot-ring-wrap">
-          <svg width="120" height="120" viewBox="0 0 100 100">
-            {/* track */}
-            <circle cx="50" cy="50" r={R} fill="none" stroke="#e8f5ee" strokeWidth="8" />
-            {/* progress */}
-            <circle
-              cx="50" cy="50" r={R}
-              fill="none"
-              stroke="var(--p)"
-              strokeWidth="8"
-              strokeLinecap="round"
-              strokeDasharray={circ}
-              strokeDashoffset={offset}
-              style={{ transform: 'rotate(-90deg)', transformOrigin: '50px 50px', transition: 'stroke-dashoffset .6s ease' }}
-            />
-            {/* centre text */}
-            <text x="50" y="45" textAnchor="middle" fill="#0a3d24" fontSize="20" fontWeight="700" fontFamily="Syne, sans-serif">{pct}%</text>
-            <text x="50" y="62" textAnchor="middle" fill="#8aad99" fontSize="9.5" fontFamily="Tajawal, sans-serif">مكتمل</text>
-          </svg>
-        </div>
+function HeaderDeliveryBanner({ order }: { order: Order }) {
+  const isCompleted = order.status === 'completed';
+  const deliveredAt = order.order_details.find(d => d.shipment?.delivered_at)?.shipment?.delivered_at ?? null;
 
-        {/* Status message + ETA */}
-        <div className="ot-progress-info">
-          <div className="ot-progress-msg">{message}</div>
-          {eta && (
-            <div className="ot-eta-box">
-              <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
-              </svg>
-              <div>
-                <div className="ot-eta-label">الوقت المتوقع للتوصيل</div>
-                <div className="ot-eta-val">{eta}</div>
-              </div>
-            </div>
-          )}
-          {status === 'completed' && (
-            <div className="ot-delivered-note">
-              <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="m5 12 5 5L20 7"/>
-              </svg>
-              تم التوصيل بتاريخ {formatDate(order.created_at)}
-            </div>
-          )}
+  if (isCompleted) return (
+    <div className="ot-hc-left ot-hc-left--success">
+      <svg className="ot-hcl-clock" width="52" height="52" fill="none" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" stroke="#15803D" strokeWidth="1.5"/>
+        <path d="m5 12 5 5L20 7" stroke="#15803D" strokeWidth="2.5"/>
+      </svg>
+      <div className="ot-hc-delivery">
+        <div className="ot-hcd-label">حالة الطلب</div>
+        <div className="ot-hcd-time ot-hcd-time--success">تم تسليم الطلب بنجاح</div>
+        {deliveredAt && (
+          <div className="ot-hcd-note">تم التسليم بتاريخ: {fmtDate(new Date(deliveredAt))}</div>
+        )}
+      </div>
+    </div>
+  );
+
+  const estimate = getDeadlineEstimate(order);
+
+  if (!estimate) return (
+    <div className="ot-hc-left ot-hc-left--success">
+      <svg className="ot-hcl-clock" width="22" height="22" fill="none" stroke="#15803D" strokeWidth="2" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+      </svg>
+      <div className="ot-hc-delivery">
+        <div className="ot-hcd-label">موعد التوصيل</div>
+        <div className="ot-hcd-time ot-hcd-time--success">سيتم تحديد موعد التوصيل قريباً</div>
+        <div className="ot-hcd-note">سيتم إشعارك عند تحديد الموعد</div>
+      </div>
+    </div>
+  );
+
+  const prefix = isToday(estimate.earliest) ? 'اليوم' : fmtShort(estimate.earliest);
+  return (
+    <div className="ot-hc-left">
+      <svg className="ot-hcl-clock" width="22" height="22" fill="none" stroke="#15803D" strokeWidth="2" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+      </svg>
+      <div className="ot-hc-delivery">
+        <div className="ot-hcd-label">الوصول المتوقع</div>
+        <div className="ot-hcd-time">{prefix} بحلول {fmtTime(estimate.earliest)}</div>
+        <div className="ot-hcd-note">
+          {estimate.isMultiShipment ? 'قد يصل طلبك على أكثر من دفعة' : 'سيتم تحديث الوقت تلقائياً'}
         </div>
       </div>
+      <CompletionRing percent={getOrderCompletionPercent(order)} />
+    </div>
+  );
+}
 
-      {/* Horizontal step bar */}
-      <div className="ot-hbar">
-        {TRACK_STEPS.map((step, idx) => {
-          const done    = idx < activeStep;
-          const current = idx === activeStep;
-          const last    = idx === TRACK_STEPS.length - 1;
+// ── Order Timeline ─────────────────────────────────────────────────────────────
+
+// Mirrors OrderHistoryPage.tsx's getStepTimestamps() exactly.
+function getOrderTimestamps(order: Order): (Date | null)[] {
+  const base = new Date(order.created_at);
+  return [
+    base,                                                                  // تم الطلب
+    order.payment_status === 'paid' ? base : null,                        // قيد المعالجة
+    earliestShipmentDate(order, ['available', 'picked_up', 'delivered']),  // تم الاستلام
+    earliestPickedUpAt(order) ?? latestDeliveredAt(order),                 // قيد التوصيل
+    latestConfirmedAt(order),                                              // اكتمل الطلب
+  ];
+}
+
+function OrderTimeline({ progress, order }: { progress: OrderProgress; order: Order }) {
+  const ts = getOrderTimestamps(order);
+  return (
+    <div className="ot-tl-wrap">
+      <div className="ot-tl-track-row">
+        <div className="ot-tl-track-bg" />
+        <div className="ot-tl-track-fill" data-step={progress.isConfirmed ? 4 : progress.step} />
+      </div>
+      <div className="ot-tl-steps">
+        {ORDER_STEPS.map((label, idx) => {
+          const isDeliverStep = idx === 3;
+          const isFinalStep   = idx === 4;
+          const isDone    = isFinalStep ? progress.isConfirmed : (progress.isCompleted || idx < progress.step);
+          const isCurrent = isFinalStep ? (progress.isCompleted && !progress.isConfirmed) : (!progress.isCompleted && idx === progress.step);
+          const state     = isDone ? 'done' : isCurrent ? 'current' : 'future';
+          const stamp     = ts[idx];
           return (
-            <React.Fragment key={step.key}>
-              <div className={`ot-hstep${done ? ' ot-hstep--done' : current ? ' ot-hstep--current' : ''}`}>
-                <div className="ot-hstep-circle">
-                  {done
-                    ? <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></svg>
-                    : step.icon
-                  }
-                </div>
-                <span className="ot-hstep-label">{step.label}</span>
+            <div key={idx} className={`ot-tl-step ot-tl-step--${state}`}>
+              <div className="ot-tl-dot">
+                {isDone && (
+                  <svg width="14" height="14" fill="none" stroke="#fff" strokeWidth="3" viewBox="0 0 24 24">
+                    <path d="m5 12 5 5L20 7"/>
+                  </svg>
+                )}
+                {isCurrent && isDeliverStep && (
+                  <svg width="16" height="16" fill="none" stroke="#15803D" strokeWidth="2" viewBox="0 0 24 24">
+                    <rect x="1" y="3" width="15" height="13" rx="1"/>
+                    <path d="M16 8h4l3 5v3h-7V8z"/>
+                    <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
+                  </svg>
+                )}
+                {isCurrent && !isDeliverStep && <span className="ot-tl-pulse" />}
               </div>
-              {!last && (
-                <div className={`ot-hconnect${done ? ' ot-hconnect--done' : current ? ' ot-hconnect--current' : ''}`} />
-              )}
-            </React.Fragment>
+              <div className="ot-tl-info">
+                <span className="ot-tl-label">{label}</span>
+                {isCurrent && isDeliverStep ? (
+                  <span className="ot-tl-sub">جاري التوصيل</span>
+                ) : isCurrent && isFinalStep ? (
+                  <span className="ot-tl-sub">في انتظار تأكيدك</span>
+                ) : (isDone || isCurrent) && stamp ? (
+                  <span className="ot-tl-time">{fmtShort(stamp)} - {fmtTime(stamp)}</span>
+                ) : (
+                  <span className="ot-tl-time ot-tl-time--empty">—</span>
+                )}
+              </div>
+            </div>
           );
         })}
       </div>
-
     </div>
   );
 }
 
-// ── 3. Timeline Table ─────────────────────────────────────────────────────────
+// ── Alert Panel ────────────────────────────────────────────────────────────────
 
-// Detailed timeline rows — each maps to an activeStep threshold
-const TIMELINE_ROWS = [
-  {
-    key:      'placed',
-    label:    'تم تقديم الطلب',
-    atStep:   0,
-    location: 'النظام الإلكتروني',
-    by:       'العميل',
-    icon: (
-      <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-        <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
-        <rect x="9" y="3" width="6" height="4" rx="1"/><path d="m9 12 2 2 4-4"/>
+function AlertPanel({ order, hasStranded }: { order: Order; hasStranded: boolean }) {
+  if (hasStranded) return (
+    <div className="ot-alert ot-alert--red">
+      <svg width="18" height="18" fill="none" stroke="#dc2626" strokeWidth="2" viewBox="0 0 24 24">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
       </svg>
-    ),
-  },
-  {
-    key:      'collecting',
-    label:    'جارٍ تجميع الطلب من المتاجر',
-    atStep:   1,
-    location: 'المتاجر المحلية',
-    by:       'فريق المتجر',
-    icon: (
-      <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-        <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
-        <path d="M3 6h18M16 10a4 4 0 0 1-8 0"/>
+      <div>
+        <div className="ot-alert-title">هناك مشكلة في أحد منتجاتك</div>
+        <div className="ot-alert-sub">سيتواصل معك فريق الدعم قريباً لحل المشكلة</div>
+      </div>
+    </div>
+  );
+  if (order.status === 'completed') return (
+    <div className="ot-alert ot-alert--green">
+      <svg width="18" height="18" fill="none" stroke="#15803D" strokeWidth="2.5" viewBox="0 0 24 24">
+        <path d="m5 12 5 5L20 7"/>
       </svg>
-    ),
-  },
-  {
-    key:      'ontheway',
-    label:    'الطلب في الطريق إليك',
-    atStep:   2,
-    location: 'في الطريق',
-    by:       'السائق',
-    icon: (
-      <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+      <div>
+        <div className="ot-alert-title">تم تسليم طلبك بنجاح</div>
+        <div className="ot-alert-sub">شكراً لثقتك بسوق لينك</div>
+      </div>
+    </div>
+  );
+  if (order.status === 'delivering') return (
+    <div className="ot-alert ot-alert--blue">
+      <svg width="18" height="18" fill="none" stroke="#2563EB" strokeWidth="2" viewBox="0 0 24 24">
         <rect x="1" y="3" width="15" height="13" rx="1"/>
         <path d="M16 8h4l3 5v3h-7V8z"/>
         <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
       </svg>
-    ),
-  },
-  {
-    key:      'delivered',
-    label:    'تم التوصيل بنجاح',
-    atStep:   3,
-    location: 'عنوان التوصيل',
-    by:       'السائق',
-    icon: (
-      <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/>
-      </svg>
-    ),
-  },
-];
-
-function VerticalTimeline({ order, events }: { order: Order; events: TrackingEvent[] }) {
-  const activeStep = STATUS_STEP[order.status ?? ''] ?? 0;
-
-  // Build a map of step key → real event (if it exists in DB)
-  const eventByStep = new Map<string, TrackingEvent>();
-  for (const ev of events) eventByStep.set(ev.step, ev);
-
-  return (
-    <div className="ot-timeline-card ot-card">
-      <div className="ot-section-title">
-        <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-          <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
-        </svg>
-        سجل الطلب
-      </div>
-
-      <div className="ot-tbl-wrap">
-        <table className="ot-tbl">
-          <thead>
-            <tr>
-              <th>الحالة</th>
-              <th>التاريخ</th>
-              <th>ملاحظات</th>
-              <th>الموقع</th>
-              <th>بواسطة</th>
-            </tr>
-          </thead>
-          <tbody>
-            {TIMELINE_ROWS.map((row) => {
-              const done    = activeStep > row.atStep;
-              const current = activeStep === row.atStep;
-              const rowCls  = done ? 'ot-tr--done' : current ? 'ot-tr--current' : 'ot-tr--future';
-
-              // Use real event data if available, fall back to row defaults
-              const ev       = eventByStep.get(row.key);
-              const ts       = ev?.created_at ?? null;
-              const location = ev?.location ?? (done || current ? row.location : null);
-              const by       = ev?.triggered_by ?? (done || current ? row.by : null);
-              const note     = ev?.note ?? null;
-
-              return (
-                <tr key={row.key} className={rowCls}>
-                  {/* Status */}
-                  <td className="ot-td-status">
-                    <div className="ot-status-cell">
-                      <div className="ot-status-dot">
-                        {done && (
-                          <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
-                            <path d="m5 12 5 5L20 7"/>
-                          </svg>
-                        )}
-                        {current && <span className="ot-status-pulse" />}
-                      </div>
-                      <span className="ot-status-label">{row.label}</span>
-                      {current && <span className="ot-now-chip">الآن</span>}
-                    </div>
-                    {note && <div className="ot-row-note">{note}</div>}
-                  </td>
-
-                  {/* Date */}
-                  <td className="ot-td-date">
-                    {ts ? (
-                      <div className="ot-date-cell">
-                        <div className="ot-date-day">{new Date(ts).toLocaleDateString('ar-EG', { weekday: 'short' })}</div>
-                        <div className="ot-date-main">
-                          {new Date(ts).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short', year: 'numeric' })}
-                        </div>
-                        <div className="ot-date-time">{formatTime(ts)}</div>
-                      </div>
-                    ) : (
-                      <span className="ot-pending-text">—</span>
-                    )}
-                  </td>
-
-                  {/* Remarks / icon */}
-                  <td className="ot-td-icon">
-                    <div className={`ot-icon-chip${done ? ' ot-icon-chip--done' : current ? ' ot-icon-chip--current' : ''}`}>
-                      {row.icon}
-                    </div>
-                  </td>
-
-                  {/* Location */}
-                  <td className="ot-td-location">
-                    {location ? (
-                      <div className="ot-location-cell">
-                        <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-                          <circle cx="12" cy="9" r="2.5"/>
-                        </svg>
-                        {location}
-                      </div>
-                    ) : (
-                      <span className="ot-pending-text">—</span>
-                    )}
-                  </td>
-
-                  {/* Updated by */}
-                  <td className="ot-td-by">
-                    {by ? (
-                      <div className="ot-by-cell">
-                        <div className="ot-by-avatar">{by.charAt(0)}</div>
-                        {by}
-                      </div>
-                    ) : (
-                      <span className="ot-pending-text">—</span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-// ── Cancelled Banner ───────────────────────────────────────────────────────────
-
-function CancelledBanner() {
-  return (
-    <div className="ot-cancelled-banner ot-card">
-      <div className="ot-cancelled-icon">
-        <svg width="26" height="26" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/>
-        </svg>
-      </div>
       <div>
-        <div className="ot-cancelled-title">تم إلغاء الطلب</div>
-        <div className="ot-cancelled-sub">لن يتم توصيل هذا الطلب. للاستفسار تواصل مع الدعم.</div>
+        <div className="ot-alert-title">السائق في الطريق إلى موقعك</div>
+        <div className="ot-alert-sub">آخر تحديث: قبل 15 دقيقة</div>
+      </div>
+    </div>
+  );
+  return (
+    <div className="ot-alert ot-alert--green">
+      <svg width="18" height="18" fill="none" stroke="#16a34a" strokeWidth="2" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+      </svg>
+      <div>
+        <div className="ot-alert-title">جارٍ تجهيز طلبك</div>
+        <div className="ot-alert-sub">سيتم إشعارك عند استلام المندوب للطلب</div>
       </div>
     </div>
   );
 }
 
-// ── 4. Items Section ───────────────────────────────────────────────────────────
+// ── Delivery Info Card ─────────────────────────────────────────────────────────
 
-function ItemsSection({ order, navigate }: { order: Order; navigate: ReturnType<typeof useNavigate> }) {
-  const count = order.order_details.length;
+function DeliveryInfoCard({ order, delivery }: { order: Order; delivery: { prefix: string; time: string } }) {
+  const isDelivering = order.status === 'delivering';
   return (
-    <div className="ot-items-card ot-card">
-      <div className="ot-section-title">
-        <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-          <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
-          <path d="M3 6h18M16 10a4 4 0 0 1-8 0"/>
+    <div className="ot-sb-card">
+      <div className="ot-sb-title">
+        <svg width="16" height="16" fill="none" stroke="#2563EB" strokeWidth="2" viewBox="0 0 24 24">
+          <rect x="1" y="3" width="15" height="13" rx="1"/>
+          <path d="M16 8h4l3 5v3h-7V8z"/>
+          <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
         </svg>
-        محتويات الطلب
-        <span className="ot-count-chip">{count} {count === 1 ? 'منتج' : 'منتجات'}</span>
+        معلومات التوصيل
+      </div>
+      <div className="ot-sb-rows">
+        {[
+          {
+            icon: <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+            label: 'اسم السائق',
+            val: isDelivering ? 'أحمد خالد' : '—',
+          },
+          {
+            icon: <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 15a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 4.21h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 11.9a16 16 0 0 0 6 6l1.27-.93a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 19.18z"/></svg>,
+            label: 'رقم التواصل',
+            val: isDelivering ? '05*******38' : '—',
+          },
+          {
+            icon: <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>,
+            label: 'وقت الوصول المتوقع',
+            val: `${delivery.prefix}، ${delivery.time.split(' - ')[0]}`,
+          },
+          {
+            icon: <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>,
+            label: 'عنوان التسليم',
+            val: 'القدس، شارع صلاح الدين\nالعمارة 12، الطابق 3',
+            multiline: true,
+          },
+        ].map(row => (
+          <div key={row.label} className="ot-sb-row">
+            <span className="ot-sb-icon">{row.icon}</span>
+            <div>
+              <div className="ot-sb-row-label">{row.label}</div>
+              {row.multiline
+                ? <div className="ot-sb-row-val">{row.val.split('\n').map((l, i) => <span key={i}>{l}{i === 0 && <br />}</span>)}</div>
+                : <div className="ot-sb-row-val">{row.val}</div>
+              }
+            </div>
+          </div>
+        ))}
+      </div>
+      {isDelivering && (
+        <button type="button" className="ot-sb-map-btn">
+          <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
+            <line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/>
+          </svg>
+          تتبع السائق على الخريطة
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── Order Summary Card ─────────────────────────────────────────────────────────
+
+function SummaryCard({ order }: { order: Order }) {
+  const total       = order.total_price ?? 0;
+  const deliveryFee = 18;
+  const count       = order.order_details.length;
+  return (
+    <div className="ot-sb-card">
+      <div className="ot-sb-title">
+        <svg width="16" height="16" fill="none" stroke="#15803D" strokeWidth="2" viewBox="0 0 24 24">
+          <rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/>
+        </svg>
+        ملخص الطلب
+      </div>
+      <div className="ot-sb-summary">
+        <div className="ot-sbs-row"><span>عدد المنتجات</span><span>{count}</span></div>
+        <div className="ot-sbs-row"><span>رسوم التوصيل</span><span>₪{deliveryFee.toFixed(2)}</span></div>
+        <div className="ot-sbs-row ot-sbs-row--total">
+          <span className="ot-sbs-total-lbl">المجموع الكلي</span>
+          <span className="ot-sbs-total-val">₪{total.toFixed(2)}</span>
+        </div>
+        <div className="ot-sbs-row">
+          <span>حالة الدفع</span>
+          <span className="ot-sbs-paid">
+            <svg width="11" height="11" fill="none" stroke="#15803D" strokeWidth="2.5" viewBox="0 0 24 24">
+              <path d="m5 12 5 5L20 7"/>
+            </svg>
+            مدفوع
+          </span>
+        </div>
       </div>
 
-      <div className="ot-items-list">
-        {order.order_details.map((detail) => {
-          const product = detail.product;
-          const price   = detail.unit_price ?? product?.price ?? 0;
-          const qty     = detail.qty ?? 1;
-          const imgUrl  = product?.image_urls?.[0];
+    </div>
+  );
+}
 
-          return (
+// ── Products Section ───────────────────────────────────────────────────────────
+
+function ProductsSection({ order, navigate }: { order: Order; navigate: ReturnType<typeof useNavigate> }) {
+  const [showAll, setShowAll] = useState(false);
+  const MAX = 2;
+  const all     = order.order_details;
+  const visible = showAll ? all : all.slice(0, MAX);
+  const hasMore = all.length > MAX;
+
+  return (
+    <div className="ot-products">
+      <div className="ot-products-hd">
+        <h2 className="ot-products-title">المنتجات في هذا الطلب</h2>
+        <span className="ot-products-count">({all.length})</span>
+      </div>
+      <div className="ot-product-list">
+        {visible.map(detail => (
+          <ProductCard
+            key={detail.id}
+            detail={detail}
+            orderCreatedAt={order.created_at}
+            navigate={navigate}
+          />
+        ))}
+      </div>
+      {hasMore && (
+        <button type="button" className={`ot-show-all-btn${showAll ? ' ot-show-all-btn--open' : ''}`} onClick={() => setShowAll(v => !v)}>
+          <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"
+            className="ot-show-chevron">
+            <path d="m6 9 6 6 6-6"/>
+          </svg>
+          {showAll ? 'عرض أقل' : 'عرض جميع المنتجات'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── Product Card ───────────────────────────────────────────────────────────────
+
+function getProductTimestamps(detail: OrderDetail, orderCreatedAt: string): (Date | null)[] {
+  const base = new Date(orderCreatedAt);
+  const s    = detail.shipment;
+  return [
+    base,                                                            // 0: تم الطلب
+    s ? new Date(s.created_at) : null,                               // 1: جاهز للاستلام
+    null,                                                            // 2: في انتظار الاستلام (no DB timestamp)
+    s?.picked_up_at ? new Date(s.picked_up_at) : null,              // 3: قيد التوصيل
+    s?.delivered_at ? new Date(s.delivered_at) : null,              // 4: تم التسليم
+  ];
+}
+
+function ProductCard({
+  detail,
+  orderCreatedAt,
+  navigate,
+}: {
+  detail: OrderDetail;
+  orderCreatedAt: string;
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  const product     = detail.product;
+  const shop        = detail.shop;
+  const shipment    = detail.shipment;
+  const pStep       = shipmentToStep(shipment?.status ?? null);
+  const isStranded  = shipment?.status === 'stranded';
+  const imgUrl      = product?.image_urls?.[0];
+  const price       = detail.unit_price ?? product?.price ?? 0;
+  const qty         = detail.qty ?? 1;
+  const timestamps  = getProductTimestamps(detail, orderCreatedAt);
+
+  return (
+    <div className={`ot-pc${isStranded ? ' ot-pc--stranded' : ''}`}>
+      <div className="ot-pc-body">
+
+        {/* Info col */}
+        <div className="ot-pc-info">
+          <div
+            className={`ot-pc-img${detail.product_id ? ' ot-pc-img--link' : ''}`}
+            onClick={detail.product_id ? () => navigate(`/product/${detail.product_id}`) : undefined}
+          >
+            {imgUrl
+              ? <img src={imgUrl} alt={product?.title} />
+              : <div className="ot-pc-img-ph">
+                  <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    <circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>
+                  </svg>
+                </div>
+            }
+          </div>
+          <div className="ot-pc-meta">
             <div
-              key={detail.id}
-              className={`ot-item${detail.product_id ? ' ot-item--clickable' : ''}`}
+              className={`ot-pc-name${detail.product_id ? ' ot-pc-name--link' : ''}`}
               onClick={detail.product_id ? () => navigate(`/product/${detail.product_id}`) : undefined}
             >
-              <div className="ot-item-img">
-                {imgUrl
-                  ? <img src={imgUrl} alt={product?.title} />
-                  : <div className="ot-item-img-ph">
-                      <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                        <rect x="3" y="3" width="18" height="18" rx="2"/>
-                        <circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>
-                      </svg>
-                    </div>
-                }
+              {product?.title ?? 'منتج'}
+            </div>
+            {shop && (
+              <div className="ot-pc-shop">
+                <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                  <path d="M9 22V12h6v10"/>
+                </svg>
+                المتجر: {shop.name}
               </div>
+            )}
+            <span className="ot-pc-qty-badge">{qty} قطعة</span>
+            <div className="ot-pc-price">₪{(price * qty).toFixed(2)}</div>
+          </div>
+        </div>
 
-              <div className="ot-item-info">
-                <div className="ot-item-name">{product?.title ?? 'منتج'}</div>
-                <div className="ot-item-meta">
-                  <span>الكمية: {qty}</span>
-                  {detail.package_status && (
-                    <span className="ot-pkg-chip">{detail.package_status}</span>
-                  )}
+        {/* Vertical timeline */}
+        <div className="ot-pc-tl">
+          {PRODUCT_STEPS.map((label, idx) => {
+            const isDone    = idx < pStep;
+            const isCurrent = idx === pStep;
+            const state     = isDone ? 'done' : isCurrent ? 'current' : 'future';
+            const stamp     = timestamps[idx];
+            const isLast    = idx === PRODUCT_STEPS.length - 1;
+            return (
+              <div key={idx} className={`ot-pcs ot-pcs--${state}`}>
+                <div className="ot-pcs-spine">
+                  <div className="ot-pcs-dot">
+                    {isDone && (
+                      <svg width="9" height="9" fill="none" stroke="#fff" strokeWidth="3" viewBox="0 0 24 24">
+                        <path d="m5 12 5 5L20 7"/>
+                      </svg>
+                    )}
+                    {isCurrent && idx === 3 && (
+                      <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <rect x="1" y="3" width="15" height="13" rx="1"/>
+                        <path d="M16 8h4l3 5v3h-7V8z"/>
+                        <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
+                      </svg>
+                    )}
+                    {isCurrent && idx !== 3 && <span className="ot-pcs-pulse" />}
+                  </div>
+                  {!isLast && <div className={`ot-pcs-line${isDone ? ' done' : ''}`} />}
+                </div>
+                <div className="ot-pcs-text">
+                  <span className="ot-pcs-label">{label}</span>
+                  {(isDone || isCurrent) && stamp
+                    ? <span className="ot-pcs-time">{fmtShort(stamp)} - {fmtTime(stamp)}</span>
+                    : <span className="ot-pcs-dash">—</span>
+                  }
                 </div>
               </div>
+            );
+          })}
+        </div>
 
-              <div className="ot-item-price">
-                <div className="ot-item-unit">₪{price.toFixed(2)}</div>
-                {qty > 1 && <div className="ot-item-sub">× {qty} = ₪{(price * qty).toFixed(2)}</div>}
-              </div>
-            </div>
-          );
-        })}
       </div>
 
-      <div className="ot-items-foot">
-        <span className="ot-foot-label">المجموع الكلي</span>
-        <span className="ot-foot-val">₪{(order.total_price ?? 0).toFixed(2)}</span>
-      </div>
+      <ProductStatusPanel shipment={shipment} />
+      <DeliveryFeedbackActions detail={detail} />
     </div>
   );
 }
 
-// ── 5. Support Area ────────────────────────────────────────────────────────────
+// ── Delivery Feedback Actions (confirm received / report delay) ────────────────
 
-function SupportArea({ order }: { order: Order }) {
-  const isDelivered = order.status === 'completed';
+function DeliveryFeedbackActions({ detail }: { detail: OrderDetail }) {
+  const shipment = detail.shipment;
+  const [confirmed, setConfirmed]     = useState(detail.confirmedByCustomer);
+  const [delayOpen, setDelayOpen]     = useState(detail.delayReportOpen);
+  const [showDelayForm, setShowDelayForm] = useState(false);
+  const [delayNote, setDelayNote]     = useState('');
+  const [busy, setBusy]               = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  if (!shipment) return null;
+
+  const isDelivered    = shipment.status === 'delivered';
+  const deadlinePassed = !!shipment.deadline && new Date() > new Date(shipment.deadline);
+  const canConfirm      = isDelivered && !confirmed;
+  const canReportDelay  = !isDelivered && deadlinePassed && !delayOpen;
+
+  if (!canConfirm && !canReportDelay && !confirmed && !delayOpen) return null;
+
+  async function handleConfirm() {
+    setBusy(true); setActionError(null);
+    const res = await confirmShipmentReceived(shipment!.id);
+    setBusy(false);
+    if (!res.ok) { setActionError(res.error ?? 'حدث خطأ، حاول مرة أخرى'); return; }
+    setConfirmed(true);
+  }
+
+  async function handleReportDelay() {
+    if (!delayNote.trim()) { setActionError('الرجاء كتابة وصف للمشكلة'); return; }
+    setBusy(true); setActionError(null);
+    const res = await reportShipmentDelay(shipment!.id, delayNote.trim());
+    setBusy(false);
+    if (!res.ok) { setActionError(res.error ?? 'حدث خطأ، حاول مرة أخرى'); return; }
+    setDelayOpen(true);
+    setShowDelayForm(false);
+  }
+
   return (
-    <div className="ot-support-card ot-card">
-      <div className="ot-section-title">
-        <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>
-        </svg>
-        هل تحتاج إلى مساعدة؟
-      </div>
-      <div className="ot-support-btns">
-        <button type="button" className="ot-sup-btn">
-          <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-          </svg>
-          تواصل مع الدعم
-        </button>
-        <button type="button" className="ot-sup-btn">
-          <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
-            <line x1="4" y1="22" x2="4" y2="15"/>
-          </svg>
-          الإبلاغ عن مشكلة
-        </button>
-        {isDelivered && (
-          <button type="button" className="ot-sup-btn ot-sup-btn--return">
-            <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/>
-            </svg>
-            طلب إرجاع المنتج
-          </button>
-        )}
-      </div>
+    <div className="ot-pc-feedback">
+      {confirmed && <div className="ot-pc-feedback-msg ot-pc-feedback-msg--success">✓ أكّدت استلام هذا المنتج</div>}
+      {delayOpen && <div className="ot-pc-feedback-msg ot-pc-feedback-msg--pending">تم إرسال بلاغك، سيتواصل معك فريق الدعم قريباً</div>}
+      {actionError && <div className="ot-pc-feedback-error">{actionError}</div>}
+
+      {(canConfirm || (canReportDelay && !showDelayForm)) && (
+        <div className="ot-pc-feedback-actions">
+          {canConfirm && (
+            <button type="button" className="ot-pc-feedback-btn ot-pc-feedback-btn--confirm" disabled={busy} onClick={handleConfirm}>
+              تأكيد الاستلام
+            </button>
+          )}
+          {canReportDelay && (
+            <button type="button" className="ot-pc-feedback-btn ot-pc-feedback-btn--delay" disabled={busy} onClick={() => setShowDelayForm(true)}>
+              الإبلاغ عن تأخير الطلب
+            </button>
+          )}
+        </div>
+      )}
+
+      {canReportDelay && showDelayForm && (
+        <div className="ot-pc-delay-form">
+          <textarea
+            value={delayNote}
+            onChange={e => setDelayNote(e.target.value)}
+            placeholder="صف المشكلة..."
+            rows={2}
+          />
+          <div className="ot-pc-delay-form-actions">
+            <button type="button" disabled={busy} onClick={handleReportDelay}>إرسال البلاغ</button>
+            <button type="button" disabled={busy} onClick={() => { setShowDelayForm(false); setActionError(null); }}>إلغاء</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+// ── Product Status Panel ───────────────────────────────────────────────────────
+
+function ProductStatusPanel({ shipment }: { shipment: Shipment | null }) {
+  if (!shipment) return null;
+  const s = shipment.status;
+
+  if (s === 'delivered') return (
+    <div className="ot-pc-status ot-pc-status--green">
+      <svg width="15" height="15" fill="none" stroke="#15803D" strokeWidth="2.5" viewBox="0 0 24 24">
+        <path d="m5 12 5 5L20 7"/>
+      </svg>
+      <span className="ot-pc-status-msg">تم تسليم المنتج بنجاح.</span>
+    </div>
+  );
+
+  if (s === 'picked_up') return (
+    <div className="ot-pc-status ot-pc-status--blue">
+      <svg width="15" height="15" fill="none" stroke="#2563EB" strokeWidth="2" viewBox="0 0 24 24">
+        <rect x="1" y="3" width="15" height="13" rx="1"/>
+        <path d="M16 8h4l3 5v3h-7V8z"/>
+        <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
+      </svg>
+      <span className="ot-pc-status-msg">السائق في الطريق إلى موقعك.</span>
+    </div>
+  );
+
+  if (s === 'stranded') return (
+    <div className="ot-pc-status ot-pc-status--red">
+      <svg width="15" height="15" fill="none" stroke="#dc2626" strokeWidth="2" viewBox="0 0 24 24">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      <div>
+        <div className="ot-pc-status-msg">نواجه مشكلة مؤقتة في عملية التوصيل.</div>
+        <div className="ot-pc-status-sub">يعمل فريقنا على حل المشكلة وسيتم تحديث الحالة قريباً.</div>
+      </div>
+    </div>
+  );
+
+  if (s === 'delayed') return (
+    <div className="ot-pc-status ot-pc-status--orange">
+      <svg width="15" height="15" fill="none" stroke="#d97706" strokeWidth="2" viewBox="0 0 24 24">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      <div>
+        <div className="ot-pc-status-msg">يوجد تأخير بسيط في جدولة عملية التوصيل.</div>
+        <div className="ot-pc-status-sub">سيتم تحديث الحالة تلقائياً قريباً.</div>
+      </div>
+    </div>
+  );
+
+  if (s === 'reserved') return (
+    <div className="ot-pc-status ot-pc-status--blue">
+      <svg width="15" height="15" fill="none" stroke="#2563EB" strokeWidth="2" viewBox="0 0 24 24">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+      </svg>
+      <span className="ot-pc-status-msg">تم تخصيص سائق لاستلام المنتج قريباً.</span>
+    </div>
+  );
+
+  if (s === 'batched') return (
+    <div className="ot-pc-status ot-pc-status--green">
+      <svg width="15" height="15" fill="none" stroke="#16a34a" strokeWidth="2" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+      </svg>
+      <span className="ot-pc-status-msg">تم جدولة المنتج للتوصيل، بانتظار استلام السائق من المتجر.</span>
+    </div>
+  );
+
+  if (s === 'available') return (
+    <div className="ot-pc-status ot-pc-status--green">
+      <svg width="15" height="15" fill="none" stroke="#15803D" strokeWidth="2.5" viewBox="0 0 24 24">
+        <path d="m5 12 5 5L20 7"/>
+      </svg>
+      <span className="ot-pc-status-msg">المنتج جاهز للاستلام من المتجر.</span>
+    </div>
+  );
+
+  if (s === 'pending') return (
+    <div className="ot-pc-status ot-pc-status--blue">
+      <svg width="15" height="15" fill="none" stroke="#2563EB" strokeWidth="2" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+      </svg>
+      <span className="ot-pc-status-msg">يقوم المتجر حالياً بتجهيز المنتج.</span>
+    </div>
+  );
+
+  return null;
+}
+

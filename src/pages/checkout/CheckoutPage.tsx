@@ -17,10 +17,10 @@ import { useFieldHint } from '../auth/useFieldHint';
 import { EMAIL_RE, ARABIC_RE, parsePhone } from '../../lib/formValidation';
 import './CheckoutPage.css';
 
-type PaymentMethod = 'paytabs' | 'cod' | null;
+type PaymentMethod = 'paytabs' | null;
 
 export default function CheckoutPage() {
-  const { cartItems, removeFromCart, updateCartQty, removeItemsFromCart } = useShop();
+  const { cartItems, removeFromCart, updateCartQty } = useShop();
   const { customer } = useCustomerAuth();
   const navigate     = useNavigate();
 
@@ -211,8 +211,7 @@ export default function CheckoutPage() {
         body: JSON.stringify({
           // item.id is a composite cart key (productId__color__size) — send the
           // real product UUID from item.productId.
-          items:          activeItems.map(item => ({ product_id: String(item.productId), qty: item.quantity })),
-          payment_method: payment,
+          items:    activeItems.map(item => ({ product_id: String(item.productId), qty: item.quantity })),
           shipping,
           contact, // persisted with the order as the shipping-address snapshot
           dropoff,  // structured delivery zone + exact pin (validated server-side)
@@ -224,38 +223,29 @@ export default function CheckoutPage() {
       }
       const orderId = orderJson.order_id;
 
-      // 2. Branch on the selected payment method
-      if (payment === 'paytabs') {
-        // Online card payment — hand off to the PayTabs Hosted Payment Page.
-        const resp = await fetch('/api/payments/paytabs/create', {
-          method:  'POST',
-          headers: authHeaders,
-          body: JSON.stringify({ order_id: orderId, contact, shipping }),
-        });
-        const json = await resp.json().catch(() => ({}));
-        if (!resp.ok || !json.ok || !json.redirect_url) {
-          throw new Error(json.error || 'تعذر بدء عملية الدفع عبر PayTabs');
-        }
-
-        // Remember which order we're paying — plus the exact cart items in it —
-        // so the return page can clear ONLY the paid-for items, and only once
-        // the payment is actually confirmed. Do NOT clear the cart here: the
-        // customer hasn't paid yet and may abandon the PayTabs page.
-        localStorage.setItem('paytabs_pending_order_id', String(orderId));
-        localStorage.setItem(
-          'paytabs_pending_item_ids',
-          JSON.stringify(activeItems.map(item => item.id)),
-        );
-        await profileSave; // settle the profile save before navigating away
-        window.location.href = json.redirect_url; // → PayTabs Hosted Payment Page
-        return;
+      // 2. Online card payment — hand off to the PayTabs Hosted Payment Page.
+      //    This is the only supported payment method; COD is not offered.
+      const resp = await fetch('/api/payments/paytabs/create', {
+        method:  'POST',
+        headers: authHeaders,
+        body: JSON.stringify({ order_id: orderId, contact, shipping }),
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok || !json.ok || !json.redirect_url) {
+        throw new Error(json.error || 'تعذر بدء عملية الدفع عبر PayTabs');
       }
 
-      // Cash on Delivery — order already marked 'cod' server-side; the order is
-      // confirmed now, so clear only the purchased items from the cart.
-      removeItemsFromCart(activeItems.map(item => item.id));
+      // Remember which order we're paying — plus the exact cart items in it —
+      // so the return page can clear ONLY the paid-for items, and only once
+      // the payment is actually confirmed. Do NOT clear the cart here: the
+      // customer hasn't paid yet and may abandon the PayTabs page.
+      localStorage.setItem('paytabs_pending_order_id', String(orderId));
+      localStorage.setItem(
+        'paytabs_pending_item_ids',
+        JSON.stringify(activeItems.map(item => item.id)),
+      );
       await profileSave; // let the parallel profile save settle before leaving
-      navigate(`/orders/${orderId}`);
+      window.location.href = json.redirect_url; // → PayTabs Hosted Payment Page
     } catch (e: unknown) {
       setPayError(e instanceof Error ? e.message : 'حدث خطأ أثناء معالجة الدفع');
     } finally {
@@ -491,27 +481,12 @@ export default function CheckoutPage() {
                 <span className="material-symbols-outlined co-pay-icon">credit_card</span>
                 <span>الدفع التجريبي عبر PayTabs<small>PayTabs Test Payment</small></span>
               </button>
-              <button
-                type="button"
-                className={`co-pay-opt ${payment === 'cod' ? 'active' : ''}`}
-                onClick={() => setPayment('cod')}
-              >
-                <span className="material-symbols-outlined co-pay-icon">local_atm</span>
-                <span>الدفع عند الاستلام<small>Cash on Delivery</small></span>
-              </button>
             </div>
 
             {payment === 'paytabs' && (
               <div className="co-paypal-msg">
                 <p>سيتم تحويلك إلى صفحة الدفع الآمنة الخاصة بـ PayTabs لإتمام عملية الدفع (وضع الاختبار).</p>
                 <p><small>You will be redirected to the secure PayTabs page to complete your payment (test mode).</small></p>
-              </div>
-            )}
-
-            {payment === 'cod' && (
-              <div className="co-paypal-msg">
-                <p>ستدفع قيمة الطلب نقداً عند استلامه. سيتم تأكيد طلبك مباشرة.</p>
-                <p><small>You will pay in cash upon delivery. Your order will be confirmed immediately.</small></p>
               </div>
             )}
           </section>

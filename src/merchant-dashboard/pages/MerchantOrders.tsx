@@ -42,9 +42,9 @@ const PROCESSED_STATUSES = ['delivering', 'completed'];
 const fmt = (id: number) => `ORD-${String(id).padStart(3, '0')}`;
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
-  pending_collection: { label: 'في انتظار المعالجة', color: '#f59e0b' },
-  delivering:         { label: 'تمت المعالجة',        color: '#0ea5e9' },
-  completed:          { label: 'تمت المعالجة',        color: '#22c55e' },
+  pending:    { label: 'في انتظار المعالجة', color: '#f59e0b' },
+  delivering: { label: 'تمت المعالجة',        color: '#0ea5e9' },
+  completed:  { label: 'تمت المعالجة',        color: '#22c55e' },
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -195,10 +195,13 @@ export default function MerchantOrders() {
       if (!res.ok || !json.ok) throw new Error(json.error || 'failed');
 
       // Only reflect success in the UI after the server confirms the write.
+      // orders.status itself never changes here (server-side it only ever
+      // holds 'pending' | 'delivering' | 'completed') — "ready for pickup"
+      // is reflected by ready_time + the shipment(s) flipping to 'available'.
       setOrders(prev =>
         prev.map(o =>
           o.id === orderId
-            ? { ...o, ready_time: json.ready_time as string, status: json.all_ready ? 'pending_collection' : o.status }
+            ? { ...o, ready_time: json.ready_time as string }
             : o
         )
       );
@@ -270,7 +273,7 @@ export default function MerchantOrders() {
             {visible.map(order => {
             const statusCfg = STATUS_LABEL[order.status] ?? { label: order.status, color: '#6b7280' };
             const isOpen    = expanded.has(order.id);
-            const canMark   = (order.status === 'pending' || order.status === 'confirmed' || order.status === 'pending_collection') && !order.ready_time;
+            const canMark   = order.status === 'pending' && !order.ready_time;
             const isMarked  = !!order.ready_time;
 
             return (

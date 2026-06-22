@@ -17,11 +17,9 @@ interface RecentOrder {
 }
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
-  pending:            { label: 'تحضير',            color: '#f59e0b' },
-  pending_collection: { label: 'انتظار استلام',     color: '#8b5cf6' },
-  delivering:         { label: 'الشحن',             color: '#0ea5e9' },
-  completed:          { label: 'تم التسليم',        color: '#16a34a' },
-  cancelled:          { label: 'ملغي',              color: '#dc2626' },
+  pending:    { label: 'تحضير',     color: '#f59e0b' },
+  delivering: { label: 'الشحن',     color: '#0ea5e9' },
+  completed:  { label: 'تم التسليم', color: '#16a34a' },
 };
 
 const fmt = (id: number) => `ORD-${String(id).padStart(3, '0')}`;
@@ -57,19 +55,19 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
 
       const orderIds = [...new Set((detailRows ?? []).map(r => r.order_id as number))];
 
-      const PENDING_STATUSES = ['pending', 'pending_collection'];
       let unpaidTotal = 0;
       let accountBalance = 0;
       let newOrders = 0;
 
       if (orderIds.length > 0) {
+        // unpaidTotal/accountBalance are about money the customer has/hasn't
+        // paid — that's payment_status, not the delivery-lifecycle status.
         const { data: unpaidData } = await supabase
-          .from('orders').select('total_price').in('id', orderIds).in('status', PENDING_STATUSES);
+          .from('orders').select('total_price').in('id', orderIds).neq('payment_status', 'paid');
         unpaidTotal = (unpaidData ?? []).reduce((s, o) => s + (Number(o.total_price) || 0), 0);
 
         const { data: paidData } = await supabase
-          .from('orders').select('total_price').in('id', orderIds)
-          .not('status', 'in', `(${PENDING_STATUSES.join(',')})`);
+          .from('orders').select('total_price').in('id', orderIds).eq('payment_status', 'paid');
         accountBalance = (paidData ?? []).reduce((s, o) => s + (Number(o.total_price) || 0), 0);
 
         const { count: newCount } = await supabase

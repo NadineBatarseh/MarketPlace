@@ -16,7 +16,7 @@ interface BillItem {
 
 interface Bill {
   id: string;
-  status: string;
+  payment_status: string | null;
   total_price: number;
   created_at: string;
   user_id: string;
@@ -32,10 +32,8 @@ function formatDate(iso: string) {
   }).format(new Date(iso));
 }
 
-const PENDING_STATUSES = ['pending_collection', 'pending'];
-
 function BillCard({ bill }: { bill: Bill }) {
-  const isPaid = !PENDING_STATUSES.includes(bill.status);
+  const isPaid = bill.payment_status === 'paid';
   const customerName = bill.customer?.full_name ?? `عميل #${bill.user_id.slice(0, 8)}`;
   const phone = bill.customer?.phone;
   const address = bill.customer?.address;
@@ -180,7 +178,7 @@ export default function MerchantBilling() {
       // 3. Fetch order headers
       const { data: orders, error: oErr } = await supabase
         .from('orders')
-        .select('id, status, total_price, created_at, user_id, delivery_lat, delivery_lng')
+        .select('id, payment_status, total_price, created_at, user_id, delivery_lat, delivery_lng')
         .in('id', orderIds)
         .order('created_at', { ascending: false });
       if (oErr) throw oErr;
@@ -203,7 +201,7 @@ export default function MerchantBilling() {
 
       const mapped: Bill[] = (orders ?? []).map((o: any) => ({
         id: o.id,
-        status: o.status,
+        payment_status: o.payment_status,
         total_price: Number(o.total_price),
         created_at: o.created_at,
         user_id: o.user_id,
@@ -221,8 +219,8 @@ export default function MerchantBilling() {
     setLoading(false);
   };
 
-  const unpaid = bills.filter(b => PENDING_STATUSES.includes(b.status));
-  const paid = bills.filter(b => !PENDING_STATUSES.includes(b.status));
+  const unpaid = bills.filter(b => b.payment_status !== 'paid');
+  const paid = bills.filter(b => b.payment_status === 'paid');
   const displayed = tab === 'unpaid' ? unpaid : paid;
 
   if (loading) return <div className="mb-root"><div className="md-page-loading">جاري تحميل الفواتير...</div></div>;

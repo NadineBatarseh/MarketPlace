@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import { supabase } from '../supabase.js';
 import { requireCustomer } from '../middleware/requireCustomer.js';
 import { PC } from '../lib/paymentConfig.js';
+import type { OrderStatus, PaymentStatus } from '../../shared/status.js';
 import { fetchZoneById, pointInZone } from '../lib/zones.js';
 import { createShipmentsForOrder } from '../lib/shipments.js';
 
@@ -62,9 +63,8 @@ function clean(v: unknown): string | null {
 }
 
 router.post('/create', requireCustomer, async (req: Request, res: Response) => {
-  const { items, payment_method, shipping, contact, dropoff } = req.body as {
+  const { items, shipping, contact, dropoff } = req.body as {
     items?: IncomingItem[];
-    payment_method?: 'paytabs' | 'cod';
     shipping?: IncomingShipping;
     contact?: IncomingContact;
     dropoff?: IncomingDropoff;
@@ -146,6 +146,9 @@ router.post('/create', requireCustomer, async (req: Request, res: Response) => {
   const round = (n: number) => Math.round(n * 100) / 100;
   const total = round(subtotal + PC.deliveryFee);
 
+  const initialStatus: OrderStatus = 'pending';
+  const initialPaymentStatus: PaymentStatus = 'unpaid';
+
   // 1. Create the order (owned by the authenticated customer).
   //    Persists BOTH the free-text shipping snapshot and the structured delivery
   //    destination (zone + exact pin + courier directions), frozen at purchase.
@@ -153,9 +156,9 @@ router.post('/create', requireCustomer, async (req: Request, res: Response) => {
     .from('orders')
     .insert({
       user_id: req.authUserId,
-      status: 'pending',
+      status: initialStatus,
       total_price: total,
-      payment_status: payment_method === 'cod' ? 'cod' : 'unpaid',
+      payment_status: initialPaymentStatus,
       shipping_address: shippingAddress,
       delivery_lat: lat,
       delivery_lng: lng,
@@ -225,8 +228,10 @@ router.post('/create', requireCustomer, async (req: Request, res: Response) => {
  * (scoped to this order so legacy NULL-order_id seed rows are untouched) so the
  * flow still works even if that trigger is ever dropped.
  *
- * When EVERY shop in the order is ready we advance the order to 'pending_collection'
- * and record a 'collecting' tracking event.
+ * When EVERY shop in the order is ready we record a 'collecting' tracking
+ * event — orders.status itself is untouched (it only ever holds
+ * 'pending' | 'delivering' | 'completed'); "ready for pickup" is derived
+ * client-side from shipment status.
  */
 router.post('/:orderId/mark-ready', requireCustomer, async (req: Request, res: Response) => {
   const orderId = Number(req.params.orderId);
@@ -291,7 +296,10 @@ router.post('/:orderId/mark-ready', requireCustomer, async (req: Request, res: R
       })
       .then(undefined, () => {});
 
-    await supabase.from('orders').update({ status: 'pending_collection' }).eq('id', orderId);
+    // orders.status is never 'pending_collection' — it only tracks
+    // pending/delivering/completed. The shipment(s) flipping to 'available'
+    // above is the source of truth; the order-level timeline derives
+    // "ready for pickup" from shipment status, not from orders.status.
   }
 
   return res.json({ ok: true, ready_time: now, all_ready: allReady });

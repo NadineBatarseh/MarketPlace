@@ -99,12 +99,7 @@ function SidebarItem({
       <span className="dd-sidebar-item-icon">{icon}</span>
       <span className="dd-sidebar-item-label">{label}</span>
       {badge != null && badge > 0 && (
-        <span style={{
-          marginRight: 'auto', background: '#2563eb', color: '#fff',
-          borderRadius: 10, padding: '1px 7px', fontSize: 11, fontWeight: 800,
-        }}>
-          {badge}
-        </span>
+        <span className="dd-sidebar-badge">{badge}</span>
       )}
     </div>
   );
@@ -697,6 +692,7 @@ export default function DriverDashboard() {
                 className="dd-status-select"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
+                aria-label="تصفية حسب الحالة"
               >
                 <option value="all">كل الحالات</option>
                 <option value="assigned">مخصصة</option>
