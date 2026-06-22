@@ -99,6 +99,41 @@
   text-align: right;
 }
 
+/* Multi-shipment informational notice (purely informational, no status link) */
+.ot-multi-shipment-card {
+  background: var(--green-light);
+  border: 1px solid var(--green-border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh);
+  display: flex;
+  align-items: flex-start;
+  direction: rtl;
+  gap: 14px;
+  padding: 18px 24px;
+  margin-bottom: 20px;
+  animation: otUp .25s ease both;
+}
+.ot-msc-icon {
+  font-size: 24px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.ot-msc-text { display: flex; flex-direction: column; gap: 4px; }
+.ot-msc-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--green-dark);
+}
+.ot-msc-desc {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.6;
+}
+.ot-msc-note {
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .ot-hc-order-num {
   font-family: 'Syne', sans-serif;
   font-size: 40px;
@@ -150,7 +185,8 @@
 .ot-hc-left--neutral { background: var(--surface); }
 .ot-hc-left--success { background: var(--green-light); }
 
-.ot-truck-svg  { flex-shrink: 0; }
+.ot-ring-svg   { flex-shrink: 0; }
+.ot-ring-progress { transition: stroke-dashoffset .6s ease; }
 .ot-hcl-clock  { flex-shrink: 0; color: var(--green); }
 
 .ot-hc-delivery { flex: 1; text-align: right; }
@@ -237,9 +273,10 @@
   transition: width .6s ease;
 }
 .ot-tl-track-fill[data-step="0"] { width: 0%; }
-.ot-tl-track-fill[data-step="1"] { width: 33.33%; }
-.ot-tl-track-fill[data-step="2"] { width: 66.67%; }
-.ot-tl-track-fill[data-step="3"] { width: 100%; }
+.ot-tl-track-fill[data-step="1"] { width: 25%; }
+.ot-tl-track-fill[data-step="2"] { width: 50%; }
+.ot-tl-track-fill[data-step="3"] { width: 75%; }
+.ot-tl-track-fill[data-step="4"] { width: 100%; }
 
 /* Steps */
 .ot-tl-steps {
@@ -325,6 +362,12 @@
 .ot-tl-step--done .ot-tl-time    { color: var(--green); }
 .ot-tl-step--current .ot-tl-time { color: var(--green); }
 .ot-tl-time--empty { opacity: .4; }
+
+.ot-tl-sub {
+  font-size: 11px;
+  color: var(--green);
+  white-space: nowrap;
+}
 
 /* Alert panel */
 .ot-alert {
@@ -758,6 +801,105 @@
   margin-top: 2px;
 }
 
+/* New tracking-update banner (driver delivered / admin resolved delay report) */
+.ot-updates-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.ot-updates-banner-item {
+  background: var(--green-light);
+  border: 1px solid var(--green-border);
+  border-radius: 12px;
+  padding: 14px 20px;
+  direction: rtl;
+}
+.ot-updates-banner-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--green-dark);
+  margin-bottom: 2px;
+}
+.ot-updates-banner-msg {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* Customer delivery-feedback actions (confirm received / report delay) */
+.ot-pc-feedback {
+  padding: 12px 24px;
+  border-top: 1px solid var(--border);
+  direction: rtl;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ot-pc-feedback-msg {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 6px;
+  width: fit-content;
+}
+.ot-pc-feedback-msg--success { background: var(--green-light); color: var(--green-dark); }
+.ot-pc-feedback-msg--pending { background: var(--orange-light); color: var(--orange); }
+.ot-pc-feedback-error {
+  font-size: 12px;
+  color: var(--red);
+}
+.ot-pc-feedback-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ot-pc-feedback-btn {
+  padding: 7px 14px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1.5px solid var(--border);
+  background: #fff;
+  font-family: inherit;
+}
+.ot-pc-feedback-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.ot-pc-feedback-btn--confirm { border-color: var(--green-border); color: var(--green-dark); background: var(--green-light); }
+.ot-pc-feedback-btn--confirm:hover:not(:disabled) { background: var(--green); color: #fff; }
+.ot-pc-feedback-btn--delay { border-color: var(--orange); color: var(--orange); background: var(--orange-light); }
+.ot-pc-feedback-btn--delay:hover:not(:disabled) { background: var(--orange); color: #fff; }
+.ot-pc-delay-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ot-pc-delay-form textarea {
+  width: 100%;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  resize: vertical;
+  direction: rtl;
+}
+.ot-pc-delay-form-actions {
+  display: flex;
+  gap: 8px;
+}
+.ot-pc-delay-form-actions button {
+  padding: 6px 14px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1.5px solid var(--border);
+  background: #fff;
+  font-family: inherit;
+}
+.ot-pc-delay-form-actions button:first-child { border-color: var(--orange); color: #fff; background: var(--orange); }
+.ot-pc-delay-form-actions button:disabled { opacity: 0.6; cursor: not-allowed; }
+
 /* Show all button */
 .ot-show-all-btn {
   display: inline-flex;
@@ -783,51 +925,6 @@
 }
 .ot-show-chevron { transition: transform .2s; }
 .ot-show-all-btn--open .ot-show-chevron { transform: rotate(180deg); }
-
-/* ── S6: Support Footer ──────────────────────────────────────────────────────── */
-.ot-support-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--r-xl);
-  padding: 18px 28px;
-  box-shadow: var(--sh);
-  direction: rtl;
-  animation: otUp .25s ease .15s both;
-  will-change: transform, opacity;
-}
-
-.ot-sf-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 14px;
-  color: var(--muted);
-}
-
-.ot-sf-actions { display: flex; gap: 10px; }
-
-.ot-sf-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  height: 40px;
-  padding: 0 18px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--muted);
-  font-family: 'DM Sans', sans-serif;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: border-color .15s, color .15s;
-}
-.ot-sf-btn:hover { border-color: var(--green); color: var(--green); }
 
 /* ── Loading / Empty ─────────────────────────────────────────────────────────── */
 .ot-loading {
@@ -884,7 +981,6 @@
   .ot-pc-tl           { width: 100%; border-right: none; border-top: 1px solid var(--border); margin-right: 0; padding-right: 0; padding-top: 16px; margin-top: 16px; }
   .ot-tl-label        { font-size: 11px; }
   .ot-tl-time         { font-size: 10px; white-space: normal; text-align: center; }
-  .ot-support-footer  { flex-direction: column; align-items: flex-start; }
 }
 
 /* ── Delivery address card ──────────────────────────────────────────────────── */

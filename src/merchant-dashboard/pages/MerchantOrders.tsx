@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useMerchantAuth } from '../context/MerchantAuthContext';
 import supabase from '../../lib/supabase';
 import { insertTrackingEvent } from '../../lib/trackingEvents';
+import type { ShipmentStatus } from '../../../shared/status';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,9 +33,9 @@ const PROCESSED_STATUSES = ['delivering', 'completed'];
 const fmt = (id: number) => `ORD-${String(id).padStart(3, '0')}`;
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
-  pending_collection: { label: 'في انتظار المعالجة', color: '#f59e0b' },
-  delivering:         { label: 'تمت المعالجة',        color: '#0ea5e9' },
-  completed:          { label: 'تمت المعالجة',        color: '#22c55e' },
+  pending:    { label: 'في انتظار المعالجة', color: '#f59e0b' },
+  delivering: { label: 'تمت المعالجة',        color: '#0ea5e9' },
+  completed:  { label: 'تمت المعالجة',        color: '#22c55e' },
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -142,16 +143,30 @@ export default function MerchantOrders() {
     setMarking(orderId);
     const now = new Date().toISOString();
 
-    const { error } = await supabase
+    const { data: shopDetails, error } = await supabase
       .from('order_details')
       .update({ ready_time: now })
       .eq('order_id', orderId)
-      .eq('shop_id', shopId);
+      .eq('shop_id', shopId)
+      .select('id');
 
     if (error) {
       setError('فشل تحديث حالة الطلب');
       setMarking(null);
       return;
+    }
+
+    // The merchant confirming "ready" is what makes this shop's shipments
+    // eligible for batching/pickup — flip them out of 'pending'.
+    const detailIds = (shopDetails ?? []).map(d => d.id);
+    const pendingStatus: ShipmentStatus = 'pending';
+    const availableStatus: ShipmentStatus = 'available';
+    if (detailIds.length > 0) {
+      await supabase
+        .from('shipments')
+        .update({ status: availableStatus })
+        .in('order_detail_id', detailIds)
+        .eq('status', pendingStatus);
     }
 
     // Update local UI
@@ -168,17 +183,13 @@ export default function MerchantOrders() {
     const allReady = allDetails?.every(d => d.ready_time != null) ?? false;
 
     if (allReady) {
-      // Insert "collecting" tracking event — visible on customer tracking page
+      // Insert "collecting" tracking event — visible on customer tracking page.
+      // orders.status is left as 'pending' here: it only ever moves to
+      // 'delivering' once a driver actually picks the shipments up.
       await insertTrackingEvent(orderId, 'collecting', merchant?.shop?.name ?? 'المتجر', {
         location: 'المتاجر المحلية',
         note:     'جميع المتاجر جهّزت الطلب وهو جاهز للتجميع',
       });
-
-      // Advance order status
-      await supabase
-        .from('orders')
-        .update({ status: 'pending_collection' })
-        .eq('id', orderId);
     }
 
     setMarking(null);
@@ -245,7 +256,7 @@ export default function MerchantOrders() {
             {visible.map(order => {
             const statusCfg = STATUS_LABEL[order.status] ?? { label: order.status, color: '#6b7280' };
             const isOpen    = expanded.has(order.id);
-            const canMark   = (order.status === 'pending' || order.status === 'pending_collection') && !order.ready_time;
+            const canMark   = order.status === 'pending' && !order.ready_time;
             const isMarked  = !!order.ready_time;
 
             return (

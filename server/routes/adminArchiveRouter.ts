@@ -23,7 +23,7 @@ const router = Router();
 router.use(requireAdmin);
 
 // Order/batch statuses that mean "still in flight" — archiving the parent is risky.
-const ACTIVE_ORDER_STATUSES = ['pending', 'pending_collection', 'delivering'];
+const ACTIVE_ORDER_STATUSES = ['pending', 'delivering'];
 const ACTIVE_BATCH_STATUSES = ['pending_assignment', 'assigned', 'in_transit'];
 
 const APP_TABLES: Record<string, string> = {

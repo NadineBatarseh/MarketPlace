@@ -24,6 +24,8 @@ import payoutOnboardingRouter from "./routes/payoutOnboardingRouter.js";
 import payoutAdminRouter from "./routes/payoutAdminRouter.js";
 import ordersRouter from "./routes/ordersRouter.js";
 import profileRouter from "./routes/profileRouter.js";
+import customerTrackingEventsRouter from "./routes/customerTrackingEventsRouter.js";
+import adminDeliveryIssuesRouter from "./routes/adminDeliveryIssuesRouter.js";
 import { requireAdmin } from "./middleware/requireAdmin.js";
 import { logisticsRouter, bootstrapLogistics } from "./logistics/index.js";
 
@@ -542,6 +544,12 @@ app.use('/api/orders', ordersRouter);
 
 /* ---------- CUSTOMER PROFILE (profile + default shipping address) ---------- */
 app.use('/api/profile', profileRouter);
+
+/* ---------- DELIVERY FEEDBACK (customer confirm-received / report-delay) ---------- */
+app.use('/api/tracking-events', customerTrackingEventsRouter);
+
+/* ---------- ADMIN: DELIVERY ISSUES (delay-report review queue) ---------- */
+app.use('/api/admin/delivery-issues', adminDeliveryIssuesRouter);
 
 /* ---------- PAYTABS PAYMENTS (Hosted Payment Page — Test Mode) ---------- */
 app.use('/api/payments/paytabs', paytabsRouter);

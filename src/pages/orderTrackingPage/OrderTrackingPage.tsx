@@ -4,13 +4,13 @@ import supabase from '../../lib/supabase';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import Topbar from '../../components/Topbar';
 import StoreNav from '../../components/StoreNav';
+import type { ShipmentStatus } from '../../../shared/status';
+import { CUSTOMER_NOTIFICATION_EVENT_TYPES, type TrackingEventType } from '../../../shared/trackingEvents';
+import { confirmShipmentReceived, reportShipmentDelay } from '../../lib/trackingEvents';
+import { markOrderNotificationsSeen } from '../../lib/orderNotifications';
 import './OrderTrackingPage.css';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-
-type ShipmentStatus =
-  | 'pending' | 'available' | 'delayed' | 'batched' | 'reserved'
-  | 'picked_up' | 'delivered' | 'stranded';
 
 interface Product {
   id: string;
@@ -31,6 +31,9 @@ interface Shipment {
   created_at: string;
   picked_up_at: string | null;
   delivered_at: string | null;
+  deadline: string | null;
+  /** created_at of this shipment's 'customer_confirmed' tracking event, if any. */
+  confirmedAt: string | null;
 }
 
 interface OrderDetail {
@@ -42,6 +45,10 @@ interface OrderDetail {
   product: Product | null;
   shop: Shop | null;
   shipment: Shipment | null;
+  /** Customer already submitted a 'customer_confirmed' event for this shipment. */
+  confirmedByCustomer: boolean;
+  /** Customer has an unresolved 'delay_reported' event for this shipment. */
+  delayReportOpen: boolean;
 }
 
 interface ShippingAddress {
@@ -92,12 +99,65 @@ function isToday(d: Date): boolean {
   return d.getDate() === n.getDate() && d.getMonth() === n.getMonth() && d.getFullYear() === n.getFullYear();
 }
 
-function computeOrderStep(details: OrderDetail[]): number {
-  const ss = details.map(d => d.shipment?.status ?? null);
-  if (details.length > 0 && details.every(d => d.shipment?.status === 'delivered')) return 3;
-  if (ss.some(s => s === 'picked_up' || s === 'delivered')) return 2;
-  if (ss.some(s => s && ['available', 'batched', 'reserved', 'delayed'].includes(s))) return 1;
-  return 0;
+// Mirrors OrderHistoryPage.tsx's getOrderProgress() exactly, so the order-level
+// timeline reads identically on both pages.
+// Steps: 0=تم الطلب  1=قيد المعالجة  2=تم الاستلام  3=قيد التوصيل
+// isConfirmed (step 4, "اكتمل الطلب") is tracked separately from isCompleted:
+// isCompleted means every shipment is 'delivered'; isConfirmed means every
+// shipment additionally has a 'customer_confirmed' tracking event — the order
+// is only ever fully done once the customer has confirmed every product.
+interface OrderProgress { step: number; isCompleted: boolean; isConfirmed: boolean; }
+
+function getOrderProgress(order: Order): OrderProgress {
+  const shipments = order.order_details.map(d => d.shipment).filter((s): s is Shipment => !!s);
+  const shipmentStatuses = shipments.map(s => s.status);
+  const isConfirmed = shipments.length > 0 && shipments.every(s => !!s.confirmedAt);
+
+  if (shipmentStatuses.length > 0 && shipmentStatuses.every(s => s === 'delivered')) {
+    return { step: 3, isCompleted: true, isConfirmed };
+  }
+  if (shipmentStatuses.some(s => s === 'picked_up' || s === 'delivered')) {
+    return { step: 3, isCompleted: false, isConfirmed };
+  }
+  if (shipmentStatuses.some(s => s === 'available')) {
+    return { step: 2, isCompleted: false, isConfirmed };
+  }
+  if (order.payment_status === 'paid') {
+    return { step: 1, isCompleted: false, isConfirmed };
+  }
+  return { step: 0, isCompleted: false, isConfirmed };
+}
+
+function earliestShipmentDate(order: Order, statuses: ShipmentStatus[]): Date | null {
+  const times = order.order_details
+    .map(d => d.shipment)
+    .filter((s): s is Shipment => !!s && statuses.includes(s.status))
+    .map(s => new Date(s.created_at).getTime());
+  return times.length ? new Date(Math.min(...times)) : null;
+}
+
+function latestConfirmedAt(order: Order): Date | null {
+  const times = order.order_details
+    .map(d => d.shipment?.confirmedAt)
+    .filter((t): t is string => !!t)
+    .map(t => new Date(t).getTime());
+  return times.length ? new Date(Math.max(...times)) : null;
+}
+
+function earliestPickedUpAt(order: Order): Date | null {
+  const times = order.order_details
+    .map(d => d.shipment?.picked_up_at)
+    .filter((t): t is string => !!t)
+    .map(t => new Date(t).getTime());
+  return times.length ? new Date(Math.min(...times)) : null;
+}
+
+function latestDeliveredAt(order: Order): Date | null {
+  const times = order.order_details
+    .map(d => d.shipment?.delivered_at)
+    .filter((t): t is string => !!t)
+    .map(t => new Date(t).getTime());
+  return times.length ? new Date(Math.max(...times)) : null;
 }
 
 function shipmentToStep(s: ShipmentStatus | null): number {
@@ -107,6 +167,39 @@ function shipmentToStep(s: ShipmentStatus | null): number {
   if (s === 'picked_up') return 3;
   if (s === 'delivered') return 4;
   return 0;
+}
+
+// 0–5 scale for the order completion ring: same as shipmentToStep, but a
+// delivered shipment only reaches the final step (5) once the customer has
+// confirmed it — matching the order-level "اكتمل الطلب" milestone.
+function shipmentToStepWithConfirmation(s: Shipment | null): number {
+  if (!s) return 0;
+  if (s.status === 'delivered') return s.confirmedAt ? 5 : 4;
+  return shipmentToStep(s.status);
+}
+
+// Every product/shipment in the order counts equally, regardless of price or
+// quantity: percent = sum(product steps) / (5 * number of products) * 100.
+function getOrderCompletionPercent(order: Order): number {
+  const details = order.order_details;
+  if (details.length === 0) return 0;
+  const sumSteps = details.reduce((sum, d) => sum + shipmentToStepWithConfirmation(d.shipment), 0);
+  return Math.round((sumSteps / (5 * details.length)) * 100);
+}
+
+// Real predicted-delivery estimate for the header banner — driven by
+// shipments.deadline (the same field the logistics batching engine uses for
+// urgency scoring / sequencing), not by guessing off orders.status.
+interface DeadlineEstimate { earliest: Date; isMultiShipment: boolean; }
+
+function getDeadlineEstimate(order: Order): DeadlineEstimate | null {
+  const shipments = order.order_details.map(d => d.shipment).filter((s): s is Shipment => !!s);
+  const deadlines = shipments.map(s => s.deadline).filter((d): d is string => !!d).map(d => new Date(d));
+  if (deadlines.length === 0) return null;
+
+  const earliest = new Date(Math.min(...deadlines.map(d => d.getTime())));
+  const isMultiShipment = new Set(shipments.map(s => s.id)).size > 1;
+  return { earliest, isMultiShipment };
 }
 
 function getDeliveryWindow(order: Order): { prefix: string; time: string } {
@@ -120,7 +213,8 @@ function getDeliveryWindow(order: Order): { prefix: string; time: string } {
   return { prefix, time: `${fmtTime(start)} - ${fmtTime(end)}` };
 }
 
-const ORDER_STEPS = ['تم الطلب', 'جاهز للاستلام', 'قيد التوصيل', 'تم التسليم'];
+// Same labels/order as OrderHistoryPage.tsx's STEPS — the two timelines must match.
+const ORDER_STEPS = ['تم الطلب', 'قيد المعالجة', 'تم الاستلام', 'قيد التوصيل', 'اكتمل الطلب'];
 const PRODUCT_STEPS = ['تم الطلب', 'جاهز للاستلام', 'في انتظار الاستلام', 'قيد التوصيل', 'تم التسليم'];
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
@@ -133,6 +227,7 @@ export default function OrderTrackingPage() {
   const [order, setOrder]     = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
+  const [newUpdates, setNewUpdates] = useState<{ event_type: TrackingEventType; note: string | null }[]>([]);
 
   useEffect(() => {
     if (!authLoading && !customer) navigate('/login');
@@ -161,28 +256,64 @@ export default function OrderTrackingPage() {
         const prodIds   = [...new Set(details.map(d => d.product_id as string | null).filter(Boolean))] as string[];
         const shopIds   = [...new Set(details.map(d => d.shop_id    as string | null).filter(Boolean))] as string[];
 
-        const [pr, sr, shr] = await Promise.all([
+        const [pr, sr, shr, tr] = await Promise.all([
           prodIds.length ? supabase.from('products').select('id,title,image_urls,price').in('id', prodIds) : Promise.resolve({ data: [] as any[] }),
           shopIds.length ? supabase.from('shops').select('shop_id,name').in('shop_id', shopIds)             : Promise.resolve({ data: [] as any[] }),
-          detailIds.length ? supabase.from('shipments').select('id,order_detail_id,status,created_at,picked_up_at,delivered_at').in('order_detail_id', detailIds) : Promise.resolve({ data: [] as any[] }),
+          detailIds.length ? supabase.from('shipments').select('id,order_detail_id,status,created_at,picked_up_at,delivered_at,deadline').in('order_detail_id', detailIds) : Promise.resolve({ data: [] as any[] }),
+          supabase.from('order_tracking_events').select('shipment_id,event_type,requires_review,note,customer_seen_at,created_at').eq('order_id', od.id),
         ]);
 
         const pm = new Map<string, Product>(); (pr.data ?? []).forEach((p: Product) => pm.set(p.id, p));
         const sm = new Map<string, Shop>();    (sr.data ?? []).forEach((s: any)     => sm.set(s.shop_id, s));
-        const hm = new Map<number, Shipment>(); (shr.data ?? []).forEach((s: any)  => hm.set(s.order_detail_id as number, s));
+
+        // shipment_id → flags/timestamps, derived from this order's tracking-event log.
+        const confirmedShipments  = new Set<string>();
+        const openDelayShipments  = new Set<string>();
+        const confirmedAtByShipment = new Map<string, string>();
+        (tr.data ?? []).forEach((e: any) => {
+          if (!e.shipment_id) return;
+          if (e.event_type === 'customer_confirmed') {
+            confirmedShipments.add(e.shipment_id);
+            confirmedAtByShipment.set(e.shipment_id, e.created_at);
+          }
+          if (e.event_type === 'delay_reported' && e.requires_review) openDelayShipments.add(e.shipment_id);
+        });
+
+        const hm = new Map<number, Shipment>();
+        (shr.data ?? []).forEach((s: any) => hm.set(s.order_detail_id as number, {
+          ...s,
+          confirmedAt: confirmedAtByShipment.get(s.id) ?? null,
+        }));
 
         const merged: Order = {
           id: od.id, total_price: od.total_price, status: od.status,
           payment_status: od.payment_status, created_at: od.created_at,
-          order_details: details.map(d => ({
-            id: d.id, product_id: d.product_id, shop_id: d.shop_id,
-            qty: d.qty, unit_price: d.unit_price,
-            product:  d.product_id ? (pm.get(d.product_id) ?? null) : null,
-            shop:     d.shop_id    ? (sm.get(d.shop_id)    ?? null) : null,
-            shipment: hm.get(d.id) ?? null,
-          })),
+          order_details: details.map(d => {
+            const shipment = hm.get(d.id) ?? null;
+            return {
+              id: d.id, product_id: d.product_id, shop_id: d.shop_id,
+              qty: d.qty, unit_price: d.unit_price,
+              product:  d.product_id ? (pm.get(d.product_id) ?? null) : null,
+              shop:     d.shop_id    ? (sm.get(d.shop_id)    ?? null) : null,
+              shipment,
+              confirmedByCustomer: shipment ? confirmedShipments.has(shipment.id) : false,
+              delayReportOpen:     shipment ? openDelayShipments.has(shipment.id) : false,
+            };
+          }),
         };
-        if (!cancelled) setOrder(merged);
+
+        // Unread customer-facing notifications (driver delivered / admin
+        // resolved a delay report / etc.) — captured before marking them
+        // seen, so this page render still shows the banner once.
+        const unseen = (tr.data ?? []).filter((e: any) =>
+          CUSTOMER_NOTIFICATION_EVENT_TYPES.includes(e.event_type) && !e.customer_seen_at
+        );
+
+        if (!cancelled) {
+          setOrder(merged);
+          setNewUpdates(unseen.map((e: any) => ({ event_type: e.event_type, note: e.note ?? null })));
+        }
+        if (unseen.length > 0) void markOrderNotificationsSeen(od.id);
       } catch (e: unknown) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'حدث خطأ أثناء تحميل الطلب');
       } finally {
@@ -218,7 +349,7 @@ export default function OrderTrackingPage() {
     </>
   );
 
-  const activeStep  = computeOrderStep(order.order_details);
+  const progress    = getOrderProgress(order);
   const hasStranded = order.order_details.some(d => d.shipment?.status === 'stranded');
   const delivery    = getDeliveryWindow(order);
 
@@ -236,6 +367,9 @@ export default function OrderTrackingPage() {
           </button>
         </div>
 
+        {/* New tracking updates since last visit */}
+        {newUpdates.length > 0 && <NewUpdatesBanner updates={newUpdates} />}
+
         {/* S2: Header card */}
         <div className="ot-header-card">
           <div className="ot-hc-right">
@@ -246,13 +380,16 @@ export default function OrderTrackingPage() {
             </div>
             <StatusBadge status={order.status ?? 'pending'} />
           </div>
-          <HeaderDeliveryBanner order={order} delivery={delivery} />
+          <HeaderDeliveryBanner order={order} />
         </div>
+
+        {/* Multi-shipment notice — only when products span >1 merchant/shipment */}
+        <MultiShipmentNotice order={order} />
 
         {/* S3: Timeline card */}
         <div className="ot-tl-card">
           <div className="ot-tlc-title">حالة الطلب العامة</div>
-          <OrderTimeline activeStep={activeStep} order={order} />
+          <OrderTimeline progress={progress} order={order} />
           <AlertPanel order={order} hasStranded={hasStranded} />
         </div>
 
@@ -268,10 +405,65 @@ export default function OrderTrackingPage() {
           <ProductsSection order={order} navigate={navigate} />
         </div>
 
-        {/* S6: Footer */}
-        <SupportFooter order={order} />
       </div>
     </>
+  );
+}
+
+// ── New Updates Banner ──────────────────────────────────────────────────────────
+
+const UPDATE_MESSAGES: Record<string, { title: string; msg: string }> = {
+  driver_delivered: { title: 'تم تسليم طلبك', msg: 'تم تسليم منتجاتك بنجاح.' },
+  admin_resolved:   { title: 'تم حل بلاغ التأخير', msg: 'قامت الإدارة بمراجعة البلاغ ومعالجة المشكلة.' },
+  customer_confirmed: { title: 'تم تأكيد الاستلام', msg: 'تم تسجيل تأكيدك لاستلام المنتج.' },
+};
+
+function NewUpdatesBanner({ updates }: { updates: { event_type: TrackingEventType; note: string | null }[] }) {
+  const seen = new Set<string>();
+  const unique = updates.filter(u => {
+    if (seen.has(u.event_type)) return false;
+    seen.add(u.event_type);
+    return true;
+  });
+
+  return (
+    <div className="ot-updates-banner">
+      {unique.map(u => {
+        const cfg = UPDATE_MESSAGES[u.event_type];
+        if (!cfg) return null;
+        return (
+          <div key={u.event_type} className="ot-updates-banner-item">
+            <div className="ot-updates-banner-title">{cfg.title}</div>
+            <div className="ot-updates-banner-msg">{cfg.msg}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Multi-Shipment Notice ────────────────────────────────────────────────────────
+// Purely informational — never tied to status. Shown whenever the order's
+// products span more than one merchant or more than one shipment, so the
+// customer isn't confused when items arrive separately.
+
+function MultiShipmentNotice({ order }: { order: Order }) {
+  const shopIds     = new Set(order.order_details.map(d => d.shop_id).filter(Boolean));
+  const shipmentIds = new Set(order.order_details.map(d => d.shipment?.id).filter(Boolean));
+  const isMultiShipment = shopIds.size > 1 || shipmentIds.size > 1;
+  if (!isMultiShipment) return null;
+
+  return (
+    <div className="ot-multi-shipment-card">
+      <div className="ot-msc-icon">📦</div>
+      <div className="ot-msc-text">
+        <div className="ot-msc-title">سيصل طلبك على عدة دفعات</div>
+        <div className="ot-msc-desc">
+          قد يتم توصيل منتجات هذا الطلب بشكل منفصل وفقاً لتوفر المنتجات وخطة التوصيل. سيتم تحديث حالة كل منتج بشكل مستقل حتى اكتمال الطلب بالكامل.
+        </div>
+        <div className="ot-msc-note">يمكنك متابعة حالة كل منتج من خلال الجدول الزمني أدناه.</div>
+      </div>
+    </div>
   );
 }
 
@@ -310,34 +502,40 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-// ── Truck Illustration ─────────────────────────────────────────────────────────
+// ── Completion Ring ────────────────────────────────────────────────────────────
+// Order-wide completion %, averaged equally across every product/shipment —
+// see getOrderCompletionPercent() above.
 
-function TruckIllustration() {
+function CompletionRing({ percent }: { percent: number }) {
+  const size   = 72;
+  const stroke = 7;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - percent / 100);
+
   return (
-    <svg className="ot-truck-svg" width="110" height="72" viewBox="0 0 110 72" fill="none">
-      <rect x="3" y="12" width="58" height="38" rx="5" fill="#DCFCE7" stroke="#16a34a" strokeWidth="1.5"/>
-      <rect x="8" y="17" width="48" height="20" rx="3" fill="#BBF7D0"/>
-      <rect x="14" y="21" width="16" height="12" rx="2" fill="#86efac"/>
-      <rect x="34" y="21" width="16" height="12" rx="2" fill="#86efac"/>
-      <path d="M61 24h30l10 14v12H61V24z" fill="#DCFCE7" stroke="#16a34a" strokeWidth="1.5"/>
-      <path d="M61 24h24l8 14H61V24z" fill="#BBF7D0"/>
-      <rect x="65" y="28" width="16" height="8" rx="2" fill="#86efac"/>
-      <circle cx="18" cy="56" r="9" fill="#15803D"/>
-      <circle cx="18" cy="56" r="4" fill="#DCFCE7"/>
-      <circle cx="72" cy="56" r="9" fill="#15803D"/>
-      <circle cx="72" cy="56" r="4" fill="#DCFCE7"/>
-      <circle cx="88" cy="56" r="9" fill="#15803D"/>
-      <circle cx="88" cy="56" r="4" fill="#DCFCE7"/>
+    <svg className="ot-ring-svg" width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#DCFCE7" strokeWidth={stroke} />
+      <circle
+        className="ot-ring-progress"
+        cx={size / 2} cy={size / 2} r={radius} fill="none"
+        stroke="#15803D" strokeWidth={stroke} strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={offset}
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+      />
+      <text x="50%" y="50%" textAnchor="middle" dominantBaseline="central" fontSize="17" fontWeight="800" fill="#15803D">
+        {percent}%
+      </text>
     </svg>
   );
 }
 
 // ── Header Delivery Banner ─────────────────────────────────────────────────────
 
-function HeaderDeliveryBanner({ order, delivery }: { order: Order; delivery: { prefix: string; time: string } }) {
-  const isCompleted  = order.status === 'completed';
-  const isDelivering = order.status === 'delivering';
-  const deliveredAt  = order.order_details.find(d => d.shipment?.delivered_at)?.shipment?.delivered_at ?? null;
+function HeaderDeliveryBanner({ order }: { order: Order }) {
+  const isCompleted = order.status === 'completed';
+  const deliveredAt = order.order_details.find(d => d.shipment?.delivered_at)?.shipment?.delivered_at ?? null;
 
   if (isCompleted) return (
     <div className="ot-hc-left ot-hc-left--success">
@@ -355,7 +553,9 @@ function HeaderDeliveryBanner({ order, delivery }: { order: Order; delivery: { p
     </div>
   );
 
-  if (!isDelivering) return (
+  const estimate = getDeadlineEstimate(order);
+
+  if (!estimate) return (
     <div className="ot-hc-left ot-hc-left--success">
       <svg className="ot-hcl-clock" width="22" height="22" fill="none" stroke="#15803D" strokeWidth="2" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
@@ -368,6 +568,7 @@ function HeaderDeliveryBanner({ order, delivery }: { order: Order; delivery: { p
     </div>
   );
 
+  const prefix = isToday(estimate.earliest) ? 'اليوم' : fmtShort(estimate.earliest);
   return (
     <div className="ot-hc-left">
       <svg className="ot-hcl-clock" width="22" height="22" fill="none" stroke="#15803D" strokeWidth="2" viewBox="0 0 24 24">
@@ -375,43 +576,44 @@ function HeaderDeliveryBanner({ order, delivery }: { order: Order; delivery: { p
       </svg>
       <div className="ot-hc-delivery">
         <div className="ot-hcd-label">الوصول المتوقع</div>
-        <div className="ot-hcd-time">{delivery.prefix} {delivery.time}</div>
-        <div className="ot-hcd-note">سيتم تحديث الوقت تلقائياً</div>
+        <div className="ot-hcd-time">{prefix} بحلول {fmtTime(estimate.earliest)}</div>
+        <div className="ot-hcd-note">
+          {estimate.isMultiShipment ? 'قد يصل طلبك على أكثر من دفعة' : 'سيتم تحديث الوقت تلقائياً'}
+        </div>
       </div>
-      <TruckIllustration />
+      <CompletionRing percent={getOrderCompletionPercent(order)} />
     </div>
   );
 }
 
 // ── Order Timeline ─────────────────────────────────────────────────────────────
 
+// Mirrors OrderHistoryPage.tsx's getStepTimestamps() exactly.
 function getOrderTimestamps(order: Order): (Date | null)[] {
   const base = new Date(order.created_at);
-  const pickedUpAt  = order.order_details.find(d => d.shipment?.picked_up_at)?.shipment?.picked_up_at;
-  const deliveredAt = order.order_details.every(d => d.shipment?.status === 'delivered')
-    ? order.order_details.find(d => d.shipment?.delivered_at)?.shipment?.delivered_at ?? null
-    : null;
-
   return [
-    base,
-    addH(base, 3),
-    pickedUpAt ? new Date(pickedUpAt) : (order.status === 'delivering' || order.status === 'completed' ? addH(base, 24) : null),
-    deliveredAt ? new Date(deliveredAt) : null,
+    base,                                                                  // تم الطلب
+    order.payment_status === 'paid' ? base : null,                        // قيد المعالجة
+    earliestShipmentDate(order, ['available', 'picked_up', 'delivered']),  // تم الاستلام
+    earliestPickedUpAt(order) ?? latestDeliveredAt(order),                 // قيد التوصيل
+    latestConfirmedAt(order),                                              // اكتمل الطلب
   ];
 }
 
-function OrderTimeline({ activeStep, order }: { activeStep: number; order: Order }) {
+function OrderTimeline({ progress, order }: { progress: OrderProgress; order: Order }) {
   const ts = getOrderTimestamps(order);
   return (
     <div className="ot-tl-wrap">
       <div className="ot-tl-track-row">
         <div className="ot-tl-track-bg" />
-        <div className="ot-tl-track-fill" data-step={activeStep} />
+        <div className="ot-tl-track-fill" data-step={progress.isConfirmed ? 4 : progress.step} />
       </div>
       <div className="ot-tl-steps">
         {ORDER_STEPS.map((label, idx) => {
-          const isDone    = idx < activeStep;
-          const isCurrent = idx === activeStep;
+          const isDeliverStep = idx === 3;
+          const isFinalStep   = idx === 4;
+          const isDone    = isFinalStep ? progress.isConfirmed : (progress.isCompleted || idx < progress.step);
+          const isCurrent = isFinalStep ? (progress.isCompleted && !progress.isConfirmed) : (!progress.isCompleted && idx === progress.step);
           const state     = isDone ? 'done' : isCurrent ? 'current' : 'future';
           const stamp     = ts[idx];
           return (
@@ -422,18 +624,22 @@ function OrderTimeline({ activeStep, order }: { activeStep: number; order: Order
                     <path d="m5 12 5 5L20 7"/>
                   </svg>
                 )}
-                {isCurrent && idx === 2 && (
+                {isCurrent && isDeliverStep && (
                   <svg width="16" height="16" fill="none" stroke="#15803D" strokeWidth="2" viewBox="0 0 24 24">
                     <rect x="1" y="3" width="15" height="13" rx="1"/>
                     <path d="M16 8h4l3 5v3h-7V8z"/>
                     <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
                   </svg>
                 )}
-                {isCurrent && idx !== 2 && <span className="ot-tl-pulse" />}
+                {isCurrent && !isDeliverStep && <span className="ot-tl-pulse" />}
               </div>
               <div className="ot-tl-info">
                 <span className="ot-tl-label">{label}</span>
-                {(isDone || isCurrent) && stamp ? (
+                {isCurrent && isDeliverStep ? (
+                  <span className="ot-tl-sub">جاري التوصيل</span>
+                ) : isCurrent && isFinalStep ? (
+                  <span className="ot-tl-sub">في انتظار تأكيدك</span>
+                ) : (isDone || isCurrent) && stamp ? (
                   <span className="ot-tl-time">{fmtShort(stamp)} - {fmtTime(stamp)}</span>
                 ) : (
                   <span className="ot-tl-time ot-tl-time--empty">—</span>
@@ -753,6 +959,84 @@ function ProductCard({
       </div>
 
       <ProductStatusPanel shipment={shipment} />
+      <DeliveryFeedbackActions detail={detail} />
+    </div>
+  );
+}
+
+// ── Delivery Feedback Actions (confirm received / report delay) ────────────────
+
+function DeliveryFeedbackActions({ detail }: { detail: OrderDetail }) {
+  const shipment = detail.shipment;
+  const [confirmed, setConfirmed]     = useState(detail.confirmedByCustomer);
+  const [delayOpen, setDelayOpen]     = useState(detail.delayReportOpen);
+  const [showDelayForm, setShowDelayForm] = useState(false);
+  const [delayNote, setDelayNote]     = useState('');
+  const [busy, setBusy]               = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  if (!shipment) return null;
+
+  const isDelivered    = shipment.status === 'delivered';
+  const deadlinePassed = !!shipment.deadline && new Date() > new Date(shipment.deadline);
+  const canConfirm      = isDelivered && !confirmed;
+  const canReportDelay  = !isDelivered && deadlinePassed && !delayOpen;
+
+  if (!canConfirm && !canReportDelay && !confirmed && !delayOpen) return null;
+
+  async function handleConfirm() {
+    setBusy(true); setActionError(null);
+    const res = await confirmShipmentReceived(shipment!.id);
+    setBusy(false);
+    if (!res.ok) { setActionError(res.error ?? 'حدث خطأ، حاول مرة أخرى'); return; }
+    setConfirmed(true);
+  }
+
+  async function handleReportDelay() {
+    if (!delayNote.trim()) { setActionError('الرجاء كتابة وصف للمشكلة'); return; }
+    setBusy(true); setActionError(null);
+    const res = await reportShipmentDelay(shipment!.id, delayNote.trim());
+    setBusy(false);
+    if (!res.ok) { setActionError(res.error ?? 'حدث خطأ، حاول مرة أخرى'); return; }
+    setDelayOpen(true);
+    setShowDelayForm(false);
+  }
+
+  return (
+    <div className="ot-pc-feedback">
+      {confirmed && <div className="ot-pc-feedback-msg ot-pc-feedback-msg--success">✓ أكّدت استلام هذا المنتج</div>}
+      {delayOpen && <div className="ot-pc-feedback-msg ot-pc-feedback-msg--pending">تم إرسال بلاغك، سيتواصل معك فريق الدعم قريباً</div>}
+      {actionError && <div className="ot-pc-feedback-error">{actionError}</div>}
+
+      {(canConfirm || (canReportDelay && !showDelayForm)) && (
+        <div className="ot-pc-feedback-actions">
+          {canConfirm && (
+            <button type="button" className="ot-pc-feedback-btn ot-pc-feedback-btn--confirm" disabled={busy} onClick={handleConfirm}>
+              تأكيد الاستلام
+            </button>
+          )}
+          {canReportDelay && (
+            <button type="button" className="ot-pc-feedback-btn ot-pc-feedback-btn--delay" disabled={busy} onClick={() => setShowDelayForm(true)}>
+              الإبلاغ عن تأخير الطلب
+            </button>
+          )}
+        </div>
+      )}
+
+      {canReportDelay && showDelayForm && (
+        <div className="ot-pc-delay-form">
+          <textarea
+            value={delayNote}
+            onChange={e => setDelayNote(e.target.value)}
+            placeholder="صف المشكلة..."
+            rows={2}
+          />
+          <div className="ot-pc-delay-form-actions">
+            <button type="button" disabled={busy} onClick={handleReportDelay}>إرسال البلاغ</button>
+            <button type="button" disabled={busy} onClick={() => { setShowDelayForm(false); setActionError(null); }}>إلغاء</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -848,34 +1132,3 @@ function ProductStatusPanel({ shipment }: { shipment: Shipment | null }) {
   return null;
 }
 
-// ── Support Footer ─────────────────────────────────────────────────────────────
-
-function SupportFooter({ order }: { order: Order }) {
-  const isCompleted = order.status === 'completed';
-  return (
-    <div className="ot-support-footer">
-      <div className="ot-sf-left">
-        <svg width="15" height="15" fill="none" stroke="#6B7280" strokeWidth="2" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>
-        </svg>
-        <span>هل تحتاج إلى مساعدة؟ فريق الدعم متاح على مدار الساعة</span>
-      </div>
-      <div className="ot-sf-actions">
-        <button type="button" className="ot-sf-btn">
-          <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-          </svg>
-          تواصل معنا
-        </button>
-        {isCompleted && (
-          <button type="button" className="ot-sf-btn">
-            <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/>
-            </svg>
-            طلب إرجاع
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}

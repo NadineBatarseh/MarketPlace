@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import { supabase } from '../supabase.js';
 import { requireCustomer } from '../middleware/requireCustomer.js';
 import { PC } from '../lib/paymentConfig.js';
+import type { OrderStatus, PaymentStatus } from '../../shared/status.js';
 
 /**
  * Orders router — server-authoritative order placement.
@@ -44,9 +45,8 @@ function clean(v: unknown): string | null {
 }
 
 router.post('/create', requireCustomer, async (req: Request, res: Response) => {
-  const { items, payment_method, shipping, contact } = req.body as {
+  const { items, shipping, contact } = req.body as {
     items?: IncomingItem[];
-    payment_method?: 'paytabs' | 'cod';
     shipping?: IncomingShipping;
     contact?: IncomingContact;
   };
@@ -105,14 +105,17 @@ router.post('/create', requireCustomer, async (req: Request, res: Response) => {
   const round = (n: number) => Math.round(n * 100) / 100;
   const total = round(subtotal + PC.deliveryFee);
 
+  const initialStatus: OrderStatus = 'pending';
+  const initialPaymentStatus: PaymentStatus = 'unpaid';
+
   // 1. Create the order (owned by the authenticated customer).
   const { data: order, error: ordErr } = await supabase
     .from('orders')
     .insert({
       user_id: req.authUserId,
-      status: 'pending',
+      status: initialStatus,
       total_price: total,
-      payment_status: payment_method === 'cod' ? 'cod' : 'unpaid',
+      payment_status: initialPaymentStatus,
       shipping_address: shippingAddress,
     })
     .select('id')

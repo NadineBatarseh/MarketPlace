@@ -5,6 +5,8 @@ import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import StoreNav from '../../components/StoreNav';
 import ExpandedDrawer, { DrawerItemData } from '../../components/ExpandedDrawer';
 import Topbar from '../../components/Topbar';
+import type { ShipmentStatus } from '../../../shared/status';
+import { fetchUnreadOrderNotifications } from '../../lib/orderNotifications';
 import './OrderHistoryPage.css';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -16,6 +18,17 @@ interface Product {
   price: number | null;
 }
 
+interface Shipment {
+  id: string;
+  order_detail_id: number;
+  status: ShipmentStatus;
+  created_at: string;
+  picked_up_at: string | null;
+  delivered_at: string | null;
+  /** created_at of this shipment's 'customer_confirmed' tracking event, if any. */
+  confirmedAt: string | null;
+}
+
 interface OrderDetail {
   id: number;
   product_id: string | null;
@@ -23,6 +36,7 @@ interface OrderDetail {
   unit_price: number | null;
   package_status: string | null;
   product: Product | null;
+  shipment: Shipment | null;
 }
 
 interface ShippingAddress {
@@ -40,6 +54,7 @@ interface Order {
   id: number;
   total_price: number | null;
   status: string | null;
+  payment_status: string | null;
   created_at: string;
   shipping_address: ShippingAddress | null;
   order_details: OrderDetail[];
@@ -47,29 +62,26 @@ interface Order {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const STEPS = ['تم الطلب', 'قيد المعالجة', 'جاهز للاستلام', 'قيد التوصيل', 'تم التسليم'];
+const STEPS = ['تم الطلب', 'قيد المعالجة', 'تم الاستلام', 'قيد التوصيل', 'اكتمل الطلب'];
 
-type StatusCfg = { label: string; badgeClass: string; step: number; filterKey: string; statusKey: string };
+const STEP_BADGE = [
+  { label: 'تم الطلب',     badgeClass: 'badge-pending',    statusKey: 'pending'    },
+  { label: 'قيد المعالجة', badgeClass: 'badge-processing', statusKey: 'processing' },
+  { label: 'تم الاستلام',  badgeClass: 'badge-ready',      statusKey: 'ready'      },
+  { label: 'قيد التوصيل',  badgeClass: 'badge-shipped',    statusKey: 'shipping'   },
+];
 
-const STATUS_CONFIG: Record<string, StatusCfg> = {
-  pending:            { label: 'تم الطلب',      badgeClass: 'badge-pending',    step: 0, filterKey: 'pending',            statusKey: 'pending'    },
-  pending_collection: { label: 'جاهز للاستلام', badgeClass: 'badge-processing', step: 2, filterKey: 'pending_collection', statusKey: 'processing' },
-  delivering:         { label: 'قيد التوصيل',   badgeClass: 'badge-shipped',    step: 3, filterKey: 'shipped',            statusKey: 'shipping'   },
-  completed:          { label: 'تم التسليم',     badgeClass: 'badge-delivered',  step: 4, filterKey: 'delivered',          statusKey: 'delivered'  },
-  cancelled:          { label: 'ملغي',           badgeClass: 'badge-cancelled',  step: 0, filterKey: 'cancelled',          statusKey: 'cancelled'  },
-};
-
-const FALLBACK_CFG: StatusCfg = {
-  label: 'تم الطلب', badgeClass: 'badge-pending', step: 0, filterKey: 'pending', statusKey: 'pending',
-};
-
+// Filter bucket for the search/filter bar above the list. Driven by the same
+// getOrderProgress() the timeline uses (payment_status + shipment status),
+// not by orders.status — orders.status alone can't tell pending apart from
+// processing/ready, and never holds payment or cancellation info.
 const FILTER_LABELS: Record<string, string> = {
-  all:                'الكل',
-  pending:            'تم الطلب',
-  pending_collection: 'جاهز للاستلام',
-  shipped:            'قيد التوصيل',
-  delivered:          'تم التسليم',
-  cancelled:          'ملغي',
+  all:        'الكل',
+  pending:    'تم الطلب',
+  processing: 'قيد المعالجة',
+  ready:      'تم الاستلام',
+  shipping:   'قيد التوصيل',
+  delivered:  'تم التسليم',
 };
 
 const DATE_FILTER_OPTIONS = [
@@ -122,19 +134,6 @@ function formatDateFull(date: Date) {
   return date.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-function getDeliveryEstimateText(order: Order, estDelivery: Date): string {
-  if (order.status === 'cancelled') return '';
-  if (order.status === 'completed') return 'تم التسليم بنجاح';
-  if (order.status === 'delivering') {
-    return isToday(estDelivery) ? `اليوم، ${formatTime(estDelivery)}` : 'خلال ساعات';
-  }
-  const days = Math.round((estDelivery.getTime() - Date.now()) / 86_400_000);
-  if (days <= 0) return 'بعد قليل';
-  if (days === 1) return 'خلال يوم واحد';
-  if (days === 2) return 'خلال يومين';
-  return `خلال ${days} أيام`;
-}
-
 function addHours(date: Date, h: number): Date {
   return new Date(date.getTime() + h * 3_600_000);
 }
@@ -145,26 +144,118 @@ function addDays(date: Date, d: number): Date {
   return r;
 }
 
-function getEstimatedDelivery(order: Order): Date {
-  const base = new Date(order.created_at);
-  switch (order.status) {
-    case 'completed':          return addHours(base, 20);
-    case 'delivering':         return addHours(new Date(), 1);
-    case 'pending_collection': return addDays(base, 2);
-    case 'cancelled':          return base;
-    default:                   return addDays(base, 3);
-  }
+// ── Order progress (timeline) ────────────────────────────────────────────────
+//
+// Steps: 0=تم الطلب  1=قيد المعالجة  2=تم الاستلام  3=قيد التوصيل
+//
+// تم الطلب      -> done as soon as orders.payment_status = 'paid'
+// قيد المعالجة   -> active after payment, done once any shipment is 'available'
+// تم الاستلام    -> active once any shipment is 'available', done once any shipment is 'picked_up'
+// قيد التوصيل    -> active once any shipment is 'picked_up', done (isCompleted) once ALL shipments are 'delivered'
+//
+// isConfirmed (step 4, "اكتمل الطلب") is tracked separately from isCompleted:
+// isCompleted means every shipment is 'delivered'; isConfirmed means every
+// shipment additionally has a 'customer_confirmed' tracking event — the order
+// is only ever fully done once the customer has confirmed every product.
+
+interface OrderProgress {
+  step: number;
+  isCompleted: boolean;
+  isCancelled: boolean;
+  isConfirmed: boolean;
 }
 
-function getStepTimestamps(order: Order): Date[] {
+function getOrderProgress(order: Order): OrderProgress {
+  if (order.status === 'cancelled') return { step: 0, isCompleted: false, isCancelled: true, isConfirmed: false };
+
+  const shipments = order.order_details.map(d => d.shipment).filter((s): s is Shipment => !!s);
+  const shipmentStatuses = shipments.map(s => s.status);
+  const isConfirmed = shipments.length > 0 && shipments.every(s => !!s.confirmedAt);
+
+  if (shipmentStatuses.length > 0 && shipmentStatuses.every(s => s === 'delivered')) {
+    return { step: 3, isCompleted: true, isCancelled: false, isConfirmed };
+  }
+  if (shipmentStatuses.some(s => s === 'picked_up' || s === 'delivered')) {
+    return { step: 3, isCompleted: false, isCancelled: false, isConfirmed };
+  }
+  if (shipmentStatuses.some(s => s === 'available')) {
+    return { step: 2, isCompleted: false, isCancelled: false, isConfirmed };
+  }
+  if (order.payment_status === 'paid') {
+    return { step: 1, isCompleted: false, isCancelled: false, isConfirmed };
+  }
+  return { step: 0, isCompleted: false, isCancelled: false, isConfirmed };
+}
+
+// Maps progress onto the filter-bar bucket keys (FILTER_LABELS above).
+function getFilterKey(progress: OrderProgress): string {
+  if (progress.isCancelled) return 'cancelled';
+  if (progress.isCompleted) return 'delivered';
+  return STEP_BADGE[progress.step].statusKey;
+}
+
+function earliestShipmentDate(order: Order, statuses: ShipmentStatus[]): Date | null {
+  const times = order.order_details
+    .map(d => d.shipment)
+    .filter((s): s is Shipment => !!s && statuses.includes(s.status))
+    .map(s => new Date(s.created_at).getTime());
+  return times.length ? new Date(Math.min(...times)) : null;
+}
+
+function earliestPickedUpAt(order: Order): Date | null {
+  const times = order.order_details
+    .map(d => d.shipment?.picked_up_at)
+    .filter((t): t is string => !!t)
+    .map(t => new Date(t).getTime());
+  return times.length ? new Date(Math.min(...times)) : null;
+}
+
+function latestConfirmedAt(order: Order): Date | null {
+  const times = order.order_details
+    .map(d => d.shipment?.confirmedAt)
+    .filter((t): t is string => !!t)
+    .map(t => new Date(t).getTime());
+  return times.length ? new Date(Math.max(...times)) : null;
+}
+
+function latestDeliveredAt(order: Order): Date | null {
+  const times = order.order_details
+    .map(d => d.shipment?.delivered_at)
+    .filter((t): t is string => !!t)
+    .map(t => new Date(t).getTime());
+  return times.length ? new Date(Math.max(...times)) : null;
+}
+
+function getEstimatedDelivery(order: Order, progress: OrderProgress): Date {
   const base = new Date(order.created_at);
-  const estDelivery = getEstimatedDelivery(order);
+  if (progress.isCancelled) return base;
+  if (progress.isCompleted) return latestDeliveredAt(order) ?? base;
+  if (progress.step === 3) return addHours(new Date(), 1);
+  if (progress.step === 2) return addDays(base, 2);
+  return addDays(base, 3);
+}
+
+function getDeliveryEstimateText(progress: OrderProgress, estDelivery: Date): string {
+  if (progress.isCancelled) return '';
+  if (progress.isCompleted) return 'تم التسليم بنجاح';
+  if (progress.step === 3) {
+    return isToday(estDelivery) ? `اليوم، ${formatTime(estDelivery)}` : 'خلال ساعات';
+  }
+  const days = Math.round((estDelivery.getTime() - Date.now()) / 86_400_000);
+  if (days <= 0) return 'بعد قليل';
+  if (days === 1) return 'خلال يوم واحد';
+  if (days === 2) return 'خلال يومين';
+  return `خلال ${days} أيام`;
+}
+
+function getStepTimestamps(order: Order): (Date | null)[] {
+  const base = new Date(order.created_at);
   return [
-    base,                // تم الطلب
-    addHours(base, 0.5), // قيد المعالجة
-    addHours(base, 2),   // جاهز للاستلام
-    addHours(base, 4),   // قيد التوصيل
-    estDelivery,         // تم التسليم
+    base,                                                                // تم الطلب
+    order.payment_status === 'paid' ? base : null,                      // قيد المعالجة
+    earliestShipmentDate(order, ['available', 'picked_up', 'delivered']), // تم الاستلام
+    earliestPickedUpAt(order) ?? latestDeliveredAt(order),               // قيد التوصيل
+    latestConfirmedAt(order),                                            // اكتمل الطلب
   ];
 }
 
@@ -193,6 +284,7 @@ export default function OrderHistoryPage() {
   const [orders, setOrders]       = useState<Order[]>([]);
   const [loading, setLoading]     = useState(true);
   const [error, setError]         = useState<string | null>(null);
+  const [unreadByOrder, setUnreadByOrder] = useState<Record<number, number>>({});
   const [activeFilter, setFilter]   = useState('all');
   const [search, setSearch]         = useState('');
   const [statusOpen, setStatusOpen] = useState(false);
@@ -215,6 +307,15 @@ export default function OrderHistoryPage() {
   }, []);
 
   useEffect(() => {
+    if (!customer) { setUnreadByOrder({}); return; }
+    let cancelled = false;
+    fetchUnreadOrderNotifications(customer.id).then(res => {
+      if (!cancelled) setUnreadByOrder(res.byOrder);
+    });
+    return () => { cancelled = true; };
+  }, [customer]);
+
+  useEffect(() => {
     if (!customer) return;
     let cancelled = false;
 
@@ -224,7 +325,7 @@ export default function OrderHistoryPage() {
       try {
         const { data: ordersData, error: ordErr } = await supabase
           .from('orders')
-          .select('id, total_price, status, created_at, shipping_address')
+          .select('id, total_price, status, payment_status, created_at, shipping_address')
           .eq('user_id', customer!.id)
           .order('created_at', { ascending: false });
         if (ordErr) throw ordErr;
@@ -242,15 +343,33 @@ export default function OrderHistoryPage() {
             (detailsData ?? []).map((d: any) => d.product_id as string | null).filter(Boolean)
           ),
         ] as string[];
+        const detailIds = (detailsData ?? []).map((d: any) => d.id as number);
+
+        const [{ data: prods }, { data: shipments }, { data: confirmedEvents }] = await Promise.all([
+          productIds.length
+            ? supabase.from('products').select('id, title, image_urls, price').in('id', productIds)
+            : Promise.resolve({ data: [] as Product[] }),
+          detailIds.length
+            ? supabase.from('shipments').select('id, order_detail_id, status, created_at, picked_up_at, delivered_at').in('order_detail_id', detailIds)
+            : Promise.resolve({ data: [] as any[] }),
+          orderIds.length
+            ? supabase.from('order_tracking_events').select('shipment_id, created_at').eq('event_type', 'customer_confirmed').in('order_id', orderIds)
+            : Promise.resolve({ data: [] as any[] }),
+        ]);
 
         const productMap = new Map<string, Product>();
-        if (productIds.length > 0) {
-          const { data: prods } = await supabase
-            .from('products')
-            .select('id, title, image_urls, price')
-            .in('id', productIds);
-          prods?.forEach(p => productMap.set(p.id, p));
-        }
+        prods?.forEach(p => productMap.set(p.id, p));
+
+        const confirmedAtByShipment = new Map<string, string>();
+        (confirmedEvents ?? []).forEach((e: any) => {
+          if (e.shipment_id) confirmedAtByShipment.set(e.shipment_id, e.created_at);
+        });
+
+        const shipmentMap = new Map<number, Shipment>();
+        shipments?.forEach((s: any) => shipmentMap.set(s.order_detail_id as number, {
+          ...s,
+          confirmedAt: confirmedAtByShipment.get(s.id) ?? null,
+        }));
 
         const detailsByOrder = new Map<number, any[]>();
         (detailsData ?? []).forEach((d: any) => {
@@ -259,10 +378,11 @@ export default function OrderHistoryPage() {
         });
 
         const merged: Order[] = ordersData.map(o => ({
-          id:          o.id,
-          total_price: o.total_price,
-          status:      o.status,
-          created_at:  o.created_at,
+          id:             o.id,
+          total_price:    o.total_price,
+          status:         o.status,
+          payment_status: (o as any).payment_status ?? null,
+          created_at:     o.created_at,
           shipping_address: (o as any).shipping_address ?? null,
           order_details: (detailsByOrder.get(o.id) ?? []).map((d: any) => ({
             id:             d.id,
@@ -271,6 +391,7 @@ export default function OrderHistoryPage() {
             unit_price:     d.unit_price,
             package_status: d.package_status,
             product:        d.product_id ? (productMap.get(d.product_id) ?? null) : null,
+            shipment:       shipmentMap.get(d.id) ?? null,
           })),
         }));
 
@@ -296,8 +417,8 @@ export default function OrderHistoryPage() {
     const q = search.toLowerCase();
     const dateStart = getDateFilterStart(dateFilter);
     return orders.filter(o => {
-      const cfg = STATUS_CONFIG[o.status ?? ''] ?? FALLBACK_CFG;
-      const matchFilter = activeFilter === 'all' || cfg.filterKey === activeFilter;
+      const filterKey = getFilterKey(getOrderProgress(o));
+      const matchFilter = activeFilter === 'all' || filterKey === activeFilter;
       const firstName   = o.order_details[0]?.product?.title ?? '';
       const matchSearch = !q
         || formatOrderId(o.id).toLowerCase().includes(q)
@@ -455,7 +576,7 @@ export default function OrderHistoryPage() {
             </button>
             {statusOpen && (
               <div className="oh-fbar-status-menu">
-                {(['all', 'pending', 'pending_collection', 'shipped', 'delivered', 'cancelled'] as const).map(f => (
+                {(['all', 'pending', 'processing', 'ready', 'shipping', 'delivered'] as const).map(f => (
                   <button
                     key={f}
                     type="button"
@@ -522,7 +643,7 @@ export default function OrderHistoryPage() {
             </div>
           ) : (
             filtered.map((order, idx) => (
-              <OrderCard key={order.id} order={order} idx={idx} />
+              <OrderCard key={order.id} order={order} idx={idx} unreadCount={unreadByOrder[order.id] ?? 0} />
             ))
           )}
         </div>
@@ -534,8 +655,14 @@ export default function OrderHistoryPage() {
 
 // ── OrderCard ─────────────────────────────────────────────────────────────────
 
-function OrderCard({ order, idx }: { order: Order; idx: number }) {
-  const cfg           = STATUS_CONFIG[order.status ?? ''] ?? FALLBACK_CFG;
+function OrderCard({ order, idx, unreadCount }: { order: Order; idx: number; unreadCount: number }) {
+  const progress      = getOrderProgress(order);
+  const badge         = progress.isCancelled
+    ? { label: 'ملغي', badgeClass: 'badge-cancelled', statusKey: 'cancelled' }
+    : progress.isCompleted
+    ? { label: 'تم التسليم', badgeClass: 'badge-delivered', statusKey: 'delivered' }
+    : STEP_BADGE[progress.step];
+
   const items         = order.order_details;
   const navigate      = useNavigate();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -547,12 +674,12 @@ function OrderCard({ order, idx }: { order: Order; idx: number }) {
   const totalQty   = items.reduce((s, d) => s + (d.qty ?? 1), 0);
   const storeName  = items[0]?.product ? null : null; // placeholder for real store data
 
-  const isDelivering   = order.status === 'delivering';
-  const isCompleted    = order.status === 'completed';
-  const showDelivery   = order.status !== 'cancelled';
-  const showTrack      = order.status !== 'cancelled';
+  const isDelivering   = !progress.isCancelled && !progress.isCompleted && progress.step === 3;
+  const isCompleted    = progress.isCompleted;
+  const showDelivery   = !progress.isCancelled;
+  const showTrack      = !progress.isCancelled;
 
-  const estDelivery    = getEstimatedDelivery(order);
+  const estDelivery    = getEstimatedDelivery(order, progress);
   const stepTimestamps = getStepTimestamps(order);
   const firstImage     = items[0]?.product?.image_urls?.[0] ?? null;
 
@@ -566,10 +693,17 @@ function OrderCard({ order, idx }: { order: Order; idx: number }) {
 
   return (
     <div
-      className="oh-card"
-      data-status={cfg.statusKey}
+      className={`oh-card${unreadCount > 0 ? ' oh-card--unread' : ''}`}
+      data-status={badge.statusKey}
       style={{ '--oh-delay': `${idx * 40}ms` } as React.CSSProperties}
     >
+
+      {unreadCount > 0 && (
+        <div className="oh-update-banner">
+          <span className="oh-update-banner-badge">{unreadCount}</span>
+          لديك تحديث جديد على هذا الطلب
+        </div>
+      )}
 
       {/* 4-column premium header */}
       <div className="oh-card-head-grid">
@@ -586,7 +720,7 @@ function OrderCard({ order, idx }: { order: Order; idx: number }) {
             </svg>
             {formatDateTime(order.created_at)}
           </div>
-          <span className={`oh-badge oh-grid-badge ${cfg.badgeClass}`}>{cfg.label}</span>
+          <span className={`oh-badge oh-grid-badge ${badge.badgeClass}`}>{badge.label}</span>
         </div>
 
         {/* Col 2: Product Info */}
@@ -639,7 +773,7 @@ function OrderCard({ order, idx }: { order: Order; idx: number }) {
                 {isCompleted ? 'تاريخ التسليم' : 'التوصيل المتوقع'}
               </div>
               <div className="oh-grid-del-date">{formatDateFull(estDelivery)}</div>
-              <div className="oh-grid-del-est">{getDeliveryEstimateText(order, estDelivery)}</div>
+              <div className="oh-grid-del-est">{getDeliveryEstimateText(progress, estDelivery)}</div>
             </>
           ) : (
             <div className="oh-grid-del-cancelled">تم إلغاء الطلب</div>
@@ -683,10 +817,16 @@ function OrderCard({ order, idx }: { order: Order; idx: number }) {
         <div className="oh-tracker">
           <div className="oh-track-inner">
             <div className="oh-track-line" />
-            <div className="oh-track-progress" data-step={cfg.step} />
+            <div className="oh-track-progress" data-step={progress.isConfirmed ? 4 : progress.step} />
             <div className="oh-track-steps">
               {STEPS.map((s, i) => {
-                const state = i < cfg.step ? 'done' : i === cfg.step ? 'current' : 'future';
+                const isFinalStep = i === 4;
+                const state = isFinalStep
+                  ? (progress.isConfirmed ? 'done' : progress.isCompleted ? 'current' : 'future')
+                  : progress.isCompleted ? 'done'
+                  : i < progress.step ? 'done'
+                  : i === progress.step ? 'current'
+                  : 'future';
                 const ts    = stepTimestamps[i];
                 const isDeliverStep = i === 3;
                 return (
@@ -714,16 +854,13 @@ function OrderCard({ order, idx }: { order: Order; idx: number }) {
                       )}
                     </div>
                     <span className="oh-step-lbl">{s}</span>
-                    {state === 'done' && (
-                      <span className="oh-step-time">{formatDateShort(ts)} - {formatTime(ts)}</span>
-                    )}
-                    {state === 'current' && isDeliverStep && (
+                    {state === 'current' && isDeliverStep ? (
                       <span className="oh-step-sub">جاري التوصيل</span>
-                    )}
-                    {state === 'current' && !isDeliverStep && (
+                    ) : state === 'current' && isFinalStep ? (
+                      <span className="oh-step-sub">في انتظار تأكيدك</span>
+                    ) : (state === 'done' || state === 'current') && ts ? (
                       <span className="oh-step-time">{formatDateShort(ts)} - {formatTime(ts)}</span>
-                    )}
-                    {state === 'future' && (
+                    ) : (
                       <span className="oh-step-dash">—</span>
                     )}
                   </div>
