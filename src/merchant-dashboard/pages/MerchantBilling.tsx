@@ -32,7 +32,7 @@ function formatDate(iso: string) {
   }).format(new Date(iso));
 }
 
-const PENDING_STATUSES = ['pending_collection', 'at_hub', 'pending'];
+const PENDING_STATUSES = ['pending_collection', 'pending'];
 
 function BillCard({ bill }: { bill: Bill }) {
   const isPaid = !PENDING_STATUSES.includes(bill.status);

@@ -19,7 +19,15 @@
       "Bash(Get-ChildItem -Name)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\hp\\\\Desktop\\\\SOUQLINK\\\\src\" -Directory)",
       "Bash(Select-Object -ExpandProperty Name)",
-      "Bash(Sort-Object)"
+      "Bash(Sort-Object)",
+      "mcp__ide__getDiagnostics",
+      "Skill(run)",
+      "Bash(npm run *)",
+      "Bash(echo \"started pid $!\")",
+      "Bash(ls tailwind.config* postcss.config*)",
+      "Bash(ls src/*.css src/index.css)",
+      "Read(//c/Users/hp/Downloads/stitch_souq_link_product_page \\(1\\)/**)",
+      "Bash(dir \"C:\\\\Users\\\\hp\\\\Downloads\\\\stitch_souq_link_product_page \\(1\\)\")"
     ]
   }
 }

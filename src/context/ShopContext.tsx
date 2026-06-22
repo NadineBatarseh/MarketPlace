@@ -58,6 +58,7 @@ interface ShopContextValue {
   cartItems: CartItem[];
   addToCart: (product: AddToCartInput) => void;
   removeFromCart: (id: string) => void;
+  removeItemsFromCart: (ids: string[]) => void;
   updateCartQty: (id: string, qty: number) => void;
   clearCart: () => void;
   cartCount: number;
@@ -363,6 +364,32 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
     }
   }, [userId, ensureCartRow]);
 
+  // Remove a specific set of cart items (by composite id). Used after a
+  // successful purchase so we clear only the items that were actually paid
+  // for, leaving anything else the customer added to their cart untouched.
+  const removeItemsFromCart = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    // Resolve the real product UUIDs before we drop the items from state.
+    const productIds = cartItemsRef.current
+      .filter((i) => idSet.has(i.id))
+      .map((i) => String(i.productId));
+
+    setCartItems((prev) => prev.filter((item) => !idSet.has(item.id)));
+
+    if (userId && productIds.length > 0) {
+      ensureCartRow().then((serialId) => {
+        if (serialId === null) return;
+        supabase
+          .from('cart_items')
+          .delete()
+          .eq('cartSerial_id', serialId)
+          .in('product_id', productIds)
+          .then(({ error }) => { if (error) console.error('[ShopContext] cart partial clear failed:', error); });
+      });
+    }
+  }, [userId, ensureCartRow]);
+
   const isInCart = useCallback(
     (id: string | number, color?: string, size?: string) =>
       cartItems.some((item) => item.id === cartItemKey(id, color, size)),
@@ -458,6 +485,7 @@ export function ShopProvider({ children, userId }: { children: React.ReactNode; 
         cartItems,
         addToCart,
         removeFromCart,
+        removeItemsFromCart,
         updateCartQty,
         clearCart,
         cartCount,

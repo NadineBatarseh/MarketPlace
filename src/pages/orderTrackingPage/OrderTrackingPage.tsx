@@ -44,12 +44,24 @@ interface OrderDetail {
   shipment: Shipment | null;
 }
 
+interface ShippingAddress {
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  apartment: string | null;
+  city: string | null;
+  postalCode: string | null;
+}
+
 interface Order {
   id: number;
   total_price: number | null;
   status: string | null;
   payment_status: string | null;
   created_at: string;
+  shipping_address: ShippingAddress | null;
   order_details: OrderDetail[];
 }
 

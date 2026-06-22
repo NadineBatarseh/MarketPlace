@@ -27,14 +27,12 @@ interface MerchantOrder {
 
 type FilterKey = 'all' | 'pending' | 'processed';
 
-const PROCESSED_STATUSES = ['at_hub', 'consolidated', 'delivering', 'completed'];
+const PROCESSED_STATUSES = ['delivering', 'completed'];
 
 const fmt = (id: number) => `ORD-${String(id).padStart(3, '0')}`;
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   pending_collection: { label: 'في انتظار المعالجة', color: '#f59e0b' },
-  at_hub:             { label: 'تمت المعالجة',        color: '#3b82f6' },
-  consolidated:       { label: 'تمت المعالجة',        color: '#8b5cf6' },
   delivering:         { label: 'تمت المعالجة',        color: '#0ea5e9' },
   completed:          { label: 'تمت المعالجة',        color: '#22c55e' },
 };

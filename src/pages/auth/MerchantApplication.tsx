@@ -215,22 +215,18 @@ export default function MerchantApplication() {
       return;
     }
 
-    const uploadDoc = async (file: File, name: string) => {
-      const ext = file.name.split('.').pop();
-      const path = `${folderName}/${name}.${ext}`;
-      const { data: uploadData, error: uploadErr } = await supabase.storage
-        .from('merchant-id-docs')
-        .upload(path, file, { upsert: true });
-      if (uploadErr) throw new Error(uploadErr.message);
-      return uploadData.path;
-    };
-
     let idFrontPath: string, idBackPath: string;
     try {
-      [idFrontPath, idBackPath] = await Promise.all([
-        uploadDoc(idFrontFile, 'id-front'),
-        uploadDoc(idBackFile, 'id-back'),
-      ]);
+      const formData = new FormData();
+      formData.append('bucket', 'merchant-id-docs');
+      formData.append('folder', folderName);
+      formData.append('idFront', idFrontFile!);
+      formData.append('idBack', idBackFile!);
+      const res = await fetch('/api/applications/upload-docs', { method: 'POST', body: formData });
+      if (!res.ok) throw new Error((await res.json()).error ?? res.statusText);
+      const result = await res.json();
+      idFrontPath = result.idFrontPath;
+      idBackPath = result.idBackPath;
     } catch (err: unknown) {
       setError('تعذّر رفع مستندات الهوية: ' + (err instanceof Error ? err.message : String(err)));
       setLoading(false);
@@ -504,7 +500,7 @@ export default function MerchantApplication() {
           </div>
 
           <div className="auth-doc-section">
-            <div className="auth-doc-section-title">🪪 الهوية الوطنية</div>
+            <div className="auth-doc-section-title">💳 الهوية الوطنية</div>
             <div className="auth-row">
               {([
                 { label: 'الوجه الأمامي', file: idFrontFile, preview: idFrontPreview, ref: idFrontRef, setFile: setIdFrontFile, setPreview: setIdFrontPreview },

@@ -204,7 +204,7 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
 
       const { data, error: insertErr } = await supabase
         .from('shops')
-        .insert({ owner_id: merchant!.id, merchant_id: merchantRow.id, ...payload })
+        .insert({ merchant_id: merchantRow.id, ...payload })
         .select().single();
 
       if (insertErr || !data) {

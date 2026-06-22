@@ -779,3 +779,12 @@
   .oh-track-steps { gap: 0; }
   .oh-step-time { display: none; }
 }
+
+/* Compact destination line on the order card */
+.oh-ship-to {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

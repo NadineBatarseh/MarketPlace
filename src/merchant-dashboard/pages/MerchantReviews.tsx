@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMerchantAuth } from '../context/MerchantAuthContext';
 import supabase from '../../lib/supabase';
 
@@ -17,6 +18,7 @@ interface Review {
   image_urls: string[];
   product_id: string;
   productTitle: string;
+  productImage: string | null;
   reply: Reply | null;
 }
 
@@ -31,6 +33,26 @@ function Stars({ count }: { count: number }) {
     <span className="mr-stars">
       {Array.from({ length: 5 }, (_, i) => (i < count ? '★' : '☆')).join('')}
     </span>
+  );
+}
+
+function ProductChip({ review }: { review: Review }) {
+  const navigate = useNavigate();
+  return (
+    <button
+      type="button"
+      className="mr-product-chip"
+      onClick={() => navigate(`/product/${review.product_id}`)}
+      title="عرض المنتج"
+    >
+      {review.productImage ? (
+        <img src={review.productImage} alt={review.productTitle} className="mr-product-chip-img" />
+      ) : (
+        <span className="mr-product-chip-img mr-product-chip-img--placeholder">🛍️</span>
+      )}
+      <span className="mr-product-chip-title">{review.productTitle}</span>
+      <span className="mr-product-chip-arrow">‹</span>
+    </button>
   );
 }
 
@@ -55,7 +77,7 @@ export default function MerchantReviews() {
       // 1. Get all product IDs belonging to this shop
       const { data: products, error: pErr } = await supabase
         .from('products')
-        .select('id, title')
+        .select('id, title, image_urls')
         .eq('shop_id', shopId);
       if (pErr) throw pErr;
 
@@ -66,7 +88,11 @@ export default function MerchantReviews() {
       }
 
       const productMap: Record<string, string> = {};
-      products.forEach(p => { productMap[p.id] = p.title; });
+      const productImageMap: Record<string, string | null> = {};
+      products.forEach(p => {
+        productMap[p.id] = p.title;
+        productImageMap[p.id] = Array.isArray(p.image_urls) && p.image_urls.length > 0 ? p.image_urls[0] : null;
+      });
       const productIds = products.map(p => p.id);
 
       // 2. Get reviews for those products, including any replies
@@ -107,6 +133,7 @@ export default function MerchantReviews() {
         customerName: nameMap[r.user_id] ?? `عميل #${r.user_id.slice(0, 6)}`,
         product_id: r.product_id,
         productTitle: productMap[r.product_id] ?? 'منتج',
+        productImage: productImageMap[r.product_id] ?? null,
         reply: Array.isArray(r.review_replies) && r.review_replies.length > 0
           ? r.review_replies[0]
           : null,
@@ -192,7 +219,7 @@ export default function MerchantReviews() {
                     <div className="mr-reviewer">{review.customerName}</div>
                     <Stars count={review.rating} />
                   </div>
-                  <span className="mr-product-tag">{review.productTitle}</span>
+                  <ProductChip review={review} />
                 </div>
                 <div className="mr-date">{formatDate(review.created_at)}</div>
                 <p className="mr-comment">{review.review_text}</p>
@@ -236,7 +263,7 @@ export default function MerchantReviews() {
                     <div className="mr-reviewer">{review.customerName}</div>
                     <Stars count={review.rating} />
                   </div>
-                  <span className="mr-product-tag">{review.productTitle}</span>
+                  <ProductChip review={review} />
                 </div>
                 <div className="mr-date">{formatDate(review.created_at)}</div>
                 <p className="mr-comment">{review.review_text}</p>

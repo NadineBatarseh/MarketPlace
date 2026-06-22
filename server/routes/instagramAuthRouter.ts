@@ -251,8 +251,8 @@ router.post('/import-products', async (req: Request, res: Response) => {
 
   const { data: shop } = await supabase
     .from('shops')
-    .select('shop_id')
-    .eq('owner_id', user.id)
+    .select('shop_id, merchants!inner(user_id)')
+    .eq('merchants.user_id', user.id)
     .maybeSingle();
 
   if (!shop) {

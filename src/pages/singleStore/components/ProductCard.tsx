@@ -2,6 +2,8 @@ import { useState } from 'react';
 import type { MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Product } from '../types';
+import { getProductBadge } from '../../../lib/productBadge';
+import '../../../lib/productBadge.css';
 
 interface Props {
   product: Product;
@@ -32,10 +34,12 @@ export default function ProductCard({ product, inWishlist, onToggleWishlist, onA
   };
 
   const imgSrc = images[idx] ?? null;
+  const badge = getProductBadge(product);
 
   return (
     <div className="product-card" onClick={() => navigate(`/product/${product.id}`)}>
       <div className="product-img-wrap">
+        {badge && <span className={`pbadge pbadge--${badge.kind}`}>{badge.text}</span>}
         {images.length > 0 ? (
           <img src={images[idx]} alt={product.title} loading="lazy" />
         ) : (

@@ -63,8 +63,16 @@ const InfoTooltip: React.FC<InfoTooltipProps> = ({ text }) => {
     <>
       <button
         ref={btnRef}
-        onMouseEnter={show}
-        onMouseLeave={hide}
+        onMouseEnter={e => {
+          (e.currentTarget as HTMLElement).style.borderColor = '#F97316';
+          (e.currentTarget as HTMLElement).style.background = '#FFF7ED';
+          show();
+        }}
+        onMouseLeave={e => {
+          (e.currentTarget as HTMLElement).style.borderColor = '#CBD5E1';
+          (e.currentTarget as HTMLElement).style.background = '#F8FAFC';
+          hide();
+        }}
         onClick={e => { e.stopPropagation(); visible ? hide() : show(); }}
         style={{
           display: 'inline-flex',
@@ -79,16 +87,6 @@ const InfoTooltip: React.FC<InfoTooltipProps> = ({ text }) => {
           flexShrink: 0,
           transition: 'border-color 0.15s, background 0.15s',
           padding: 0,
-        }}
-        onMouseEnterCapture={e => {
-          const el = e.currentTarget as HTMLElement;
-          el.style.borderColor = '#F97316';
-          el.style.background = '#FFF7ED';
-        }}
-        onMouseLeaveCapture={e => {
-          const el = e.currentTarget as HTMLElement;
-          el.style.borderColor = '#CBD5E1';
-          el.style.background = '#F8FAFC';
         }}
       >
         <span style={{ color: '#64748B', fontSize: 10, fontWeight: 700, lineHeight: 1, userSelect: 'none', fontStyle: 'italic', fontFamily: 'serif' }}>

@@ -1,0 +1,134 @@
+/* ══════════════════════════════════════════════
+   MerchantPayoutDetails.css — vendor bank/IBAN onboarding
+   RTL, matches SouqLink merchant-dashboard palette
+   ══════════════════════════════════════════════ */
+
+.mpd-root {
+  padding: 0.75rem 2rem 2rem 2rem;
+  direction: rtl;
+  font-family: var(--font-main, 'Segoe UI', sans-serif);
+  max-width: 720px;
+}
+
+.mpd-title {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #1a1a2e;
+  margin: 0 0 0.4rem 0;
+  text-align: right;
+}
+
+.mpd-subtitle {
+  color: #666;
+  font-size: 0.92rem;
+  line-height: 1.7;
+  margin: 0 0 1.5rem 0;
+}
+
+.mpd-card {
+  background: #fff;
+  border: 1px solid #ececf1;
+  border-radius: 14px;
+  padding: 1.5rem 1.5rem 1.75rem;
+  box-shadow: 0 2px 10px rgba(26, 26, 46, 0.04);
+}
+
+/* ── Form fields ── */
+.mpd-field {
+  margin-bottom: 1.15rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.mpd-field label {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin-bottom: 0.45rem;
+}
+
+.mpd-req { color: #e8572a; }
+.mpd-optional { color: #94a3b8; font-weight: 500; font-size: 0.8rem; }
+
+.mpd-field input {
+  border: 1px solid #d9d9e3;
+  border-radius: 10px;
+  padding: 0.7rem 0.85rem;
+  font-size: 0.95rem;
+  font-family: inherit;
+  color: #1a1a2e;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.mpd-field input:focus {
+  outline: none;
+  border-color: #e8572a;
+  box-shadow: 0 0 0 3px rgba(232, 87, 42, 0.12);
+}
+
+.mpd-hint {
+  font-size: 0.78rem;
+  color: #94a3b8;
+  margin-top: 0.35rem;
+}
+
+/* ── Save button ── */
+.mpd-save-btn {
+  margin-top: 0.5rem;
+  background: #e8572a;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 0.75rem 1.6rem;
+  font-size: 0.95rem;
+  font-weight: 800;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, transform 0.08s;
+}
+.mpd-save-btn:hover:not(:disabled) { background: #cf4a21; }
+.mpd-save-btn:active:not(:disabled) { transform: translateY(1px); }
+.mpd-save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ── Success ── */
+.mpd-success {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+  border-radius: 10px;
+  padding: 0.8rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+/* ── Active confirmation card ── */
+.mpd-active-card { position: relative; }
+
+.mpd-badge {
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  margin-bottom: 1.1rem;
+}
+.mpd-badge--active { background: #ecfdf5; color: #16b981; border: 1px solid #a7f3d0; }
+
+.mpd-active-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid #f1f1f5;
+}
+.mpd-active-label { color: #666; font-size: 0.9rem; }
+.mpd-active-value { color: #1a1a2e; font-weight: 700; font-size: 0.95rem; }
+.mpd-iban { letter-spacing: 0.12em; font-family: 'Courier New', monospace; direction: ltr; }
+
+.mpd-note {
+  margin: 1.1rem 0 0;
+  color: #94a3b8;
+  font-size: 0.82rem;
+  line-height: 1.7;
+}

@@ -34,9 +34,11 @@ export async function fetchProducts(
 
   let query = supabase
     .from('products')
-    .select('id, title, description, price, image_urls, stock_Quantity', { count: 'exact' })
+    .select('id, title, description, price, image_urls, stock_Quantity, discount_pct, created_at', { count: 'exact' })
     .eq('shop_id', shopId)
     .eq('isPublish', true)
+    .not('is_deleted', 'eq', true)
+    .not('is_archived', 'eq', true)
     .range(from, to);
 
   if (sort === 'price_asc') query = query.order('price', { ascending: true });

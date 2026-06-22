@@ -38,15 +38,48 @@ export default function Topbar({
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // ── Search autocomplete suggestions ──
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showSuggest, setShowSuggest] = useState(false);
+  const [activeIdx, setActiveIdx] = useState(-1);
+  const searchBarRef = useRef<HTMLDivElement>(null);
+  const suggestDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const currentQuery = searchQuery ?? navQuery;
+
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
       }
+      if (searchBarRef.current && !searchBarRef.current.contains(e.target as Node)) {
+        setShowSuggest(false);
+      }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  // Debounced fetch of suggestions as the user types.
+  useEffect(() => {
+    const q = currentQuery.trim();
+    if (suggestDebounce.current) clearTimeout(suggestDebounce.current);
+    if (q.length < 2) { setSuggestions([]); setShowSuggest(false); return; }
+
+    suggestDebounce.current = setTimeout(async () => {
+      try {
+        const res  = await fetch(`/api/search/suggestions?q=${encodeURIComponent(q)}`);
+        const data = await res.json();
+        if (data.ok && Array.isArray(data.suggestions)) {
+          setSuggestions(data.suggestions);
+          setShowSuggest(data.suggestions.length > 0);
+          setActiveIdx(-1);
+        }
+      } catch { /* silent — suggestions are best-effort */ }
+    }, 250);
+
+    return () => { if (suggestDebounce.current) clearTimeout(suggestDebounce.current); };
+  }, [currentQuery]);
 
   function handleSearchChange(q: string) {
     setNavQuery(q);
@@ -54,13 +87,34 @@ export default function Topbar({
   }
 
   function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key !== 'Enter') return;
-    submitSearch();
+    if (showSuggest && suggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setActiveIdx(i => (i + 1) % suggestions.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setActiveIdx(i => (i <= 0 ? suggestions.length - 1 : i - 1));
+        return;
+      }
+      if (e.key === 'Escape') { setShowSuggest(false); return; }
+      if (e.key === 'Enter' && activeIdx >= 0) {
+        submitSearch(suggestions[activeIdx]);
+        return;
+      }
+    }
+    if (e.key === 'Enter') submitSearch();
   }
 
-  function submitSearch() {
-    const q = (searchQuery ?? navQuery).trim();
+  function submitSearch(term?: string) {
+    const q = (term ?? currentQuery).trim();
     if (!q) return;
+    setShowSuggest(false);
+    if (term) {
+      setNavQuery(term);
+      if (onSearchChange) onSearchChange(term);
+    }
     if (onSearchSubmit) { onSearchSubmit(q); return; }
     navigate(`/search?q=${encodeURIComponent(q)}`);
   }
@@ -115,7 +169,7 @@ export default function Topbar({
         </nav>
 
         {/* Search bar */}
-        <div className="search-bar">
+        <div className="search-bar" ref={searchBarRef}>
           <SearchInput
             className="topbar-search-input"
             value={searchQuery ?? navQuery}
@@ -123,12 +177,32 @@ export default function Topbar({
             onKeyDown={handleSearchKeyDown}
             placeholder="ابحث عن منتج أو متجر..."
           />
-          <button className="search-submit-btn" onClick={submitSearch} type="button" title="بحث" aria-label="بحث">
+          <button className="search-submit-btn" onClick={() => submitSearch()} type="button" title="بحث" aria-label="بحث">
             <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" width="14" height="14">
               <circle cx="11" cy="11" r="8" />
               <path d="m21 21-4.35-4.35" />
             </svg>
           </button>
+
+          {/* Autocomplete suggestions dropdown */}
+          {showSuggest && suggestions.length > 0 && (
+            <ul className="search-suggestions" dir="rtl">
+              {suggestions.map((s, i) => (
+                <li
+                  key={`${s}-${i}`}
+                  className={`search-suggestion-item${i === activeIdx ? ' active' : ''}`}
+                  onMouseDown={(e) => { e.preventDefault(); submitSearch(s); }}
+                  onMouseEnter={() => setActiveIdx(i)}
+                >
+                  <svg className="search-suggestion-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="m21 21-4.35-4.35" />
+                  </svg>
+                  <span>{s}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <nav className="nav-actions">
@@ -227,10 +301,6 @@ export default function Topbar({
                   🚚 تقديم طلب كمندوب
                 </button>
                 <button type="button" className="topbar-dropdown-item"
-                  onClick={() => { navigate('/hubworker-application'); setDropdownOpen(false); }}>
-                  📦 تقديم طلب كعامل مستودع
-                </button>
-                <button type="button" className="topbar-dropdown-item"
                   onClick={() => { navigate('/admin-dashboard'); setDropdownOpen(false); }}>
                   🛡️ دخول كمشرف
                 </button>
@@ -253,6 +323,15 @@ export default function Topbar({
                     onClick={() => { navigate(dashboardPath); setDropdownOpen(false); }}
                   >
                     🏠 لوحة التحكم
+                  </button>
+                )}
+                {isCustomer && (
+                  <button
+                    type="button"
+                    className="topbar-dropdown-item"
+                    onClick={() => { navigate('/profile'); setDropdownOpen(false); }}
+                  >
+                    👤 إعدادات الملف الشخصي
                   </button>
                 )}
                 <button

@@ -6,7 +6,6 @@ const ROLE_HOME: Record<string, string> = {
   customer: '/home',
   merchant: '/merchant-dashboard',
   delivery: '/driver-dashboard',
-  hubworker: '/hub',
   admin: '/admin-dashboard',
 };
 

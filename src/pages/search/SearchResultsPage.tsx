@@ -4,6 +4,8 @@ import {
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import Topbar from '../../components/Topbar';
 import supabase from '../../lib/supabase';
+import { getProductBadge } from '../../lib/productBadge';
+import '../../lib/productBadge.css';
 import './SearchResultsPage.css';
 
 /* ═══════════════════════════════════════════════
@@ -17,6 +19,8 @@ interface Product {
   price: number | null;
   image_urls: string[] | string | null;
   stock_Quantity: number | null;
+  discount_pct: number | null;
+  created_at: string | null;
   shops: { name: string; location: string | null } | null;
 }
 interface SearchResponse {
@@ -284,6 +288,7 @@ function ProductCard({ product, rating, onView }: {
   const [liked, setLiked] = useState(false);
   const img = firstImg(product.image_urls);
   const oos = product.stock_Quantity === 0;
+  const badge = getProductBadge(product);
 
   return (
     <article className="srp-card" onClick={() => onView(product.id)}>
@@ -312,7 +317,7 @@ function ProductCard({ product, rating, onView }: {
           </svg>
         </button>
 
-        {oos && <span className="srp-oos-badge">نفدت الكمية</span>}
+        {badge && <span className={`pbadge pbadge--${badge.kind}`}>{badge.text}</span>}
       </div>
 
       {/* ── Body ── */}

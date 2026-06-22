@@ -16,6 +16,15 @@ import metaCatalogRouter from "./routes/metaCatalogAPIRouter.js";
 import productCRUDRouter from "./routes/productCRUDRouter.js";
 import supabaseProductWebhookRouter from "./routes/supabaseProductWebhookRouter.js";
 import instagramAuthRouter from "./routes/instagramAuthRouter.js";
+import applicationUploadRouter from "./routes/applicationUploadRouter.js";
+import adminArchiveRouter from "./routes/adminArchiveRouter.js";
+import synonymsAdminRouter from "./routes/synonymsAdminRouter.js";
+import paytabsRouter from "./routes/paytabsRouter.js";
+import payoutOnboardingRouter from "./routes/payoutOnboardingRouter.js";
+import payoutAdminRouter from "./routes/payoutAdminRouter.js";
+import ordersRouter from "./routes/ordersRouter.js";
+import profileRouter from "./routes/profileRouter.js";
+import { requireAdmin } from "./middleware/requireAdmin.js";
 import { logisticsRouter, bootstrapLogistics } from "./logistics/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -37,6 +46,8 @@ app.use(cors({
 app.use("/webhook", express.raw({ type: "application/json" }), webhookRouter);
 
 app.use(express.json({ limit: '10mb' }));
+// PayTabs posts its browser `return` redirect as application/x-www-form-urlencoded.
+app.use(express.urlencoded({ extended: true }));
 
 /* ---------- HELPERS ---------- */
 
@@ -180,7 +191,7 @@ app.post("/api/chat", async (req: Request, res: Response) => {
       if (user) {
         merchant_user_id = user.id;
         const [shopResult, igResult] = await Promise.allSettled([
-          supabase.from("shops").select("shop_id").eq("owner_id", user.id).maybeSingle(),
+          supabase.from("shops").select("shop_id, merchants!inner(user_id)").eq("merchants.user_id", user.id).maybeSingle(),
           supabase.from("instagram_connections")
             .select("access_token, instagram_account_id")
             .eq("user_id", user.id)
@@ -503,6 +514,9 @@ app.post("/api/chat", async (req: Request, res: Response) => {
 /* ---------- SEARCH ---------- */
 app.use("/api/search", searchRouter);
 
+/* ---------- APPLICATION DOC UPLOAD (merchant ID / driver docs) ---------- */
+app.use("/api/applications", applicationUploadRouter);
+
 /* ---------- PRODUCT BULK UPLOAD ---------- */
 app.use("/api/products", productUploadRouter);
 
@@ -517,6 +531,26 @@ app.use("/api/webhooks/supabase-products", supabaseProductWebhookRouter);
 
 /* ---------- LOGISTICS ---------- */
 app.use('/api/logistics', logisticsRouter);
+
+app.use('/api/admin', adminArchiveRouter);
+
+/* ---------- SEARCH SYNONYMS ADMIN (review / approve / reject) ---------- */
+app.use('/api/admin/synonyms', synonymsAdminRouter);
+
+/* ---------- ORDERS (server-authoritative placement) ---------- */
+app.use('/api/orders', ordersRouter);
+
+/* ---------- CUSTOMER PROFILE (profile + default shipping address) ---------- */
+app.use('/api/profile', profileRouter);
+
+/* ---------- PAYTABS PAYMENTS (Hosted Payment Page — Test Mode) ---------- */
+app.use('/api/payments/paytabs', paytabsRouter);
+
+/* ---------- VENDOR PAYOUT ONBOARDING (merchant self-serve IBAN → PayTabs entity) ---------- */
+app.use('/api/payments/payout-onboarding', payoutOnboardingRouter);
+
+/* ---------- VENDOR SETTLEMENT ADMIN (run sweep / batches / reconcile) ---------- */
+app.use('/api/payments/payouts', payoutAdminRouter);
 
 /* ---------- DEBUG (remove after fixing) ---------- */
 
@@ -562,7 +596,7 @@ app.post("/api/debug/test-instagram-import", async (req: Request, res: Response)
   if (authError || !user) return res.status(401).json({ ok: false, error: authError?.message ?? "Invalid token" });
 
   const [shopResult, igResult] = await Promise.allSettled([
-    supabase.from("shops").select("shop_id").eq("owner_id", user.id).maybeSingle(),
+    supabase.from("shops").select("shop_id, merchants!inner(user_id)").eq("merchants.user_id", user.id).maybeSingle(),
     supabase.from("user_social_tokens")
       .select("access_token, instagram_account_id")
       .eq("user_id", user.id)
@@ -815,43 +849,35 @@ app.post("/api/activate", async (req: Request, res: Response) => {
     return res.status(400).json({ ok: false, error: "Missing email or password" });
   }
 
-  // 1. Find approved application (merchant → delivery → hubworker)
+  // 1. Find approved application (merchant → delivery)
   let applicantName: string | null = null;
-  let role: "merchant" | "delivery" | "hubworker" = "merchant";
+  let role: "merchant" | "delivery" = "merchant";
 
   const { data: merchantApp } = await supabase
     .from("merchant_applications")
-    .select("name_of_owner, name_of_store, email, phone_number, \"Type_of_store\", description, city, zone_id")
+    .select("name_of_owner, name_of_store, email, phone_number, \"Type_of_store\", description, city, zone_id, pictures, id_front_url, id_back_url")
     .eq("platform_email", platformEmail.trim())
     .eq("status", "approved")
     .maybeSingle();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let deliveryApp: any = null;
 
   if (merchantApp) {
     applicantName = merchantApp.name_of_owner;
     role = "merchant";
   } else {
-    const { data: deliveryApp } = await supabase
+    const { data: dApp } = await supabase
       .from("delivery_applications")
-      .select("name")
+      .select("name, phone_number, email, type_of_vehicle, id_front_url, id_back_url, license_front_url, license_back_url")
       .eq("platform_email", platformEmail.trim())
       .eq("status", "approved")
       .maybeSingle();
+    deliveryApp = dApp;
 
     if (deliveryApp) {
       applicantName = deliveryApp.name;
       role = "delivery";
-    } else {
-      const { data: hubApp } = await supabase
-        .from("hubworker_applications")
-        .select("name")
-        .eq("platform_email", platformEmail.trim())
-        .eq("status", "approved")
-        .maybeSingle();
-
-      if (hubApp) {
-        applicantName = hubApp.name;
-        role = "hubworker";
-      }
     }
   }
 
@@ -898,7 +924,49 @@ app.post("/api/activate", async (req: Request, res: Response) => {
     return res.status(500).json({ ok: false, error: insertError.message });
   }
 
-  // 4. For merchants: create the merchant row (owner personal info)
+  // 4a. For delivery: populate the couriers row with the applicant's documents.
+  // A DB trigger already creates a bare courier row when the Users row above is
+  // inserted, using the auth user id as the courier's primary key (id) — it sets
+  // a default location but leaves user_id and the document URLs unset. So we
+  // UPDATE that row (matched by id = userId) rather than inserting a new one
+  // (a plain insert fails the NOT NULL "location" constraint). As a safety net,
+  // if no such row exists we insert one with the trigger's defaults.
+  if (role === "delivery" && deliveryApp) {
+    const courierDocs = {
+      user_id: userId,
+      name: deliveryApp.name,
+      id_front_url: deliveryApp.id_front_url ?? null,
+      id_back_url: deliveryApp.id_back_url ?? null,
+      license_front_url: deliveryApp.license_front_url ?? null,
+      license_back_url: deliveryApp.license_back_url ?? null,
+    };
+
+    const { data: updated, error: updateError } = await supabase
+      .from("couriers")
+      .update(courierDocs)
+      .eq("id", userId)
+      .select("id");
+
+    if (updateError) {
+      console.error("[/api/activate] courier row update failed:", updateError.message);
+    } else if (!updated || updated.length === 0) {
+      const { error: insertCourierError } = await supabase
+        .from("couriers")
+        .insert({
+          id: userId,
+          status: "offline",
+          location: { lat: 31.9038, lng: 35.2034 },
+          home_base: { lat: 31.9038, lng: 35.2034 },
+          home_base_zone: "Ramallah",
+          ...courierDocs,
+        });
+      if (insertCourierError) {
+        console.error("[/api/activate] courier row insert failed:", insertCourierError.message);
+      }
+    }
+  }
+
+  // 4b. For merchants: create the merchant row (owner personal info)
   let merchantRowId: string | null = null;
   if (role === "merchant" && merchantApp) {
     const { data: merchantRow, error: merchantError } = await supabase
@@ -908,6 +976,9 @@ app.post("/api/activate", async (req: Request, res: Response) => {
         owner_name: merchantApp.name_of_owner,
         phone_number: merchantApp.phone_number != null ? String(merchantApp.phone_number) : null,
         owner_email: merchantApp.email,
+        pictures: merchantApp.pictures ?? null,
+        id_front_url: merchantApp.id_front_url ?? null,
+        id_back_url: merchantApp.id_back_url ?? null,
       })
       .select("id")
       .single();
@@ -921,7 +992,6 @@ app.post("/api/activate", async (req: Request, res: Response) => {
   // 5. For merchants: create the shop row (store details)
   if (role === "merchant" && merchantApp) {
     const { error: shopError } = await supabase.from("shops").insert({
-      owner_id: userId,
       merchant_id: merchantRowId,
       name: merchantApp.name_of_store ?? applicantName,
       Type_of_store: merchantApp.Type_of_store ?? null,
@@ -1005,6 +1075,61 @@ app.get("/auth/meta", (_req: Request, res: Response) => {
   res.redirect(oauthUrl.toString());
 });
 
+/* ---------- ADMIN: shop owner info (service-role, bypasses RLS) ---------- */
+
+app.get("/api/admin/shop-owners", requireAdmin, async (req: Request, res: Response) => {
+  const raw = req.query.merchantIds as string | undefined;
+  if (!raw) return res.json({ ok: true, owners: {} });
+
+  const merchantIds = raw.split(",").map(s => s.trim()).filter(Boolean);
+  if (merchantIds.length === 0) return res.json({ ok: true, owners: {} });
+
+  // Fetch merchants using service-role client (bypasses RLS)
+  const { data: merchantRows, error: mErr } = await supabase
+    .from("merchants")
+    .select("id, user_id, owner_name, phone_number, owner_email, id_front_url, id_back_url")
+    .in("id", merchantIds);
+
+  if (mErr) return res.status(500).json({ ok: false, error: mErr.message });
+
+  const owners: Record<string, {
+    user_id: string | null;
+    owner_name: string | null;
+    phone_number: string | null;
+    owner_email: string | null;
+    id_front_url: string | null;
+    id_back_url: string | null;
+  }> = {};
+
+  for (const m of merchantRows ?? []) {
+    owners[m.id] = {
+      user_id:      m.user_id      ?? null,
+      owner_name:   m.owner_name   ?? null,
+      phone_number: m.phone_number ? String(m.phone_number) : null,
+      owner_email:  m.owner_email  ?? null,
+      id_front_url: m.id_front_url ?? null,
+      id_back_url:  m.id_back_url  ?? null,
+    };
+  }
+
+  // Fill missing owner_name from Users table when merchants.owner_name is null
+  const userIds = (merchantRows ?? []).filter(m => !m.owner_name && m.user_id).map(m => m.user_id!);
+  if (userIds.length > 0) {
+    const { data: userRows } = await supabase.from("Users").select("user_id, name, email").in("user_id", userIds);
+    const userMap: Record<string, { name: string | null; email: string | null }> = {};
+    for (const u of userRows ?? []) userMap[u.user_id] = { name: u.name ?? null, email: u.email ?? null };
+
+    for (const m of merchantRows ?? []) {
+      if (!owners[m.id].owner_name && m.user_id && userMap[m.user_id]) {
+        owners[m.id].owner_name  = userMap[m.user_id].name;
+        owners[m.id].owner_email = owners[m.id].owner_email ?? userMap[m.user_id].email;
+      }
+    }
+  }
+
+  return res.json({ ok: true, owners });
+});
+
 /* ---------- SERVE FRONTEND (production only) ---------- */
 
 if (process.env.NODE_ENV === "production" && !process.env.VERCEL) {
@@ -1022,7 +1147,7 @@ const PORT = Number(process.env.PORT) || 4000;
 function startServer() {
   const server = app.listen(PORT, () => {
     console.log(`✅ Server running on http://localhost:${PORT}`);
-    bootstrapLogistics();
+    bootstrapLogistics().catch(e => console.error('[Logistics] bootstrap failed:', e));
   });
 
   server.on('error', async (err: NodeJS.ErrnoException) => {

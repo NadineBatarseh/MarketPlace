@@ -1,11 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import {
+  Star, StarHalf, ShoppingCart, Heart, Share2, ChevronLeft, ChevronRight,
+  Plus, Minus, Truck, CreditCard, X, Camera,
+} from 'lucide-react';
 import supabase from '../../lib/supabase';
 import Topbar from '../../components/Topbar';
 import StoreNav from '../../components/StoreNav';
 import { useShop } from '../../context/ShopContext';
 import CartConfirmModal from '../../components/CartConfirmModal';
-import './ProductDetailPage.css';
+
+// Brand palette (per Souq Link product-page design system)
+const GREEN = '#064e3b';
+const FONT: React.CSSProperties = { fontFamily: "'IBM Plex Sans Arabic', sans-serif" };
 
 const NOT_FOUND = "المعلومة غير متوفرة";
 const safeText = (v?: string | null) => (v && v.trim() ? v : NOT_FOUND);
@@ -35,7 +42,7 @@ function normalizeArabic(s: string): string {
     .replace(/[أإآا]/g, 'ا')
     .replace(/ة/g, 'ه')
     .replace(/ى/g, 'ي')
-    .replace(/[ً-ٰٟ]/g, '');
+    .replace(/[ً-ٰٟ]/g, '');
 }
 
 // Pre-build a normalized lookup so we never iterate at runtime
@@ -106,6 +113,7 @@ const ProductDetailPage: React.FC = () => {
 
   const [product, setProduct] = useState<any>(null);
   const [shopName, setShopName] = useState<string | null>(null);
+  const [relatedProducts, setRelatedProducts] = useState<any[]>([]);
 
   const [ratingAvg, setRatingAvg] = useState<number | null>(null);
   const [reviewsCount, setReviewsCount] = useState<number>(0);
@@ -117,17 +125,12 @@ const ProductDetailPage: React.FC = () => {
   const [qty, setQty] = useState(1);
   const isFav = product ? isFavorited(product.id) : false;
   const [activeThumb, setActiveThumb] = useState(0);
-  const [thumbOffset, setThumbOffset] = useState(0);
-  const THUMBS_PER_PAGE = 7;
   const [mainImage, setMainImage] = useState<string>(
     'https://via.placeholder.com/600x600?text=SouqLink'
   );
   const [activeTab, setActiveTab] = useState('desc');
 
   // Nav counters
-  const [favCount] = useState(0);
-  const [cartCount, setCartCount] = useState(0);
-  const [cartProductIds, setCartProductIds] = useState<Set<string>>(new Set());
   const [cartMsg, setCartMsg] = useState<string | null>(null);
   const cartMsgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showCartMsg = (msg: string) => {
@@ -139,6 +142,25 @@ const ProductDetailPage: React.FC = () => {
   // Share menu
   const [showShareMenu, setShowShareMenu] = useState(false);
   const shareRef = useRef<HTMLDivElement>(null);
+  const thumbStripRef = useRef<HTMLDivElement>(null);
+
+  const scrollThumbs = (dir: number) => {
+    thumbStripRef.current?.scrollBy({ left: dir * 200, behavior: 'smooth' });
+  };
+
+  // Render a 5-star row for a given rating value (filled / half / empty)
+  const renderStars = (value: number, size = 20) => {
+    const v = value || 0;
+    return [1, 2, 3, 4, 5].map(i => {
+      if (i <= Math.floor(v)) {
+        return <Star key={i} size={size} className="text-amber-500 fill-amber-500" />;
+      }
+      if (i === Math.floor(v) + 1 && v % 1 >= 0.3) {
+        return <StarHalf key={i} size={size} className="text-amber-500 fill-amber-500" />;
+      }
+      return <Star key={i} size={size} className="text-gray-300" />;
+    });
+  };
 
   // Auth + review form
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -200,6 +222,14 @@ const ProductDetailPage: React.FC = () => {
       ) ?? null)
     : null;
   const displayPrice = product?.price ?? null;
+
+  // Stock availability — prefer the selected variant's quantity, fall back to
+  // the product-level stock. `null` means the value is unknown (not fetched).
+  const stockQty: number | null = selectedVariant
+    ? (selectedVariant.quantity ?? 0)
+    : (typeof product?.stock_Quantity === 'number' ? product.stock_Quantity : null);
+  const stockState: 'in' | 'out' | 'unknown' =
+    stockQty === null ? 'unknown' : stockQty > 0 ? 'in' : 'out';
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -379,19 +409,16 @@ const ProductDetailPage: React.FC = () => {
     {
       label: 'WhatsApp',
       icon: '💬',
-      className: 'share-opt-whatsapp',
       href: `https://wa.me/?text=${encodeURIComponent(shareText)}`,
     },
     {
       label: 'Instagram',
       icon: '📸',
-      className: 'share-opt-instagram',
       href: 'https://www.instagram.com',
     },
     {
       label: 'Gmail',
       icon: '✉️',
-      className: 'share-opt-gmail',
       href: `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(product?.title ?? 'منتج من سوق لينك')}&body=${encodeURIComponent(shareText)}`,
     },
   ];
@@ -454,6 +481,30 @@ const ProductDetailPage: React.FC = () => {
     showCartMsg('✓ تمت الإضافة إلى السلة');
   };
 
+  // "Buy now": run the same guards/variant checks as add-to-cart, ensure the
+  // item is in the cart, then take the customer straight to the cart page.
+  const handleBuyNow = () => {
+    if (!currentUser) { showCartMsg('يجب تسجيل الدخول أو إنشاء حساب أولاً'); return; }
+    if (userRole !== 'customer') { showCartMsg('متاح للعملاء فقط'); return; }
+    if (!product) return;
+    if (hasColors && !selectedColor) { showCartMsg('يرجى اختيار اللون أولاً'); return; }
+    if (hasSizes && !selectedSize) { showCartMsg('يرجى اختيار المقاس أولاً'); return; }
+    const color = selectedColor ? parseColorEntry(selectedColor).name : undefined;
+    const size = selectedSize ?? undefined;
+    if (!isInCart(product.id, color, size)) {
+      const price = parseFloat(String(displayPrice ?? product.price ?? '0').replace(/[^\d.]/g, '')) || 0;
+      addToCartCtx({
+        id: product.id,
+        name: product.title ?? '',
+        image: product.image_urls?.[0] ?? '',
+        price,
+        color,
+        size,
+      });
+    }
+    navigate('/cart');
+  };
+
   const prevImage = () => {
     if (activeThumb === 0) return;
     const newIdx = activeThumb - 1;
@@ -480,6 +531,8 @@ const ProductDetailPage: React.FC = () => {
             .from("products")
             .select("id")
             .eq("isPublish", true)
+            .not("is_deleted", "eq", true)
+            .not("is_archived", "eq", true)
             .limit(1)
             .maybeSingle();
 
@@ -500,6 +553,8 @@ const ProductDetailPage: React.FC = () => {
           .select("id, title, description, price, discount_pct, stock_Quantity, shop_id, image_urls")
           .eq("id", productId)
           .eq("isPublish", true)
+          .not("is_deleted", "eq", true)
+          .not("is_archived", "eq", true)
           .single();
 
         if (pErr) throw pErr;
@@ -610,6 +665,21 @@ const ProductDetailPage: React.FC = () => {
         if (attrsErr) console.error('[attributes fetch error]', attrsErr);
         setAttributes(attrsData ?? []);
 
+        // 7) Similar products — other published products (same shop first, then any)
+        const { data: related } = await supabase
+          .from("products")
+          .select("id, title, price, image_urls, shop_id")
+          .eq("isPublish", true)
+          .not("is_deleted", "eq", true)
+          .not("is_archived", "eq", true)
+          .neq("id", productId)
+          .limit(8);
+        const relatedList = related ?? [];
+        // Prefer products from the same shop, then fill with the rest, cap at 4
+        const sameShop = relatedList.filter((p: any) => p.shop_id === productData?.shop_id);
+        const others = relatedList.filter((p: any) => p.shop_id !== productData?.shop_id);
+        setRelatedProducts([...sameShop, ...others].slice(0, 4));
+
       } catch (e: any) {
         setError(e?.message ?? "حدث خطأ أثناء جلب البيانات");
       } finally {
@@ -621,12 +691,17 @@ const ProductDetailPage: React.FC = () => {
   }, [id]);
 
   if (loadingData) {
-    return <div style={{ padding: 20, direction: "rtl" }}>جاري تحميل البيانات...</div>;
+    return <div style={{ padding: 20, direction: "rtl", ...FONT }}>جاري تحميل البيانات...</div>;
   }
 
   if (error) {
-    return <div style={{ padding: 20, direction: "rtl" }}>{error}</div>;
+    return <div style={{ padding: 20, direction: "rtl", ...FONT }}>{error}</div>;
   }
+
+  const discountedPrice =
+    discountValue !== null && displayPrice != null
+      ? (displayPrice * (1 - discountValue / 100))
+      : null;
 
   return (
     <>
@@ -635,33 +710,62 @@ const ProductDetailPage: React.FC = () => {
 
       {/* LIGHTBOX */}
       {lightboxUrl && (
-        <div className="lightbox-overlay" onClick={() => setLightboxUrl(null)}>
-          <button type="button" className="lightbox-close" onClick={() => setLightboxUrl(null)}>✕</button>
-          <img className="lightbox-img" src={lightboxUrl} alt="صورة مكبّرة" onClick={e => e.stopPropagation()} />
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button
+            type="button"
+            className="absolute top-4 left-4 text-white/90 transition-colors hover:text-white"
+            onClick={() => setLightboxUrl(null)}
+          >
+            <X size={32} />
+          </button>
+          <img
+            className="max-h-[90vh] max-w-[90vw] rounded-xl object-contain"
+            src={lightboxUrl}
+            alt="صورة مكبّرة"
+            onClick={e => e.stopPropagation()}
+          />
         </div>
       )}
 
       {/* LOGIN MODAL */}
       {showLoginModal && (
-        <div className="login-overlay" onClick={() => setShowLoginModal(false)}>
-          <div className="login-modal" onClick={e => e.stopPropagation()}>
-            <button type="button" className="login-close" onClick={() => setShowLoginModal(false)}>✕</button>
-            <h3 className="login-title">تسجيل الدخول</h3>
-
-            <p className="login-hint">أدخل بريدك الإلكتروني للتحقق من حسابك.</p>
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setShowLoginModal(false)}
+        >
+          <div
+            className="flex w-full max-w-md flex-col gap-5 rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+            style={FONT}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-bold" style={{ color: GREEN }}>تسجيل الدخول</h3>
+              <button
+                type="button"
+                className="text-gray-500 transition-colors hover:text-gray-800"
+                onClick={() => setShowLoginModal(false)}
+              >
+                <X size={22} />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600">أدخل بريدك الإلكتروني للتحقق من حسابك.</p>
             <input
               type="email"
-              className="login-email-input"
+              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 outline-none transition-colors focus:border-[#064e3b] focus:ring-2 focus:ring-[#064e3b]/20"
               placeholder="example@email.com"
               value={loginEmail}
               onChange={e => setLoginEmail(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleLogin()}
               autoFocus
             />
-            {loginError && <p className="login-error-msg">{loginError}</p>}
+            {loginError && <p className="text-sm text-red-600">{loginError}</p>}
             <button
               type="button"
-              className="login-submit-btn"
+              className="w-full rounded-xl py-3 font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+              style={{ backgroundColor: GREEN }}
               onClick={handleLogin}
               disabled={loginLoading}
             >
@@ -671,440 +775,609 @@ const ProductDetailPage: React.FC = () => {
         </div>
       )}
 
-      <div className="page-wrapper">
-        {/* MAIN PRODUCT SECTION */}
-        <>
-            <div className="product-section">
-              {/* LEFT: Product Details */}
-              <div className="product-details">
-                <a href="#" className="shop-tag">
-                  <div className="shop-avatar">T</div>
-                  <span className="shop-name">{safeText(shopName)}</span>
-                </a>
+      <main dir="rtl" className="bg-white text-[#191c1d]" style={FONT}>
+        <div className="mx-auto max-w-[1280px] px-4 pt-6 pb-16 md:px-6">
+          {/* BREADCRUMBS */}
+          <nav className="mb-6 flex items-center gap-2 text-xs text-gray-500">
+            <a
+              href="#"
+              className="transition-colors hover:text-[#064e3b]"
+              onClick={(e) => { e.preventDefault(); navigate('/home'); }}
+            >
+              الرئيسية
+            </a>
+            <ChevronLeft size={14} />
+            <span className="font-bold" style={{ color: GREEN }}>{safeText(product?.title)}</span>
+          </nav>
 
-                <h1 className="product-title">
+          {/* HERO SECTION */}
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-10">
+            {/* Gallery — appears on the left in RTL */}
+            <div className="order-1 flex flex-col gap-4 lg:order-2">
+              <div className="group relative aspect-square overflow-hidden rounded-lg border border-gray-200 bg-white">
+                <img
+                  src={mainImage}
+                  alt={safeText(product?.title)}
+                  className="h-full w-full object-contain"
+                />
+                {discountValue !== null && (
+                  <span className="absolute right-4 top-4 z-10 rounded-full bg-red-500 px-3 py-1 text-xs font-bold text-white">
+                    {`وفر ${discountValue}%`}
+                  </span>
+                )}
+                {allImages.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={prevImage}
+                      className="absolute right-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 opacity-0 shadow-md transition-opacity hover:bg-white group-hover:opacity-100"
+                    >
+                      <ChevronRight size={22} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={nextImage}
+                      className="absolute left-4 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/80 opacity-0 shadow-md transition-opacity hover:bg-white group-hover:opacity-100"
+                    >
+                      <ChevronLeft size={22} />
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Thumbnails strip */}
+              {allImages.length > 0 && (
+                <div className="flex items-center gap-2">
+                  {allImages.length > 5 && (
+                    <button
+                      type="button"
+                      className="shrink-0 text-gray-400 transition-colors hover:text-[#064e3b]"
+                      onClick={() => scrollThumbs(1)}
+                    >
+                      <ChevronRight size={20} />
+                    </button>
+                  )}
+                  <div
+                    ref={thumbStripRef}
+                    className="flex gap-2 overflow-x-auto scroll-smooth"
+                    style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' } as React.CSSProperties}
+                  >
+                    {allImages.map((img, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handleImageChange(idx, img)}
+                        className={`h-20 w-20 shrink-0 overflow-hidden rounded border-2 transition-colors ${activeThumb === idx ? '' : 'border-gray-200'}`}
+                        style={activeThumb === idx ? { borderColor: GREEN } : {}}
+                      >
+                        <img src={img} alt={`صورة ${idx + 1}`} className="h-full w-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                  {allImages.length > 5 && (
+                    <button
+                      type="button"
+                      className="shrink-0 text-gray-400 transition-colors hover:text-[#064e3b]"
+                      onClick={() => scrollThumbs(-1)}
+                    >
+                      <ChevronLeft size={20} />
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Product info — appears on the right in RTL */}
+            <div className="order-2 flex flex-col gap-6 lg:order-1">
+              {/* Title group — shop tag, title and rating sit tightly together (gap-sm = 8px) */}
+              <div className="flex flex-col gap-2">
+                {/* Shop tag */}
+                <div className="flex items-center gap-2 mb-2">
+                  <div
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold"
+                    style={{ backgroundColor: `${GREEN}1a`, color: GREEN }}
+                  >
+                    {shopName?.trim()?.[0] ?? '🏪'}
+                  </div>
+                  <button
+                    type="button"
+                    className="text-sm font-bold hover:underline"
+                    style={{ color: GREEN }}
+                    onClick={() => { if (product?.shop_id) navigate(`/store/${product.shop_id}`); }}
+                  >
+                    {safeText(shopName)}
+                  </button>
+                  <span className="rounded bg-gray-100 px-2 py-0.5 text-[10px] text-gray-600">موثوق</span>
+                </div>
+
+                {/* Title — headline-lg = 32px / 600 */}
+                <h1 className="text-[28px] font-bold leading-tight md:text-[32px] md:leading-[40px]" style={{ color: GREEN }}>
                   {safeText(product?.title)}
                 </h1>
 
-                <div className="rating-row">
-                  <div className="stars">★★★★★</div>
-                  <span className="rating-text">
-                    <strong>{ratingAvg !== null ? ratingAvg.toFixed(1) : NOT_FOUND}</strong>
-                    {" "}من 5 · ({reviewsCount ? reviewsCount : NOT_FOUND} تقييم)
+                {/* Rating */}
+                <div className="flex items-center gap-4">
+                  <div className="flex">{renderStars(ratingAvg ?? 0, 20)}</div>
+                  <span className="text-sm text-gray-500">
+                    {ratingAvg !== null ? ratingAvg.toFixed(1) : NOT_FOUND} ({reviewsCount} تقييم)
                   </span>
                 </div>
-
-                <div className="divider"></div>
-
-                <div className="price-row">
-                  <span className="price-main">
-                    {discountValue !== null && displayPrice != null
-                      ? (displayPrice * (1 - discountValue / 100)).toFixed(1)
-                      : displayPrice ?? NOT_FOUND}
-                  </span>
-                  <span className="price-currency">₪</span>
-                  {discountValue !== null && product?.price != null && (
-                    <>
-                      <span className="price-old">{product.price} ₪</span>
-                      <span className="price-save">{`وفر ${discountValue}%`}</span>
-                    </>
-                  )}
-                </div>
-
-                <div className="stock-row">
-                  <div className="stock-dot low"></div>
-                  <span className="stock-label low">كمية</span>
-                  <span className="stock-count">
-                    {selectedVariant
-                      ? `– تبقى ${selectedVariant.quantity ?? 0} قطع`
-                      : typeof product?.stock_Quantity === "number"
-                        ? `– تبقى ${product.stock_Quantity} قطع`
-                        : NOT_FOUND}
-                  </span>
-                </div>
-
-                <div className="divider"></div>
-
-                {/* COLOR & SIZE VARIANTS */}
-                {variants.length > 0 && (
-                  <>
-                    {hasColors && (
-                      <div className="variants-section">
-                        <div className="section-label">
-                          اللون{selectedColor ? `: ${parseColorEntry(selectedColor).name}` : ''}
-                        </div>
-                        <div className="color-options">
-                          {uniqueColors.map(color => {
-                            const { name: cName, hex: cHex } = parseColorEntry(color);
-                            return (
-                              <button
-                                key={color}
-                                type="button"
-                                className={`color-swatch${selectedColor === color ? ' active' : ''}`}
-                                style={{ backgroundColor: cHex } as React.CSSProperties}
-                                onClick={() => { setSelectedColor(color); setSelectedSize(null); }}
-                                title={cName}
-                                aria-label={cName}
-                              />
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {hasSizes && (
-                      <div className="variants-section">
-                        <div className="section-label">
-                          المقاس{selectedSize ? `: ${selectedSize}` : ''}
-                        </div>
-                        <div className="size-options">
-                          {sizesToShow.map(size => {
-                            const available = isSizeAvailable(size);
-                            return (
-                              <button
-                                key={size}
-                                type="button"
-                                className={`size-chip${selectedSize === size ? ' active' : ''}${!available ? ' unavailable' : ''}`}
-                                onClick={() => available && setSelectedSize(size)}
-                                disabled={!available}
-                                title={!available ? 'نفد المخزون' : size}
-                              >
-                                {size}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        {hasColors && !selectedColor && (
-                          <p className="variants-hint">اختر اللون أولاً لمعرفة المقاسات المتاحة</p>
-                        )}
-                      </div>
-                    )}
-                  </>
-                )}
-
-                <div className="qty-row">
-                  <div className="section-label" style={{ marginBottom: '0' }}>الكمية</div>
-                  <div className="qty-control">
-                    <button className="qty-btn" onClick={() => updateQty(-1)}>−</button>
-                    <input className="qty-value" value={qty} readOnly aria-label="Quantity" />
-                    <button className="qty-btn" onClick={() => updateQty(1)}>+</button>
-                  </div>
-                </div>
-
-                <div className="btn-group">
-                  <button className="btn-cart" onClick={addToCart}>
-                    🛒 أضف إلى السلة
-                  </button>
-                  <button
-                    className={`btn-fav ${isFav ? 'active' : ''}`}
-                    onClick={toggleFav}
-                    title="أضف للمفضلة"
-                  >
-                    {isFav ? '♥' : '♡'}
-                  </button>
-                  <div className="share-wrapper" ref={shareRef}>
-                    <button
-                      className="btn-share"
-                      title="مشاركة"
-                      onClick={() => setShowShareMenu(prev => !prev)}
-                    >
-                      ↗
-                    </button>
-                    {showShareMenu && (
-                      <div className="share-menu">
-                        {shareOptions.map(opt => (
-                          <button
-                            key={opt.label}
-                            type="button"
-                            className={`share-opt ${opt.className}`}
-                            onClick={() => handleShareOption(opt)}
-                          >
-                            <span className="share-opt-icon">{opt.icon}</span>
-                            <span>{opt.label}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {cartMsg && <p className="cart-msg">{cartMsg}</p>}
               </div>
 
-              {/* RIGHT: Gallery */}
-              <div className="product-gallery">
-                {/* Main image with arrows */}
-                <div className="main-image-wrap">
-                  <img src={mainImage} alt={safeText(product?.title)} />
-                  {discountValue !== null && (
-                    <div className="image-badge">{`خصم ${discountValue}%`}</div>
+              {/* Price — display-lg = 48px / 700 / -0.02em */}
+              <div className="flex flex-wrap items-baseline gap-4">
+                <span className="text-[40px] font-bold leading-none tracking-tight md:text-[48px]" style={{ color: GREEN }}>
+                  {discountedPrice !== null
+                    ? discountedPrice.toFixed(2)
+                    : (displayPrice ?? NOT_FOUND)} ₪
+                </span>
+                {discountValue !== null && product?.price != null && (
+                  <span className="text-2xl text-gray-500 line-through">{product.price} ₪</span>
+                )}
+              </div>
+
+              {/* Stock */}
+              <div className="flex items-center gap-2">
+                <span
+                  className={`h-2 w-2 rounded-full ${stockState === 'in' ? 'bg-green-500' : stockState === 'out' ? 'bg-red-500' : 'bg-gray-400'}`}
+                />
+                <span
+                  className={`text-sm font-bold ${stockState === 'in' ? 'text-green-600' : stockState === 'out' ? 'text-red-600' : 'text-gray-500'}`}
+                >
+                  {stockState === 'in'
+                    ? (stockQty !== null && stockQty <= 10
+                        ? `متوفر في المخزون — تبقى ${stockQty} قطع`
+                        : 'متوفر في المخزون')
+                    : stockState === 'out'
+                      ? 'غير متوفر حالياً'
+                      : NOT_FOUND}
+                </span>
+              </div>
+
+              {/* Variants */}
+              {variants.length > 0 && (
+                <div className="flex flex-col gap-6">
+                  {hasColors && (
+                    <div className="flex flex-col gap-2">
+                      <span className="text-sm font-bold">
+                        اللون:{' '}
+                        <span className="font-normal text-gray-500">
+                          {selectedColor ? parseColorEntry(selectedColor).name : 'اختر اللون'}
+                        </span>
+                      </span>
+                      <div className="flex flex-wrap gap-4">
+                        {uniqueColors.map(color => {
+                          const { name, hex } = parseColorEntry(color);
+                          const active = selectedColor === color;
+                          return (
+                            <button
+                              key={color}
+                              type="button"
+                              title={name}
+                              aria-label={name}
+                              onClick={() => { setSelectedColor(color); setSelectedSize(null); }}
+                              className="h-8 w-8 rounded-xl border border-gray-300 transition"
+                              style={{
+                                backgroundColor: hex,
+                                outline: active ? `2px solid ${GREEN}` : 'none',
+                                outlineOffset: '2px',
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
                   )}
-                  {allImages.length > 1 && (
-                    <>
-                      <button className="gallery-arrow gallery-arrow-prev" onClick={prevImage}>‹</button>
-                      <button className="gallery-arrow gallery-arrow-next" onClick={nextImage}>›</button>
-                    </>
+
+                  {hasSizes && (
+                    <div className="flex flex-col gap-2">
+                      <span className="text-sm font-bold">
+                        المقاس:{' '}
+                        <span className="font-normal text-gray-500">{selectedSize ?? 'اختر المقاس'}</span>
+                      </span>
+                      <div className="flex flex-wrap gap-4">
+                        {sizesToShow.map(size => {
+                          const available = isSizeAvailable(size);
+                          const active = selectedSize === size;
+                          return (
+                            <button
+                              key={size}
+                              type="button"
+                              disabled={!available}
+                              onClick={() => available && setSelectedSize(size)}
+                              title={!available ? 'نفد المخزون' : size}
+                              className={`rounded-xl border px-6 py-2 text-sm transition-all ${active ? 'text-white' : 'hover:border-[#064e3b]'} ${!available ? 'cursor-not-allowed bg-gray-100 opacity-40' : ''}`}
+                              style={active ? { backgroundColor: GREEN, borderColor: GREEN } : { borderColor: '#d1d5db' }}
+                            >
+                              {size}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {hasColors && !selectedColor && (
+                        <p className="text-xs text-gray-400">اختر اللون أولاً لمعرفة المقاسات المتاحة</p>
+                      )}
+                    </div>
                   )}
                 </div>
+              )}
 
-                {/* Thumbnails row below the main image */}
-                {allImages.length > 0 && (
-                  <div className="thumbs-wrap">
-                    {allImages.length > THUMBS_PER_PAGE && (
+              {/* Actions */}
+              <div className="flex flex-col gap-4 border-t border-gray-200 pt-6">
+                {/* Quantity */}
+                <div className="flex items-center gap-4">
+                  <span className="text-sm font-bold">الكمية:</span>
+                  <div className="flex items-center overflow-hidden rounded-lg border border-gray-300 bg-gray-50">
+                    <button type="button" onClick={() => updateQty(-1)} className="p-2 transition-colors hover:bg-gray-100">
+                      <Minus size={18} />
+                    </button>
+                    <input
+                      value={qty}
+                      readOnly
+                      aria-label="الكمية"
+                      className="w-12 bg-transparent text-center font-bold outline-none"
+                    />
+                    <button type="button" onClick={() => updateQty(1)} className="p-2 transition-colors hover:bg-gray-100">
+                      <Plus size={18} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Buttons */}
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                  <button
+                    type="button"
+                    onClick={addToCart}
+                    className="flex items-center justify-center gap-2 rounded-lg py-4 font-bold text-white transition-opacity hover:opacity-90 md:col-span-2"
+                    style={{ backgroundColor: GREEN }}
+                  >
+                    <ShoppingCart size={20} /> أضف إلى السلة
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBuyNow}
+                    className="rounded-lg border-2 py-4 font-bold transition-colors hover:bg-[#064e3b]/5"
+                    style={{ borderColor: GREEN, color: GREEN }}
+                  >
+                    شراء الآن
+                  </button>
+                  <div className="flex gap-4">
+                    <button
+                      type="button"
+                      onClick={toggleFav}
+                      title="أضف للمفضلة"
+                      className={`flex flex-1 items-center justify-center rounded-lg border transition-colors ${isFav ? 'border-red-200 bg-red-50' : 'border-gray-200 hover:bg-gray-100'}`}
+                    >
+                      <Heart size={20} className={isFav ? 'fill-red-500 text-red-500' : 'text-gray-600'} />
+                    </button>
+                    <div className="relative flex-1" ref={shareRef}>
                       <button
                         type="button"
-                        className="thumbs-arrow thumbs-arrow-prev"
-                        onClick={() => setThumbOffset(o => Math.max(0, o - 1))}
-                        disabled={thumbOffset === 0}
-                      >‹</button>
-                    )}
-                    <div className="thumbs">
-                      {allImages.slice(thumbOffset, thumbOffset + THUMBS_PER_PAGE).map((img, idx) => {
-                        const realIdx = thumbOffset + idx;
+                        title="مشاركة"
+                        onClick={() => setShowShareMenu(prev => !prev)}
+                        className="flex h-full w-full items-center justify-center rounded-lg border border-gray-200 transition-colors hover:bg-gray-100"
+                      >
+                        <Share2 size={20} className="text-gray-600" />
+                      </button>
+                      {showShareMenu && (
+                        <div className="absolute bottom-full left-0 z-20 mb-2 w-44 rounded-lg border border-gray-200 bg-white p-2 shadow-xl">
+                          {shareOptions.map(opt => (
+                            <button
+                              key={opt.label}
+                              type="button"
+                              onClick={() => handleShareOption(opt)}
+                              className="flex w-full items-center gap-2 rounded-lg p-2 text-sm transition-colors hover:bg-gray-100"
+                            >
+                              <span>{opt.icon}</span>
+                              <span>{opt.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {cartMsg && <p className="text-sm font-bold" style={{ color: GREEN }}>{cartMsg}</p>}
+              </div>
+
+              {/* Delivery / trust card */}
+              <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white" style={{ color: GREEN }}>
+                    <Truck size={20} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold">توصيل بواسطة سوق لينك</p>
+                    <p className="text-xs text-gray-500">توصيل سريع وآمن إلى باب منزلك</p>
+                  </div>
+                </div>
+                <div className="border-t border-gray-200" />
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white" style={{ color: GREEN }}>
+                    <CreditCard size={20} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold">الشحن</p>
+                    <p className="text-xs text-gray-500">يتم حسابه عند إتمام الدفع</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* TABS SECTION */}
+          <section className="mt-16">
+            <div className="flex gap-10 overflow-x-auto border-b border-gray-200">
+              {[
+                { key: 'desc', label: 'الوصف' },
+                { key: 'specs', label: 'المواصفات' },
+                { key: 'reviews', label: `التقييمات (${reviewsCount})` },
+              ].map(t => (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setActiveTab(t.key)}
+                  className={`whitespace-nowrap pb-4 text-xl font-bold transition-colors md:text-2xl ${activeTab === t.key ? '' : 'text-gray-400 hover:text-[#064e3b]'}`}
+                  style={activeTab === t.key ? { color: GREEN, borderBottom: `2px solid ${GREEN}` } : {}}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="py-10">
+              {/* Description */}
+              {activeTab === 'desc' && (
+                <div className="max-w-none text-lg leading-relaxed text-gray-600">
+                  <p className="whitespace-pre-line">{safeText(product?.description)}</p>
+                </div>
+              )}
+
+              {/* Specifications */}
+              {activeTab === 'specs' && (
+                attributes.length === 0 ? (
+                  <p className="text-gray-500">المواصفات غير متوفرة حالياً</p>
+                ) : (
+                  <table className="w-full table-fixed border-collapse overflow-hidden rounded-lg border border-gray-200">
+                    <tbody>
+                      {attributes.map((attr, i) => (
+                        <tr key={i} className={i % 2 === 0 ? 'bg-gray-50' : ''}>
+                          <td className="w-1/3 p-4 align-top font-bold" style={{ color: GREEN }}>
+                            {attr.attribute_name}
+                          </td>
+                          <td className="p-4 text-gray-600">{String(attr.attribute_value ?? '')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )
+              )}
+
+              {/* Reviews */}
+              {activeTab === 'reviews' && (
+                <div className="grid grid-cols-1 gap-10 lg:grid-cols-3">
+                  {/* Summary column */}
+                  <div className="flex flex-col gap-4">
+                    <div className="flex flex-col items-center gap-2 rounded-2xl border border-gray-200 bg-white p-6">
+                      <span className="text-[64px] font-bold leading-none" style={{ color: GREEN }}>
+                        {ratingAvg !== null ? ratingAvg.toFixed(1) : '—'}
+                      </span>
+                      <div className="flex">{renderStars(ratingAvg ?? 0, 28)}</div>
+                      <span className="text-sm text-gray-500">بناءً على {reviewsCount} تقييم</span>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {[5, 4, 3, 2, 1].map(star => {
+                        const pct = reviewsCount ? ((ratingDist[star] ?? 0) / reviewsCount) * 100 : 0;
                         return (
-                          <div
-                            key={realIdx}
-                            className={`thumb ${activeThumb === realIdx ? 'active' : ''}`}
-                            onClick={() => handleImageChange(realIdx, img)}
-                          >
-                            <img src={img} alt={`Product view ${realIdx + 1}`} />
+                          <div key={star} className="flex items-center gap-2">
+                            <span className="w-4 text-xs">{star}</span>
+                            <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-200">
+                              <div className="h-full bg-amber-500" style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="w-8 text-left text-xs text-gray-500">{Math.round(pct)}%</span>
                           </div>
                         );
                       })}
                     </div>
-                    {allImages.length > THUMBS_PER_PAGE && (
-                      <button
-                        type="button"
-                        className="thumbs-arrow thumbs-arrow-next"
-                        onClick={() => setThumbOffset(o => Math.min(allImages.length - THUMBS_PER_PAGE, o + 1))}
-                        disabled={thumbOffset >= allImages.length - THUMBS_PER_PAGE}
-                      >›</button>
-                    )}
                   </div>
-                )}
-              </div>
-            </div>
 
-            {/* TABS */}
-            <div className="tabs-section">
-              <div className="tabs-header">
-                <button
-                  className={`tab-btn ${activeTab === 'desc' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('desc')}
-                >
-                  الوصف
-                </button>
-                <button
-                  className={`tab-btn ${activeTab === 'specs' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('specs')}
-                >
-                  المواصفات
-                </button>
-                <button
-                  className={`tab-btn ${activeTab === 'reviews' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('reviews')}
-                >
-                  التقييمات ({reviewsCount ? reviewsCount : 0})
-                </button>
-              </div>
-
-              {activeTab === 'desc' && (
-                <div className="tab-content">
-                  <h4>عن المنتج</h4>
-                  <p>{safeText(product?.description)}</p>
-                </div>
-              )}
-
-              {activeTab === 'specs' && (
-                <div className="tab-content">
-                  {attributes.length === 0 ? (
-                    <p className="specs-empty">المواصفات غير متوفرة حالياً</p>
-                  ) : (
-                    <table className="spec-table">
-                      <thead>
-                        <tr>
-                          <th>الخاصية</th>
-                          <th>القيمة</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {attributes.map((attr, i) => (
-                          <tr key={i}>
-                            <td>{attr.attribute_name}</td>
-                            <td>{String(attr.attribute_value ?? '')}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              )}
-
-              {activeTab === 'reviews' && (
-                <div className="tab-content">
-
-                  {/* ── Rating Summary ── */}
-                  {reviewsCount > 0 && (
-                    <div className="rv-summary">
-                      <div className="rv-summary-score">
-                        <span className="rv-big-score">{ratingAvg !== null ? ratingAvg.toFixed(1) : '—'}</span>
-                        <span className="rv-big-stars">
-                          {[1,2,3,4,5].map(s => (
-                            <span key={s} className={s <= Math.round(ratingAvg ?? 0) ? 'rv-star filled' : 'rv-star'}>★</span>
-                          ))}
-                        </span>
-                        <span className="rv-total-count">{reviewsCount} تقييم</span>
+                  {/* Form + list column */}
+                  <div className="flex flex-col gap-6 lg:col-span-2">
+                    {/* Review form / auth states */}
+                    {authLoading ? (
+                      <p className="text-gray-500">جاري التحقق من حسابك...</p>
+                    ) : !currentUser ? (
+                      <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm">
+                        يجب تسجيل الدخول لإضافة تقييم —{' '}
+                        <button
+                          type="button"
+                          className="font-bold underline"
+                          style={{ color: GREEN }}
+                          onClick={() => setShowLoginModal(true)}
+                        >
+                          تسجيل الدخول
+                        </button>
                       </div>
-                      <div className="rv-dist">
-                        {[5,4,3,2,1].map(star => (
-                          <div key={star} className="rv-dist-row">
-                            <span className="rv-dist-label">{star} ★</span>
-                            <div className="rv-dist-bar-wrap">
-                              <div
-                                className="rv-dist-bar-fill"
-                                style={{ '--bar-pct': reviewsCount ? `${((ratingDist[star] ?? 0) / reviewsCount) * 100}%` : '0%' } as React.CSSProperties}
-                              />
-                            </div>
-                            <span className="rv-dist-count">{ratingDist[star] ?? 0}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── Submit Form ── */}
-                  {authLoading ? (
-                    <p className="review-info-msg">جاري التحقق من حسابك...</p>
-                  ) : !currentUser ? (
-                    <div className="rv-guest-prompt">
-                      <p>يجب تسجيل الدخول لإضافة تقييم — <a href="/login">تسجيل الدخول</a></p>
-                    </div>
-                  ) : userRole !== 'customer' ? (
-                    <p className="review-info-msg">فقط العملاء يمكنهم إضافة تقييم.</p>
-                  ) : reviewSuccess ? (
-                    <p className="review-success-msg">✅ تم إرسال تقييمك بنجاح، شكراً لك!</p>
-                  ) : (
-                    <div className="review-form">
-                      <h4 className="review-form-title">أضف تقييمك</h4>
-                      <div className="review-stars-row">
-                        <span className="review-label">تقييمك:</span>
-                        <div className="review-stars">
-                          {[1, 2, 3, 4, 5].map(star => (
-                            <button
-                              key={star}
-                              type="button"
-                              className={`review-star ${star <= (hoverRating || reviewRating) ? 'filled' : ''}`}
-                              onClick={() => setReviewRating(star)}
-                              onMouseEnter={() => setHoverRating(star)}
-                              onMouseLeave={() => setHoverRating(0)}
-                            >★</button>
-                          ))}
-                        </div>
-                      </div>
-                      <textarea
-                        className="review-textarea"
-                        placeholder="اكتب تقييمك هنا..."
-                        value={reviewText}
-                        onChange={e => setReviewText(e.target.value)}
-                        rows={4}
-                      />
-                      <div className="review-photo-section">
-                        <label className="review-photo-label" htmlFor="review-photo-input">
-                          📷 أضف صور (اختياري)
-                        </label>
-                        <input
-                          id="review-photo-input"
-                          type="file"
-                          accept="image/*"
-                          multiple
-                          className="review-photo-input"
-                          onChange={e => {
-                            const files = Array.from(e.target.files ?? []);
-                            setReviewPhotos(prev => [...prev, ...files]);
-                            setReviewPhotoPreviews(prev => [...prev, ...files.map(f => URL.createObjectURL(f))]);
-                            e.target.value = '';
-                          }}
-                        />
-                        {reviewPhotoPreviews.length > 0 && (
-                          <div className="review-photo-grid">
-                            {reviewPhotoPreviews.map((src, idx) => (
-                              <div key={idx} className="review-photo-thumb">
-                                <img src={src} alt={`معاينة ${idx + 1}`} />
-                                <button
-                                  type="button"
-                                  className="review-photo-delete"
-                                  onClick={() => {
-                                    setReviewPhotos(prev => prev.filter((_, i) => i !== idx));
-                                    setReviewPhotoPreviews(prev => prev.filter((_, i) => i !== idx));
-                                  }}
-                                >×</button>
-                              </div>
+                    ) : userRole !== 'customer' ? (
+                      <p className="text-gray-500">فقط العملاء يمكنهم إضافة تقييم.</p>
+                    ) : reviewSuccess ? (
+                      <p className="font-bold text-green-600">✅ تم إرسال تقييمك بنجاح، شكراً لك!</p>
+                    ) : (
+                      <div className="flex flex-col gap-4 rounded-2xl border border-gray-200 p-5">
+                        <h4 className="font-bold" style={{ color: GREEN }}>أضف تقييمك</h4>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm">تقييمك:</span>
+                          <div className="flex">
+                            {[1, 2, 3, 4, 5].map(star => (
+                              <button
+                                key={star}
+                                type="button"
+                                onClick={() => setReviewRating(star)}
+                                onMouseEnter={() => setHoverRating(star)}
+                                onMouseLeave={() => setHoverRating(0)}
+                              >
+                                <Star
+                                  size={24}
+                                  className={star <= (hoverRating || reviewRating) ? 'fill-amber-500 text-amber-500' : 'text-gray-300'}
+                                />
+                              </button>
                             ))}
                           </div>
-                        )}
+                        </div>
+                        <textarea
+                          className="w-full rounded-xl border border-gray-200 bg-gray-50 p-3 outline-none transition-colors focus:border-[#064e3b]"
+                          placeholder="اكتب تقييمك هنا..."
+                          value={reviewText}
+                          onChange={e => setReviewText(e.target.value)}
+                          rows={4}
+                        />
+                        <div>
+                          <label
+                            htmlFor="review-photo-input"
+                            className="inline-flex cursor-pointer items-center gap-2 text-sm font-bold"
+                            style={{ color: GREEN }}
+                          >
+                            <Camera size={18} /> أضف صور (اختياري)
+                          </label>
+                          <input
+                            id="review-photo-input"
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            className="hidden"
+                            onChange={e => {
+                              const files = Array.from(e.target.files ?? []);
+                              setReviewPhotos(prev => [...prev, ...files]);
+                              setReviewPhotoPreviews(prev => [...prev, ...files.map(f => URL.createObjectURL(f))]);
+                              e.target.value = '';
+                            }}
+                          />
+                          {reviewPhotoPreviews.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {reviewPhotoPreviews.map((src, idx) => (
+                                <div key={idx} className="relative h-20 w-20">
+                                  <img src={src} alt={`معاينة ${idx + 1}`} className="h-full w-full rounded-lg object-cover" />
+                                  <button
+                                    type="button"
+                                    className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs text-white"
+                                    onClick={() => {
+                                      setReviewPhotos(prev => prev.filter((_, i) => i !== idx));
+                                      setReviewPhotoPreviews(prev => prev.filter((_, i) => i !== idx));
+                                    }}
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {reviewError && <p className="text-sm text-red-600">{reviewError}</p>}
+                        <button
+                          type="button"
+                          onClick={submitReview}
+                          disabled={reviewSubmitting}
+                          className="self-start rounded-xl px-6 py-3 font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+                          style={{ backgroundColor: GREEN }}
+                        >
+                          {reviewSubmitting ? 'جاري الإرسال...' : 'إرسال التقييم'}
+                        </button>
                       </div>
-                      {reviewError && <p className="review-error-msg">{reviewError}</p>}
-                      <button
-                        type="button"
-                        className="review-submit-btn"
-                        onClick={submitReview}
-                        disabled={reviewSubmitting}
-                      >
-                        {reviewSubmitting ? 'جاري الإرسال...' : 'إرسال التقييم'}
-                      </button>
-                    </div>
-                  )}
+                    )}
 
-                  {/* ── Review Cards ── */}
-                  {reviews.length === 0 ? (
-                    <p className="review-info-msg rv-empty-msg">لا توجد تقييمات بعد — كن أول من يقيّم هذا المنتج!</p>
-                  ) : (
-                    <div className="rv-list">
-                      {reviews.map(r => (
-                        <div key={r.id} className="rv-card">
-                          <div className="rv-card-top">
-                            <div className="rv-avatar">{(r.customerName?.[0] ?? '؟')}</div>
-                            <div className="rv-card-body">
-                              <span className="rv-card-name">{r.customerName}</span>
-                              {r.review_text && <p className="rv-card-text">{r.review_text}</p>}
-                              <div className="rv-card-stars">
-                                {[1,2,3,4,5].map(s => (
-                                  <span key={s} className={s <= r.rating ? 'rv-star filled' : 'rv-star'}>★</span>
-                                ))}
+                    {/* Reviews list */}
+                    {reviews.length === 0 ? (
+                      <p className="text-gray-500">لا توجد تقييمات بعد — كن أول من يقيّم هذا المنتج!</p>
+                    ) : (
+                      reviews.map(r => (
+                        <div key={r.id} className="border-b border-gray-200 pb-6">
+                          <div className="mb-4 flex items-start justify-between">
+                            <div className="flex items-center gap-3">
+                              <div
+                                className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 font-bold"
+                                style={{ color: GREEN }}
+                              >
+                                {r.customerName?.[0] ?? '؟'}
+                              </div>
+                              <div>
+                                <p className="font-bold">{r.customerName}</p>
+                                <p className="text-xs text-gray-500">
+                                  {new Intl.DateTimeFormat('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(r.created_at))}
+                                </p>
                               </div>
                             </div>
-                            <span className="rv-card-date rv-card-date--push">
-                              {new Intl.DateTimeFormat('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(r.created_at))}
-                            </span>
+                            <div className="flex">{renderStars(r.rating, 18)}</div>
                           </div>
-                          {/* Row 4: photos */}
+                          {r.review_text && <p className="mb-4 text-gray-600">{r.review_text}</p>}
                           {Array.isArray(r.image_urls) && r.image_urls.length > 0 && (
-                            <div className="rv-card-photos">
+                            <div className="mb-4 flex flex-wrap gap-2">
                               {r.image_urls.map((url: string, idx: number) => (
                                 <img
                                   key={idx}
                                   src={url}
                                   alt={`صورة ${idx + 1}`}
-                                  className="rv-card-photo rv-card-photo--zoomable"
+                                  className="h-20 w-20 cursor-pointer rounded-lg border border-gray-200 object-cover"
                                   onClick={() => setLightboxUrl(url)}
                                 />
                               ))}
                             </div>
                           )}
                           {r.reply && (
-                            <div className="rv-merchant-reply">
-                              <span className="rv-reply-label">رد التاجر:</span>
-                              <p className="rv-reply-text">{r.reply.reply_text}</p>
+                            <div className="mt-4 rounded-lg bg-gray-50 p-4">
+                              <p className="mb-1 text-xs font-bold" style={{ color: GREEN }}>رد المتجر:</p>
+                              <p className="text-xs text-gray-600">{r.reply.reply_text}</p>
                             </div>
                           )}
                         </div>
-                      ))}
-                    </div>
-                  )}
+                      ))
+                    )}
+                  </div>
                 </div>
               )}
             </div>
-        </>
-      </div>
+          </section>
+
+          {/* SIMILAR PRODUCTS */}
+          {relatedProducts.length > 0 && (
+            <section className="mt-16">
+              <h2 className="mb-6 text-2xl font-bold" style={{ color: GREEN }}>منتجات مشابهة قد تعجبك</h2>
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                {relatedProducts.map((p) => {
+                  const img = Array.isArray(p.image_urls) ? p.image_urls.filter(Boolean)[0] : null;
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => navigate(`/product/${p.id}`)}
+                      className="group cursor-pointer overflow-hidden rounded-lg border border-gray-200 bg-white transition-shadow hover:shadow-lg"
+                    >
+                      <div className="aspect-square overflow-hidden bg-gray-50">
+                        {img ? (
+                          <img
+                            src={img}
+                            alt={p.title ?? ''}
+                            loading="lazy"
+                            className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-3xl text-gray-300">🛍</div>
+                        )}
+                      </div>
+                      <div className="p-3">
+                        <h4 className="line-clamp-1 text-sm font-bold">{safeText(p.title)}</h4>
+                        {p.price != null && (
+                          <p className="mt-1 font-bold" style={{ color: GREEN }}>{p.price} ₪</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+        </div>
+      </main>
+
       {showCartConfirm && product && (
         <CartConfirmModal
           onConfirm={() => {

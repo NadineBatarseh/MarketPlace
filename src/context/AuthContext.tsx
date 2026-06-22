@@ -33,6 +33,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const wasLoggedIn = useRef(false);
+  // tracks the user id for which we've already completed the DB fetch
+  const fetchedForUserIdRef = useRef<string | null>(null);
 
   // Step 1: listen for auth changes — no async DB work here
   useEffect(() => {
@@ -48,7 +50,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         wasLoggedIn.current = true;
         // On a fresh login the initial empty-session already set isLoading=false.
         // Re-arm it so RoleGuard waits for the role DB fetch to complete.
-        if (event === 'SIGNED_IN') setIsLoading(true);
+        // Only re-arm for a genuinely new user; tab-return SIGNED_IN events for the
+        // same user must NOT set isLoading=true because the step-2 effect won't
+        // re-run (deps unchanged), which would leave isLoading stuck at true (white page).
+        if (event === 'SIGNED_IN' && session.user.id !== fetchedForUserIdRef.current) {
+          setIsLoading(true);
+        }
         setRawUser(session.user);
       }
     });
@@ -59,23 +66,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (rawUser === undefined) return; // not yet resolved
     if (rawUser === null) {
+      fetchedForUserIdRef.current = null;
       setRole(null);
       setName(null);
       setStatus(null);
       setIsLoading(false);
       return;
     }
-    fetchUserData(rawUser.id).then(async userData => {
+    const userId = rawUser.id;
+    fetchUserData(userId).then(async userData => {
       if (userData.role) {
         setRole(userData.role);
         setName(userData.name);
         setStatus(userData.status);
+        fetchedForUserIdRef.current = userId;
         setIsLoading(false);
         return;
       }
 
       // No public.Users row but user exists in auth and email is confirmed
-      // Only auto-create for customers — merchants/delivery/hub go through admin approval
+      // Only auto-create for customers — merchants/delivery go through admin approval
       if (rawUser.email_confirmed_at) {
         const role = rawUser.user_metadata?.role?.trim() || 'customer';
         if (role === 'customer') {
@@ -94,6 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setStatus('approved');
         }
       }
+      fetchedForUserIdRef.current = userId;
       setIsLoading(false);
     });
   }, [rawUser?.id, rawUser === null]);

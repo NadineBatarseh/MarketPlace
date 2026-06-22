@@ -19,8 +19,6 @@ interface RecentOrder {
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   pending:            { label: 'تحضير',            color: '#f59e0b' },
   pending_collection: { label: 'انتظار استلام',     color: '#8b5cf6' },
-  at_hub:             { label: 'في الهاب',          color: '#3b82f6' },
-  consolidated:       { label: 'تمت المعالجة',      color: '#6366f1' },
   delivering:         { label: 'الشحن',             color: '#0ea5e9' },
   completed:          { label: 'تم التسليم',        color: '#16a34a' },
   cancelled:          { label: 'ملغي',              color: '#dc2626' },
@@ -59,7 +57,7 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
 
       const orderIds = [...new Set((detailRows ?? []).map(r => r.order_id as number))];
 
-      const PENDING_STATUSES = ['pending', 'at_hub', 'pending_collection'];
+      const PENDING_STATUSES = ['pending', 'pending_collection'];
       let unpaidTotal = 0;
       let accountBalance = 0;
       let newOrders = 0;

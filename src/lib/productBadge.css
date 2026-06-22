@@ -1,0 +1,22 @@
+/* Shared product-card badge — top-right corner of the card image.
+   Hearts/wishlist buttons sit top-left across all cards, so this never overlaps. */
+.pbadge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 4px 9px;
+  border-radius: 5px;
+  color: #fff;
+  letter-spacing: .2px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, .18);
+  pointer-events: none;
+}
+
+.pbadge--oos  { background: #6b7280; }  /* out of stock — neutral grey */
+.pbadge--disc { background: #dc2626; }  /* discount — red */
+.pbadge--low  { background: #ea8a00; }  /* limited quantity — amber */
+.pbadge--new  { background: #136540; }  /* new — brand green */

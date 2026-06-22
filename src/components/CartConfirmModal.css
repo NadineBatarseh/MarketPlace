@@ -57,6 +57,6 @@
 }
 
 .ccm-btn-danger {
-  background: #d9534f;
+  background: var(--color-danger);
   color: #fff;
 }

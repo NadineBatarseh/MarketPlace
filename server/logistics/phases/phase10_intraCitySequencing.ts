@@ -1,5 +1,5 @@
 import { C } from '../constants.js';
-import { haversineDistance } from '../formulas.js';
+import { getRoadDistanceKm } from '../distanceProvider.js';
 import { Coordinates, IntraCityTask } from '../types.js';
 
 // Phase 10 â€” Intra-City Sequencing
@@ -34,7 +34,7 @@ function scoreTask(
   task: IntraCityTask,
   currentLocation: Coordinates
 ): number {
-  const dist = haversineDistance(
+  const dist = getRoadDistanceKm(
     currentLocation.lat, currentLocation.lng,
     task.location.lat, task.location.lng
   );
@@ -110,7 +110,7 @@ function totalDistance(
   let dist = 0;
   let prev = entryPoint;
   for (const task of sequence) {
-    dist += haversineDistance(prev.lat, prev.lng, task.location.lat, task.location.lng);
+    dist += getRoadDistanceKm(prev.lat, prev.lng, task.location.lat, task.location.lng);
     prev = task.location;
   }
   return dist;

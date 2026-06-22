@@ -1,28 +1,206 @@
-/* ── Category hero: override store-hero background ── */
-.store-hero {
-  background-image: url('/storepage-photo.jpg');
+/* ══════════════════════════════════════════════════════════
+   Category Listing Page — "Souq Link" marketplace theme
+   Modern minimalism · dark green / white / soft beige.
+   Reference: /catagorey (DESIGN.md + screen.png)
+
+   All overrides are scoped under `.cat-page`, including a local
+   re-mapping of the brand color tokens, so the shared single-store
+   page keeps its original styling untouched.
+   ══════════════════════════════════════════════════════════ */
+
+.cat-page {
+  /* ── Re-themed palette (scoped) ── */
+  --color-primary:       #064e3b;   /* editorial dark green — CTAs, active states */
+  --color-primary-dark:  #003527;   /* hover / pressed + prices */
+  --color-primary-light: #e8f1ec;   /* green tint backgrounds */
+
+  /* ── Local surface tokens ── */
+  --cat-page-bg:    #f7f7f2;   /* soft beige page surface */
+  --cat-card:       #ffffff;   /* card surface */
+  --cat-canvas:     #f1ece3;   /* product image canvas (beige) */
+  --cat-line:       #ebe9e2;   /* hairline dividers */
+  --cat-line-strong:#dde0db;   /* filter section dividers (reference: outline-variant) */
+  --cat-ink:        #191c1b;   /* main text */
+  --cat-ink-soft:   #5b615c;   /* secondary text */
+  --cat-shadow:     0 4px 20px rgba(0, 0, 0, 0.04);
+  --cat-shadow-lg:  0 14px 34px rgba(0, 53, 39, 0.12);
+
+  background: var(--cat-page-bg);
+  min-height: calc(100vh - 68px);
 }
 
-/* ── Category hero: title & subtitle overrides ── */
-.cat-hero-section .sh-name {
-  font-size: 34px;
+/* ══════════════════════════════════════════════════════════
+   Category hero — faint banner fading into the page surface
+   ══════════════════════════════════════════════════════════ */
+.cat-hero {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  padding: 56px 24px;
+  text-align: center;
+}
+.cat-hero-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+.cat-hero-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.5;
+}
+.cat-hero-fade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(247, 247, 242, 0.55) 0%,
+    var(--cat-page-bg) 100%
+  );
+}
+.cat-hero-content {
+  position: relative;
+  z-index: 1;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+.cat-hero-title {
+  font-family: var(--font-main);
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--color-primary-dark);
+  margin: 0 0 12px;
+}
+.cat-hero-desc {
+  font-family: var(--font-main);
+  font-size: 18px;
+  line-height: 1.7;
+  color: var(--cat-ink-soft);
+  max-width: 640px;
+  margin: 0 auto;
 }
 
-.cat-hero-section .sh-desc {
-  max-width: none;
-  white-space: nowrap;
+/* ══════════════════════════════════════════════════════════
+   Layout
+   ══════════════════════════════════════════════════════════ */
+.cat-page .page-body {
+  max-width: 1280px;
+  padding: 12px 24px 48px;
+  gap: 28px;
 }
 
-/* ── Store filter buttons ── */
+/* ══════════════════════════════════════════════════════════
+   Filters — reference "editorial rail" look (visual only).
+   Content, options, and behavior of CategorySidebar are unchanged;
+   this is a flat, transparent rail with hairline section dividers,
+   green section headers and generous spacing.
+   ══════════════════════════════════════════════════════════ */
+.cat-page .sidebar-panel {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0 0 8px;
+}
+
+/* Header: blends with the page so the sticky rail masks scroll cleanly */
+.cat-page .sp-header {
+  background: var(--cat-page-bg);
+  border-bottom: 1px solid var(--cat-line-strong);
+  border-radius: 0;
+  padding: 4px 2px 16px;
+}
+.cat-page .sp-header-title {
+  color: var(--color-primary-dark);
+  font-weight: 800;
+}
+
+.cat-page .sp-active-chips {
+  padding: 16px 2px 4px;
+}
+.cat-page .sp-chip {
+  background: var(--color-primary-light);
+  border-color: #cbe2d6;
+  color: var(--color-primary-dark);
+}
+
+/* Sections divided by hairlines with airy padding (reference: pb-lg) */
+.cat-page .sp-section {
+  padding: 22px 2px 6px;
+  border-bottom: 1px solid var(--cat-line-strong);
+}
+.cat-page .sp-section:last-child {
+  border-bottom: none;
+}
+
+/* Section titles: primary green, uppercase label treatment */
+.cat-page .sp-section-title {
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.cat-page .sp-section-header {
+  padding-bottom: 14px;
+}
+.cat-page .sp-collapse-icon {
+  color: var(--color-primary);
+  opacity: 0.65;
+}
+.cat-page .sp-section-header:hover .sp-collapse-icon {
+  opacity: 1;
+}
+
+/* Checkbox / radio rows */
+.cat-page .sp-check-item {
+  padding: 8px 4px;
+}
+.cat-page .sp-check-box {
+  border-radius: 6px;
+  border-color: #c4cdc6;
+}
+.cat-page .sp-check-box--radio {
+  border-radius: 50%;
+}
+
+/* Color swatches: ring-offset highlight like the reference */
+.cat-page .sp-swatch {
+  width: 26px;
+  height: 26px;
+}
+.cat-page .sp-swatch--active {
+  box-shadow: 0 0 0 2px var(--cat-page-bg), 0 0 0 4px var(--color-primary);
+}
+
+/* "View more" link in primary green */
+.cat-page .sp-view-more {
+  color: var(--color-primary);
+}
+
+/* Price inputs on the beige canvas, 2px green focus (reference inputs) */
+.cat-page .sp-price-box {
+  background: var(--cat-canvas);
+  border: 1px solid var(--cat-line-strong);
+  border-radius: 8px;
+}
+.cat-page .sp-price-box:focus-within {
+  border: 2px solid var(--color-primary);
+  background: var(--color-primary-light);
+}
+
+/* Store quick-select buttons inside CategorySidebar */
 .cat-store-actions {
   display: flex;
   gap: 6px;
   margin-bottom: 10px;
 }
-
 .cat-store-btn {
   flex: 1;
-  padding: 5px 8px;
+  padding: 6px 8px;
   border-radius: 8px;
   font-family: var(--font-main);
   font-size: 11.5px;
@@ -33,22 +211,17 @@
   color: #fff;
   border: 1.5px solid var(--color-primary);
 }
-
 .cat-store-btn:hover {
   background: var(--color-primary-dark);
   border-color: var(--color-primary-dark);
 }
-
 .cat-store-btn--outline {
   background: #fff;
   color: var(--color-primary-dark);
 }
-
 .cat-store-btn--outline:hover {
-  background: var(--color-primary-light, #f0faf4);
+  background: var(--color-primary-light);
 }
-
-/* ── Store count badge ── */
 .cat-store-count {
   font-size: 11px;
   color: var(--color-muted, #9ca3af);
@@ -56,19 +229,135 @@
   margin-right: 4px;
 }
 
-/* ── Responsive ── */
+/* ══════════════════════════════════════════════════════════
+   Products toolbar
+   ══════════════════════════════════════════════════════════ */
+.cat-page .products-toolbar {
+  background: var(--cat-card);
+  border: 1px solid var(--cat-line);
+  border-radius: 12px;
+  padding: 12px 18px;
+  box-shadow: var(--cat-shadow);
+  margin-bottom: 22px;
+}
+.cat-page .products-toolbar .label {
+  font-weight: 600;
+  color: var(--cat-ink-soft);
+}
+.cat-page .sort-select {
+  background: var(--cat-page-bg);
+  border: 1px solid var(--cat-line);
+  border-radius: 8px;
+}
+.cat-page .sort-select:focus {
+  border-color: var(--color-primary);
+}
+.cat-page .view-btn {
+  border-radius: 8px;
+  border-color: var(--cat-line);
+}
+
+/* ══════════════════════════════════════════════════════════
+   Product grid + cards — Level 1 elevation, beige canvas
+   ══════════════════════════════════════════════════════════ */
+.cat-page .products-grid {
+  gap: 16px;
+}
+/* Smaller product cards in grid view: 5 per row instead of 4 (list view untouched). */
+.cat-page .products-grid:not(.products-grid--list) {
+  grid-template-columns: repeat(5, 1fr);
+}
+.cat-page .product-card {
+  background: var(--cat-card);
+  border: none;
+  border-radius: 16px;
+  box-shadow: var(--cat-shadow);
+  transition: box-shadow 0.25s ease, transform 0.25s ease;
+}
+.cat-page .product-card:hover {
+  box-shadow: var(--cat-shadow-lg);
+  transform: translateY(-4px);
+}
+.cat-page .product-img-wrap {
+  background: var(--cat-canvas);
+}
+/* Portrait product imagery in grid view only (list view untouched). */
+.cat-page .products-grid:not(.products-grid--list) .product-img-wrap {
+  aspect-ratio: 3 / 4;
+}
+.cat-page .product-card {
+  border-radius: 12px;
+}
+.cat-page .product-body {
+  padding: 10px 12px 12px;
+}
+.cat-page .product-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cat-ink);
+  line-height: 1.4;
+}
+.cat-page .product-price {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--color-primary-dark);
+}
+.cat-page .product-price .currency {
+  font-size: 11px;
+}
+.cat-page .add-to-cart {
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+.cat-page .wishlist-btn {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* ══════════════════════════════════════════════════════════
+   Responsive
+   ══════════════════════════════════════════════════════════ */
+@media (max-width: 1280px) {
+  .cat-page .products-grid:not(.products-grid--list) { grid-template-columns: repeat(4, 1fr); }
+}
+@media (max-width: 1100px) {
+  .cat-page .products-grid { gap: 14px; }
+}
+@media (max-width: 900px) {
+  .cat-page .products-grid:not(.products-grid--list) { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 900px) {
+  /* Stack filters above products instead of hiding them. */
+  .cat-page .page-body {
+    flex-direction: column;
+    padding: 12px 16px 40px;
+    gap: 18px;
+  }
+  .cat-page .sidebar-panel {
+    width: 100%;
+    position: static;
+    max-height: none;
+  }
+  .cat-page .products-section {
+    padding-right: 0;
+  }
+}
+
 @media (max-width: 768px) {
-  .cat-listing-hero {
-    margin: 12px 12px 0;
-    min-height: 160px;
-    border-radius: 12px;
-  }
+  .cat-hero { padding: 40px 18px; }
+  .cat-hero-title { font-size: 30px; }
+  .cat-hero-desc { font-size: 15px; }
+}
 
-  .clh-title {
-    font-size: 28px;
-  }
-
-  .clh-subtitle {
-    font-size: 13px;
-  }
+@media (max-width: 620px) {
+  .cat-page .products-grid:not(.products-grid--list) { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .cat-hero-title { font-size: 25px; }
+  .cat-page .products-grid { gap: 10px; }
+  .cat-page .product-body { padding: 9px 10px 11px; }
+  .cat-page .product-name { font-size: 12.5px; }
 }

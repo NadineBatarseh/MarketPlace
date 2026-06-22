@@ -25,11 +25,23 @@ interface OrderDetail {
   product: Product | null;
 }
 
+interface ShippingAddress {
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  apartment: string | null;
+  city: string | null;
+  postalCode: string | null;
+}
+
 interface Order {
   id: number;
   total_price: number | null;
   status: string | null;
   created_at: string;
+  shipping_address: ShippingAddress | null;
   order_details: OrderDetail[];
 }
 
@@ -212,7 +224,7 @@ export default function OrderHistoryPage() {
       try {
         const { data: ordersData, error: ordErr } = await supabase
           .from('orders')
-          .select('id, total_price, status, created_at')
+          .select('id, total_price, status, created_at, shipping_address')
           .eq('user_id', customer!.id)
           .order('created_at', { ascending: false });
         if (ordErr) throw ordErr;
@@ -251,6 +263,7 @@ export default function OrderHistoryPage() {
           total_price: o.total_price,
           status:      o.status,
           created_at:  o.created_at,
+          shipping_address: (o as any).shipping_address ?? null,
           order_details: (detailsByOrder.get(o.id) ?? []).map((d: any) => ({
             id:             d.id,
             product_id:     d.product_id,
@@ -632,7 +645,6 @@ function OrderCard({ order, idx }: { order: Order; idx: number }) {
             <div className="oh-grid-del-cancelled">تم إلغاء الطلب</div>
           )}
         </div>
-
       </div>
 
       {/* Expanded drawer */}

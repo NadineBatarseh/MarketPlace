@@ -4,12 +4,48 @@ import { startBackgroundJobs } from './phases/phase7_backgroundJobs.js';
 import { handleBreakdown } from './phases/phase9_breakdownHandling.js';
 import { tryAddShipmentsToBatch } from './phases/phase8_inTransitAdditions.js';
 import { sequenceIntraCityTasks } from './phases/phase10_intraCitySequencing.js';
+import { prefetchPairs } from './distanceProvider.js';
 import { atomicAssign } from './driverAssignment.js';
 import { autoAssignUnbatchedShipments } from './phases/phase0a_autoAssignUnbatched.js';
 import { supabase } from '../supabase.js';
 import { C } from './constants.js';
+import { startSettlementScheduler } from '../lib/settlementExecutor.js';
+import { PC, loadPaymentConfig } from '../lib/paymentConfig.js';
 
 export const logisticsRouter = Router();
+
+/**
+ * Arm vendor settlement for a just-delivered shipment: resolve order_detail → its
+ * order + shop, then set settle_eligible_at on that shop's still-pending payout for the
+ * order. Per-shop (not per-order) so one slow shop never blocks another. Best-effort:
+ * any failure is logged and swallowed so delivery confirmation never breaks.
+ */
+async function markPayoutEligibleForShipment(orderDetailId: number | null): Promise<void> {
+  try {
+    if (orderDetailId == null) return;
+
+    const { data: detail } = await supabase
+      .from('order_details')
+      .select('order_id, shop_id')
+      .eq('id', orderDetailId)
+      .maybeSingle();
+
+    if (!detail?.order_id || !detail.shop_id) return;
+
+    const eligibleAt = new Date(Date.now() + PC.settlementReturnWindowHours * 3_600_000).toISOString();
+
+    await supabase
+      .from('payouts')
+      .update({ settle_eligible_at: eligibleAt })
+      .eq('order_id', detail.order_id)
+      .eq('payee_type', 'shop')
+      .eq('payee_id', detail.shop_id)
+      .eq('status', 'pending')
+      .is('settle_eligible_at', null);
+  } catch (err) {
+    console.error('[settlement] markPayoutEligibleForShipment error:', (err as Error).message);
+  }
+}
 
 // â”€â”€ POST /api/logistics/cycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Manually trigger one full batch cycle
@@ -76,7 +112,7 @@ logisticsRouter.post('/add-shipments', async (req: Request, res: Response) => {
 // â”€â”€ POST /api/logistics/sequence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Compute intra-city stop sequence for a courier arriving at a city (Phase 10)
 // Body: { tasks, entry_point, initial_volume }
-logisticsRouter.post('/sequence', (req: Request, res: Response) => {
+logisticsRouter.post('/sequence', async (req: Request, res: Response) => {
   const { tasks, entry_point, initial_volume } = req.body;
 
   if (!tasks || !entry_point) {
@@ -85,6 +121,12 @@ logisticsRouter.post('/sequence', (req: Request, res: Response) => {
   }
 
   try {
+    // Warm the road-distance cache for every stop the sequencer will evaluate, so the
+    // (synchronous) greedy + 2-opt run on real road distances. A prefetch failure is
+    // non-fatal: getRoadDistanceKm falls back to Haversine.
+    const locations = [entry_point, ...tasks.map((t: { location: unknown }) => t.location)];
+    await prefetchPairs(locations as any);
+
     const sequence = sequenceIntraCityTasks(tasks, entry_point, initial_volume ?? 0);
     res.json({ success: true, sequence });
   } catch (err) {
@@ -193,7 +235,7 @@ logisticsRouter.post('/deliver-shipment', async (req: Request, res: Response) =>
 
   const { data: shipment } = await supabase
     .from('shipments')
-    .select('id, batch_id, status')
+    .select('id, batch_id, status, order_detail_id')
     .eq('id', shipment_id)
     .maybeSingle();
 
@@ -231,6 +273,12 @@ logisticsRouter.post('/deliver-shipment', async (req: Request, res: Response) =>
     res.status(409).json({ success: false, error: 'Delivery failed â€” shipment status changed' });
     return;
   }
+
+  // Vendor-settlement eligibility hook (best-effort; never blocks the courier flow).
+  // Map this shipment → its order + shop, then arm the shop's 'pending' payout for that
+  // order: settle_eligible_at = delivered_at + return window. The deferred settlement
+  // sweep (server/lib/settlementExecutor.ts) pays it out once this timestamp passes.
+  void markPayoutEligibleForShipment(shipment.order_detail_id as number | null);
 
   // Auto-complete batch if every shipment is now delivered
   const allIds = [
@@ -315,9 +363,12 @@ function startShipmentWatcher(): void {
 
 // â”€â”€ Bootstrap function â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Call this once from server/index.ts during startup
-export function bootstrapLogistics(): void {
+export async function bootstrapLogistics(): Promise<void> {
+  // Load admin-editable payment/settlement config before starting timers that read it.
+  await loadPaymentConfig();
   startBackgroundJobs();
   startBatchCycleScheduler(C.CYCLE_INTERVAL_MINUTES);
   startShipmentWatcher();
+  startSettlementScheduler(PC.settlementSweepIntervalMinutes);
   console.log('[Logistics] Module bootstrapped.');
 }

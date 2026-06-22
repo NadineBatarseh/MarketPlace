@@ -1,0 +1,418 @@
+/* Customer Settings — categorised sidebar layout. Shares the Checkout palette. */
+:root {
+  --ps-green: #2D6A4F;
+  --ps-green-light: #e8f5eb;
+  --ps-green-dark: #1a4a35;
+  --ps-bg: #f7f5f0;
+  --ps-white: #ffffff;
+  --ps-border: #e2e0db;
+  --ps-text: #1a1a1a;
+  --ps-muted: #6b7280;
+  --ps-radius: 16px;
+  --ps-shadow: 0 2px 16px rgba(0, 0, 0, 0.07);
+}
+
+.ps-page {
+  min-height: 100vh;
+  background: var(--ps-bg);
+  padding-bottom: 120px; /* room for the sticky save bar */
+  font-family: 'Segoe UI', 'Arial', sans-serif;
+  color: var(--ps-text);
+}
+
+.ps-shell {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 36px 24px 0;
+}
+
+.ps-loading-card {
+  background: var(--ps-white);
+  border-radius: var(--ps-radius);
+  box-shadow: var(--ps-shadow);
+  padding: 48px;
+  text-align: center;
+  color: var(--ps-muted);
+}
+
+/* ── Layout: sidebar + panel (tight gap for a docked feel) ── */
+.ps-layout {
+  display: grid;
+  grid-template-columns: 236px 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+/* Sidebar is ONE cohesive white panel: title on top, connected list below.
+   align-self:start keeps it from stretching to the content's height. */
+.ps-sidebar {
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 84px;            /* clear the 68px fixed Topbar (+16px breathing room) */
+  align-self: start;
+  background: var(--ps-white);
+  border-radius: var(--ps-radius);
+  box-shadow: var(--ps-shadow);
+  padding: 10px;
+}
+
+.ps-sidebar-title {
+  margin: 0 0 8px;
+  padding: 10px 12px 14px;
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--ps-green-dark);
+  border-bottom: 1px solid var(--ps-border);
+}
+
+/* One connected vertical list — items are rows, not separate cards. */
+.ps-navlist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ps-navitem {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: right;
+  color: var(--ps-text);
+  transition: background 0.15s, color 0.15s;
+}
+
+.ps-navitem:hover { background: rgba(45, 106, 79, 0.06); }
+
+/* Active item: very light green fill + a side accent bar tying it to content. */
+.ps-navitem.is-active { background: var(--ps-green-light); color: var(--ps-green-dark); }
+.ps-navitem.is-active::before {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--ps-green);
+}
+
+/* Minimalist line icon — inherits text colour, no boxed background. */
+.ps-navicon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  color: var(--ps-muted);
+}
+.ps-navitem.is-active .ps-navicon { color: var(--ps-green); }
+.ps-navitem:hover .ps-navicon { color: var(--ps-green); }
+
+.ps-navtext { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ps-navlabel { font-size: 0.92rem; font-weight: 700; }
+.ps-navhint { font-size: 0.75rem; color: var(--ps-muted); font-weight: 400; }
+.ps-navitem.is-active .ps-navhint { color: var(--ps-green); opacity: 0.85; }
+
+/* Single-line link rows (طلباتي / المفضلة) sit a little tighter. */
+.ps-navitem--link { padding-top: 13px; padding-bottom: 13px; }
+
+/* ── Panel / cards (expanded to reduce empty space) ──────── */
+.ps-panel { min-width: 0; }
+
+.ps-card {
+  background: var(--ps-white);
+  border-radius: var(--ps-radius);
+  padding: 32px 34px;
+  box-shadow: var(--ps-shadow);
+  min-height: 460px;
+}
+
+.ps-card-head { margin-bottom: 22px; }
+
+.ps-card-title {
+  margin: 0 0 4px;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--ps-green-dark);
+}
+
+.ps-card-desc { margin: 0; font-size: 0.86rem; color: var(--ps-muted); line-height: 1.5; }
+
+/* ── Fields ─────────────────────────────────────────────── */
+.ps-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.ps-field label { font-size: 0.85rem; font-weight: 600; color: var(--ps-text); }
+
+.ps-field input {
+  padding: 11px 14px;
+  border: 1.5px solid var(--ps-border);
+  border-radius: 10px;
+  font-size: 0.9rem;
+  background: #fafaf9;
+  color: var(--ps-text);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+  direction: rtl;
+}
+
+.ps-field input:focus {
+  border-color: var(--ps-green);
+  box-shadow: 0 0 0 3px rgba(45, 106, 79, 0.1);
+  background: var(--ps-white);
+}
+
+.ps-field input:disabled { background: #f0efea; color: var(--ps-muted); cursor: not-allowed; }
+.ps-field input::placeholder { color: #c0bdb8; }
+.ps-field-note { font-size: 0.76rem; color: var(--ps-muted); }
+
+.ps-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+/* ── Map block ──────────────────────────────────────────── */
+.ps-map-block {
+  margin-top: 8px;
+  padding-top: 22px;
+  border-top: 1px solid var(--ps-border);
+}
+
+.ps-map-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.ps-map-title { margin: 0; font-size: 0.98rem; font-weight: 700; color: var(--ps-text); }
+
+.ps-link-btn {
+  background: none;
+  border: none;
+  color: #dc2626;
+  font-size: 0.83rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px;
+}
+.ps-link-btn:hover { text-decoration: underline; }
+
+/* ── Security action row ────────────────────────────────── */
+.ps-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  background: #fafaf9;
+  border: 1.5px solid var(--ps-border);
+  border-radius: 12px;
+  flex-wrap: wrap;
+}
+
+.ps-action-info { display: flex; flex-direction: column; gap: 3px; }
+.ps-action-label { font-size: 0.92rem; font-weight: 700; }
+.ps-action-sub { font-size: 0.8rem; color: var(--ps-muted); }
+
+.ps-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 18px;
+  background: var(--ps-white);
+  color: var(--ps-green-dark);
+  border: 1.5px solid var(--ps-green);
+  border-radius: 10px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+}
+.ps-action-btn:hover { background: var(--ps-green-light); transform: translateY(-1px); }
+
+/* ── Toggles ────────────────────────────────────────────── */
+.ps-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 16px;
+  background: #fafaf9;
+  border: 1.5px solid var(--ps-border);
+  border-radius: 12px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  text-align: right;
+  transition: border-color 0.15s;
+}
+.ps-toggle-row:hover { border-color: var(--ps-green); }
+
+.ps-toggle-info { display: flex; flex-direction: column; gap: 3px; }
+.ps-toggle-label { font-size: 0.92rem; font-weight: 700; }
+.ps-toggle-sub { font-size: 0.8rem; color: var(--ps-muted); }
+
+.ps-switch {
+  flex-shrink: 0;
+  width: 46px;
+  height: 26px;
+  border-radius: 999px;
+  background: #cfcdc7;
+  position: relative;
+  transition: background 0.2s;
+}
+.ps-switch.is-on { background: var(--ps-green); }
+
+.ps-switch-knob {
+  position: absolute;
+  top: 3px;
+  right: 3px;                 /* RTL: knob rests on the right when off */
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.2s;
+}
+.ps-switch.is-on .ps-switch-knob { transform: translateX(-20px); } /* slide left when on */
+
+/* ── Feedback ───────────────────────────────────────────── */
+.ps-error {
+  background: #fef2f2; border: 1px solid #fca5a5; color: #dc2626;
+  font-size: 13px; padding: 10px 14px; border-radius: 10px; margin-top: 16px;
+}
+.ps-success {
+  background: var(--ps-green-light); border: 1px solid #86c79b; color: var(--ps-green-dark);
+  font-size: 13px; font-weight: 600; padding: 10px 14px; border-radius: 10px; margin-top: 16px;
+}
+
+/* ── Sticky save bar ────────────────────────────────────── */
+.ps-savebar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 40;
+  background: var(--ps-white);
+  border-top: 1px solid var(--ps-border);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 1120px;
+  margin: 0 auto;
+  border-radius: 16px 16px 0 0;
+}
+
+.ps-savebar-text { font-size: 0.9rem; font-weight: 600; color: var(--ps-green-dark); }
+.ps-savebar-actions { display: flex; gap: 10px; }
+
+.ps-savebar-discard {
+  padding: 11px 20px;
+  background: transparent;
+  border: 1.5px solid var(--ps-border);
+  border-radius: 10px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--ps-muted);
+  cursor: pointer;
+}
+.ps-savebar-discard:hover:not(:disabled) { border-color: var(--ps-muted); }
+
+.ps-savebar-save {
+  padding: 11px 28px;
+  background: linear-gradient(135deg, var(--ps-green) 0%, var(--ps-green-dark) 100%);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(45, 106, 79, 0.35);
+  transition: transform 0.15s;
+}
+.ps-savebar-save:hover:not(:disabled) { transform: translateY(-1px); }
+.ps-savebar-save:disabled, .ps-savebar-discard:disabled { opacity: 0.6; cursor: default; }
+
+/* ── Responsive ─────────────────────────────────────────── */
+
+/* Tablet & below: stack the layout; the sidebar becomes a horizontal,
+   swipeable chip bar pinned above the content. */
+@media (max-width: 820px) {
+  .ps-layout { grid-template-columns: 1fr; gap: 16px; }
+
+  .ps-sidebar { position: static; padding: 12px; }
+  .ps-sidebar-title { padding: 4px 6px 12px; font-size: 1.2rem; margin-bottom: 10px; }
+
+  .ps-navlist {
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 8px;
+    padding-bottom: 6px;
+    -webkit-overflow-scrolling: touch;       /* momentum scroll on iOS */
+    scroll-snap-type: x proximity;
+  }
+  .ps-navlist::-webkit-scrollbar { height: 0; } /* hide the scrollbar track */
+
+  .ps-navitem {
+    flex: 0 0 auto;                            /* don't shrink — let them scroll */
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    min-width: 88px;
+    padding: 12px 10px;
+    text-align: center;
+    border-radius: 12px;
+    scroll-snap-align: start;
+  }
+  .ps-navitem.is-active::before { display: none; }
+  .ps-navitem.is-active { box-shadow: inset 0 0 0 1.5px var(--ps-green); } /* ring instead of side bar */
+  .ps-navhint { display: none; }
+
+  .ps-card { min-height: 0; padding: 24px; }
+}
+
+/* Phones */
+@media (max-width: 600px) {
+  .ps-page { padding-bottom: 168px; }         /* room for the taller stacked save bar */
+  .ps-shell { padding: 22px 12px 0; }
+
+  .ps-card { padding: 20px 16px; }
+  .ps-card-title { font-size: 1.1rem; }
+
+  .ps-row { grid-template-columns: 1fr; gap: 0; } /* field margins handle spacing */
+
+  /* 16px inputs stop iOS Safari auto-zooming when a field is focused. */
+  .ps-field input { font-size: 16px; }
+
+  /* Stack the security / map header rows so nothing gets cramped. */
+  .ps-action-row { flex-direction: column; align-items: stretch; }
+  .ps-action-btn { justify-content: center; }
+
+  .ps-savebar {
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+    padding: 12px 14px;
+    gap: 10px;
+  }
+  .ps-savebar-actions { justify-content: stretch; }
+  .ps-savebar-actions button { flex: 1; padding-left: 0; padding-right: 0; }
+}
+
+/* Small phones — tighten the chip bar so more items are visible. */
+@media (max-width: 380px) {
+  .ps-navitem { min-width: 74px; padding: 10px 6px; }
+  .ps-navlabel { font-size: 0.82rem; }
+  .ps-shell { padding: 18px 10px 0; }
+}
