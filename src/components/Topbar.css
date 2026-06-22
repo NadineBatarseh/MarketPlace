@@ -344,11 +344,32 @@
 /* ── Responsive ── */
 @media (max-width: 900px) {
   .topbar-nav-links { display: none; }
-  .search-bar { max-width: 340px; }
+  .search-bar { max-width: none; }
 }
 
 @media (max-width: 768px) {
-  .topbar { padding: 0 16px; }
-  .search-bar { display: none; }
+  .topbar { padding: 0 14px; gap: 8px; }
   .topbar-dropdown { left: auto; right: 0; }
+  /* Keep search usable on phones instead of hiding it */
+  .search-bar { flex: 1; min-width: 0; margin: 0; }
+  .logo-text .en { display: none; }
+}
+
+@media (max-width: 560px) {
+  .topbar { height: 56px; padding: 0 10px; gap: 6px; }
+  .logo-img { height: 30px; }
+  .logo-text { display: none; }          /* logo image alone frees room for search */
+  .nav-actions { gap: 0; }
+  .nav-action { padding: 6px 5px; }
+  .nav-action svg { width: 21px; height: 21px; }
+  .nav-action-username { display: none; }
+  .nav-action--home { display: none; }   /* logo already navigates home */
+  .topbar-search-input input { padding: 8px 32px 8px 12px; font-size: 13px; }
+  .search-submit-btn { width: 30px; }
+  .badge { width: 15px; height: 15px; font-size: 8px; }
+}
+
+@media (max-width: 360px) {
+  .nav-action { padding: 6px 3px; }
+  .nav-action svg { width: 19px; height: 19px; }
 }

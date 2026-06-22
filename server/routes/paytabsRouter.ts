@@ -7,8 +7,11 @@ import {
   createHostedPayment,
   queryTransaction,
   isApproved,
+  type SplitPayoutEntity,
 } from '../lib/paytabs.js';
 import { PC } from '../lib/paymentConfig.js';
+import { createShipmentsForOrder } from '../lib/shipments.js';
+import { decryptSecret } from '../lib/payoutCrypto.js';
 
 /**
  * PayTabs Hosted Payment Page — Phase 1 (Test Mode).
@@ -87,6 +90,142 @@ async function computeOrderTotals(orderId: number | string): Promise<OrderTotals
     total: round(subtotal + PC.deliveryFee),
     perShop,
   };
+}
+
+/* ─────────────────────────── split payout (pay-in distribution) ─────────────────────────── */
+
+/**
+ * The platform's own settlement beneficiary, read from PAYOUT_PLATFORM_* env vars.
+ * Every split includes a platform entity that absorbs the remainder, because PayTabs
+ * requires the split item_totals to sum EXACTLY to the charged total (verified live —
+ * sum < total is rejected with "Total of split items does not match transaction total").
+ * Returns null if not fully configured.
+ */
+function getPlatformBeneficiary(): SplitPayoutEntity['beneficiary'] | null {
+  const name = process.env.PAYOUT_PLATFORM_NAME;
+  const account_number = process.env.PAYOUT_PLATFORM_IBAN;
+  const bank = process.env.PAYOUT_PLATFORM_BANK;
+  const country = process.env.PAYOUT_PLATFORM_COUNTRY || process.env.PAYTABS_COUNTRY || 'PS';
+  if (!name || !account_number || !bank) return null;
+  return {
+    name,
+    account_number,
+    country,
+    bank,
+    bank_branch: process.env.PAYOUT_PLATFORM_BANK_BRANCH || '',
+    mobile_number: process.env.PAYOUT_PLATFORM_MOBILE || '',
+    email: process.env.PAYOUT_PLATFORM_EMAIL || '',
+    address_1: process.env.PAYOUT_PLATFORM_ADDRESS1 || '',
+    address_2: '',
+  };
+}
+
+/**
+ * Build the PayTabs `split_payout[]` for an order. PayTabs distributes the WHOLE charge
+ * across the entities at settlement — the item_totals MUST sum exactly to the charged
+ * total. So the split has two kinds of entity:
+ *   - one per shop that completed payout onboarding: item_total = product revenue NET of
+ *     the platform commission, paid to the shop's bank.
+ *   - a single PLATFORM entity that takes the remainder (commissions + delivery fee +
+ *     any not-yet-onboarded shop's share — "platform holds the share", user decision),
+ *     paid to the platform's own settlement account (PAYOUT_PLATFORM_*).
+ *
+ * MSC (PayTabs' processing fee) is borne by the vendors (user decision 2026-06-23): shop
+ * entities are 'P' (last shop 'R' to absorb the rounding remainder), a lone shop is 'F';
+ * the platform entity is 'Z' (bears no fee).
+ *
+ * Returns [] (→ charge with no split, platform settles everything manually) when no shop
+ * is payable, or when a remainder exists but PAYOUT_PLATFORM_* isn't configured.
+ */
+async function buildSplitPayout(totals: OrderTotals): Promise<SplitPayoutEntity[]> {
+  const shopIds = [...totals.perShop.keys()].filter((k) => k && k !== 'unknown');
+  if (shopIds.length === 0) return [];
+
+  const { data: shops } = await supabase
+    .from('shops')
+    .select('shop_id, name, payout_onboarding_status, payout_iban_enc, payout_beneficiary_name, payout_bank_name, payout_bank_branch, payout_country, payout_email, payout_mobile, payout_address1')
+    .in('shop_id', shopIds);
+
+  const round = (n: number) => Math.round(n * 100) / 100;
+  const rate = PC.platformCommissionRate;
+  const shopEntities: SplitPayoutEntity[] = [];
+
+  // PayTabs requires non-empty mobile_number, email AND address_1 per beneficiary (verified
+  // live — bank_branch/address_2 may be empty). Onboarding doesn't yet collect these, so fall
+  // back to platform contact values. TODO: capture per-shop contact details at onboarding.
+  const fbEmail = process.env.PAYOUT_PLATFORM_EMAIL || 'payouts@souqlink.test';
+  const fbMobile = process.env.PAYOUT_PLATFORM_MOBILE || '+970000000000';
+  const fbAddress = process.env.PAYOUT_PLATFORM_ADDRESS1 || process.env.PAYTABS_COUNTRY || 'PS';
+
+  for (const s of shops ?? []) {
+    if (s.payout_onboarding_status !== 'active' || !s.payout_iban_enc) continue;
+    if (!s.payout_beneficiary_name || !s.payout_bank_name || !s.payout_country) continue;
+
+    const gross = totals.perShop.get(s.shop_id) ?? 0;
+    const net = round(gross * (1 - rate));
+    if (net <= 0) continue;
+
+    let iban: string;
+    try {
+      iban = decryptSecret(s.payout_iban_enc);
+    } catch {
+      console.error(`[paytabs] split: IBAN decrypt failed for shop ${s.shop_id} — held by platform`);
+      continue;
+    }
+
+    shopEntities.push({
+      entity_id: 1001 + shopEntities.length,
+      entity_name: s.name || `Shop ${s.shop_id}`,
+      item_description: `Order revenue (net of ${Math.round(rate * 100)}% commission)`,
+      item_total: net.toFixed(2),
+      msc_flag: 'P', // finalised below once the entity count is known
+      beneficiary: {
+        name: s.payout_beneficiary_name,
+        account_number: iban,
+        country: s.payout_country,
+        bank: s.payout_bank_name,
+        bank_branch: s.payout_bank_branch || '',
+        mobile_number: s.payout_mobile || fbMobile,
+        email: s.payout_email || fbEmail,
+        address_1: s.payout_address1 || fbAddress,
+        address_2: '',
+      },
+    });
+  }
+
+  if (shopEntities.length === 0) return []; // nothing payable → no split
+
+  // Vendors bear MSC: 'P' for all shops, 'R' on the last; a lone shop takes 'F'.
+  if (shopEntities.length === 1) {
+    shopEntities[0].msc_flag = 'F';
+  } else {
+    for (const e of shopEntities) e.msc_flag = 'P';
+    shopEntities[shopEntities.length - 1].msc_flag = 'R';
+  }
+
+  const allocated = round(shopEntities.reduce((sum, e) => sum + Number(e.item_total), 0));
+  const remainder = round(totals.total - allocated);
+
+  if (remainder <= 0.001) return shopEntities; // nothing left for the platform (rare)
+
+  // The platform entity absorbs the remainder so the items sum to the exact total.
+  const platform = getPlatformBeneficiary();
+  if (!platform) {
+    console.error('[paytabs] split: PAYOUT_PLATFORM_* not configured — cannot allocate remainder; charging WITHOUT split.');
+    return [];
+  }
+
+  return [
+    ...shopEntities,
+    {
+      entity_id: 1000,
+      entity_name: 'SOUQLINK Platform',
+      item_description: 'Platform commission + delivery',
+      item_total: remainder.toFixed(2),
+      msc_flag: 'Z',
+      beneficiary: platform,
+    },
+  ];
 }
 
 /* ─────────────────────────── courier lookup ─────────────────────────── */
@@ -245,6 +384,13 @@ async function applyPaymentResult(tranRef: string): Promise<ApplyOutcome> {
     // Idempotent — recompute totals so payout amounts match the charged amount.
     const totals = await computeOrderTotals(orderId);
     await createPayoutRecords(orderId, payment.id, payment.currency, totals);
+
+    // Safety net: shipments are normally created at order placement, but retry
+    // here (idempotent) in case that step failed — and so a callback firing
+    // multiple times never duplicates shipments.
+    await createShipmentsForOrder(orderId).catch(e =>
+      console.error('[paytabs] shipment creation failed for order', orderId, e),
+    );
     return { status: 'paid', orderId };
   }
 
@@ -312,6 +458,21 @@ router.post('/create', requireCustomer, async (req: Request, res: Response) => {
 
   const fullName = [contact?.firstName, contact?.lastName].filter(Boolean).join(' ').trim();
 
+  // Marketplace split: distribute each onboarded shop's share to its bank at settlement.
+  // Best-effort — a failure here must never block checkout (the order just charges without
+  // a split, leaving every shop's share with the platform to settle manually).
+  let splitPayout: SplitPayoutEntity[] = [];
+  try {
+    splitPayout = await buildSplitPayout(totals);
+  } catch (e) {
+    console.error('[paytabs] split build failed — charging without split:', (e as Error).message);
+  }
+  const payableShops = splitPayout.length;
+  const totalShops = [...totals.perShop.keys()].filter((k) => k && k !== 'unknown').length;
+  if (payableShops < totalShops) {
+    console.log(`[paytabs] order ${order.id}: ${payableShops}/${totalShops} shops in split; ${totalShops - payableShops} held by platform (not onboarded).`);
+  }
+
   // 3. Create the Hosted Payment Page.
   let paytabsRes;
   try {
@@ -327,6 +488,7 @@ router.post('/create', requireCustomer, async (req: Request, res: Response) => {
         city: shipping?.city || undefined,
         zip: shipping?.postalCode || undefined,
       },
+      splitPayout,
     });
   } catch (e) {
     return res.status(502).json({ ok: false, error: (e as Error).message });

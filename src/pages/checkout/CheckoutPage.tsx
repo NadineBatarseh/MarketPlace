@@ -11,6 +11,10 @@ import {
 } from '../../lib/profile';
 import supabase from '../../lib/supabase';
 import Topbar from '../../components/Topbar';
+import LocationPicker, { type PlaceMeta } from '../../components/LocationPicker';
+import { fetchZones, pointInZone, zoneCenter, type Zone } from '../../lib/zones';
+import { useFieldHint } from '../auth/useFieldHint';
+import { EMAIL_RE, ARABIC_RE, parsePhone } from '../../lib/formValidation';
 import './CheckoutPage.css';
 
 type PaymentMethod = 'paytabs' | 'cod' | null;
@@ -30,12 +34,40 @@ export default function CheckoutPage() {
   // Email is owned by the auth account, not the profile — kept as its own field.
   const [email, setEmail] = useState(customer?.email ?? '');
 
-  // When the form differs from the saved profile, offer to save it as default.
-  const [saveAsDefault, setSaveAsDefault] = useState(false);
+  // Phone is edited via a split control (country code + "05" prefix + 8 digits)
+  // and recomposed into formData.phone. Inline hints mirror the application forms.
+  const [phoneCode, setPhoneCode]   = useState('970');
+  const [phoneLocal, setPhoneLocal] = useState('');
+  const phoneHint     = useFieldHint();
+  const firstNameHint = useFieldHint();
+  const lastNameHint  = useFieldHint();
+  const emailHint     = useFieldHint();
 
   const [payment, setPayment] = useState<PaymentMethod>(null);
   const [paying, setPaying]   = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
+
+  // ── Delivery zone + exact location ────────────────────────────────────
+  const [zones, setZones] = useState<Zone[]>([]);
+  // Whether the customer is editing the address (vs. using the saved default).
+  const [editingAddress, setEditingAddress] = useState(false);
+
+  useEffect(() => {
+    fetchZones().then(setZones).catch(() => setZones([]));
+  }, []);
+
+  const selectedZone = zones.find(z => z.id === formData.dropoffZoneId) ?? null;
+  const hasPin = formData.latitude != null && formData.longitude != null;
+
+  // Live, client-side mirror of the server's point-in-zone check, so the customer
+  // gets instant feedback. The server re-validates authoritatively on submit.
+  const pinOutsideZone =
+    selectedZone != null && hasPin &&
+    !pointInZone(selectedZone, formData.latitude as number, formData.longitude as number);
+
+  // A saved default address exists when the profile carries a zone + a pin.
+  const hasSavedAddress = !!originalData.dropoffZoneId &&
+    originalData.latitude != null && originalData.longitude != null;
 
   // ── Auto-fill: pull the saved profile once when the page opens ─────────
   useEffect(() => {
@@ -46,8 +78,17 @@ export default function CheckoutPage() {
       try {
         const profile = await fetchProfile();
         if (cancelled) return;
-        setFormData(profile);
-        setOriginalData(profile); // baseline for change detection
+        // Normalise the saved phone into the split control's canonical form so
+        // the recomposed value doesn't read as an "edit" against the baseline.
+        const { code, local } = parsePhone(profile.phone);
+        setPhoneCode(code);
+        setPhoneLocal(local);
+        const normalized = { ...profile, phone: local ? `${code}5${local}` : '' };
+        setFormData(normalized);
+        setOriginalData(normalized); // baseline for change detection
+        // Start in "use saved address" mode only if a complete one exists.
+        const savedComplete = !!profile.dropoffZoneId && profile.latitude != null && profile.longitude != null;
+        setEditingAddress(!savedComplete);
       } catch {
         // No saved profile / network issue → leave the form blank; not fatal.
       }
@@ -59,22 +100,64 @@ export default function CheckoutPage() {
 
   // Change detection: true the moment ANY monitored field diverges from the
   // originally fetched profile. Recomputed every render — cheap (7 string ==).
+  // Drives whether we persist the form back to the profile on submit.
   const hasChanges = !profilesEqual(formData, originalData);
 
-  // If the user reverts every edit back to the saved values, the checkbox
-  // disappears again — so also clear its checked state to avoid a hidden "on".
-  useEffect(() => {
-    if (!hasChanges && saveAsDefault) setSaveAsDefault(false);
-  }, [hasChanges, saveAsDefault]);
-
   // One-liner field updater for every shipping/contact input.
-  const update = (field: keyof ProfileData) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setFormData((prev) => ({ ...prev, [field]: e.target.value }));
+  const update = (field: keyof ProfileData) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      setFormData((prev) => ({ ...prev, [field]: e.target.value }));
+
+  // Zone dropdown → store both id and name (name groups shipments into batches).
+  const onZoneChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const z = zones.find(zz => zz.id === e.target.value) ?? null;
+    setFormData(prev => ({ ...prev, dropoffZoneId: z?.id ?? null, dropoffZone: z?.name ?? '' }));
+  };
+
+  // Map pin updates: store coordinates + any place metadata from a search.
+  const onPinChange = (lat: number, lng: number, meta?: PlaceMeta) => {
+    setFormData(prev => ({
+      ...prev,
+      latitude: lat,
+      longitude: lng,
+      placeId: meta?.placeId ?? '',
+      formattedAddress: meta?.formattedAddress ?? prev.formattedAddress,
+    }));
+  };
 
   const handlePay = async () => {
     if (!customer) { navigate('/login'); return; }
     if (!payment)  { setPayError('الرجاء اختيار طريقة الدفع'); return; }
     if (activeItems.length === 0) { setPayError('لا توجد منتجات متاحة للشراء في سلتك'); return; }
+
+    // Contact validation (fail fast for a better UX).
+    if (!formData.firstName.trim() || !formData.lastName.trim()) {
+      setPayError('يرجى إدخال الاسم الأول والأخير');
+      return;
+    }
+    if (!EMAIL_RE.test(email.trim())) {
+      setPayError('يرجى إدخال بريد إلكتروني صحيح (مثال: example@email.com)');
+      return;
+    }
+    if (phoneLocal.length !== 8) {
+      setPayError('رقم الهاتف غير صحيح — أدخل 8 أرقام بعد 05');
+      return;
+    }
+
+    // Delivery destination is required + must be a pin inside the chosen zone
+    // (the server re-validates, but fail fast for a better UX).
+    if (!formData.dropoffZoneId || formData.latitude == null || formData.longitude == null) {
+      setPayError('يرجى اختيار منطقة التوصيل وتحديد الموقع على الخريطة');
+      return;
+    }
+    if (pinOutsideZone) {
+      setPayError('الموقع المحدد خارج حدود المنطقة المختارة. يرجى تغيير المنطقة أو تعديل الموقع.');
+      return;
+    }
+    if (!formData.deliveryDescription.trim()) {
+      setPayError('يرجى إدخال تعليمات التوصيل لمساعدة المندوب في الوصول إليك');
+      return;
+    }
 
     setPaying(true);
     setPayError(null);
@@ -82,19 +165,31 @@ export default function CheckoutPage() {
     // Build the contact + shipping payloads the order/payment APIs expect from
     // the profile-shaped form.
     const contact  = { firstName: formData.firstName, lastName: formData.lastName, email, phone: formData.phone };
+    // Free-text snapshot (shown on order history / tracking). Derived from the new
+    // structured fields: formatted address as the address line, zone as the city.
     const shipping = {
-      address:    formData.street,
-      apartment:  formData.apartment,
-      city:       formData.city,
-      postalCode: formData.postalCode,
+      address:    formData.formattedAddress || formData.deliveryDescription,
+      apartment:  '',
+      city:       formData.dropoffZone,
+      postalCode: '',
+    };
+    // Structured delivery destination → drives zone-based batching + routing.
+    const dropoff = {
+      zone_id:           formData.dropoffZoneId,
+      zone:              formData.dropoffZone,
+      lat:               formData.latitude,
+      lng:               formData.longitude,
+      place_id:          formData.placeId,
+      formatted_address: formData.formattedAddress,
+      description:       formData.deliveryDescription,
     };
 
-    // Phase 2 — save on submit: if the user edited their details AND ticked the
-    // box, persist the new profile IN PARALLEL with placing the order. This is
-    // best-effort: a profile-save failure must never block the purchase, so we
-    // swallow its error and only log it.
+    // Always persist the contact + address back to the customer's profile so it
+    // is kept in their personal settings for next time. Runs IN PARALLEL with
+    // placing the order; best-effort — a save failure must never block the
+    // purchase, so we swallow its error and only log it.
     const profileSave =
-      saveAsDefault && hasChanges
+      hasChanges
         ? saveProfile(formData)
             .then(() => setOriginalData(formData)) // new baseline once saved
             .catch((err) => console.error('[checkout] profile save failed:', err))
@@ -120,6 +215,7 @@ export default function CheckoutPage() {
           payment_method: payment,
           shipping,
           contact, // persisted with the order as the shipping-address snapshot
+          dropoff,  // structured delivery zone + exact pin (validated server-side)
         }),
       });
       const orderJson = await orderResp.json().catch(() => ({}));
@@ -150,6 +246,7 @@ export default function CheckoutPage() {
           'paytabs_pending_item_ids',
           JSON.stringify(activeItems.map(item => item.id)),
         );
+        await profileSave; // settle the profile save before navigating away
         window.location.href = json.redirect_url; // → PayTabs Hosted Payment Page
         return;
       }
@@ -198,25 +295,93 @@ export default function CheckoutPage() {
             </h2>
             <div className="co-row">
               <div className="co-field">
-                <label>الاسم الأول</label>
-                <input placeholder="أدخل الاسم الأول" value={formData.firstName}
-                  onChange={update('firstName')} />
+                <label>الاسم الأول <span className="co-req">*</span></label>
+                <input
+                  placeholder="أدخل الاسم الأول"
+                  value={formData.firstName}
+                  onChange={e => {
+                    const raw = e.target.value;
+                    if (/[0-9]/.test(raw)) firstNameHint.show('لا يُسمح بالأرقام في هذا الحقل');
+                    else firstNameHint.clear();
+                    setFormData(prev => ({ ...prev, firstName: raw.replace(/[0-9]/g, '') }));
+                  }}
+                />
+                {firstNameHint.hint && <p className="co-field-hint">{firstNameHint.hint}</p>}
               </div>
               <div className="co-field">
-                <label>الاسم الأخير</label>
-                <input placeholder="أدخل الاسم الأخير" value={formData.lastName}
-                  onChange={update('lastName')} />
+                <label>الاسم الأخير <span className="co-req">*</span></label>
+                <input
+                  placeholder="أدخل الاسم الأخير"
+                  value={formData.lastName}
+                  onChange={e => {
+                    const raw = e.target.value;
+                    if (/[0-9]/.test(raw)) lastNameHint.show('لا يُسمح بالأرقام في هذا الحقل');
+                    else lastNameHint.clear();
+                    setFormData(prev => ({ ...prev, lastName: raw.replace(/[0-9]/g, '') }));
+                  }}
+                />
+                {lastNameHint.hint && <p className="co-field-hint">{lastNameHint.hint}</p>}
               </div>
             </div>
             <div className="co-field">
-              <label>البريد الإلكتروني</label>
-              <input type="email" placeholder="example@email.com" value={email}
-                onChange={e => setEmail(e.target.value)} />
+              <label>البريد الإلكتروني <span className="co-req">*</span></label>
+              <input
+                type="email"
+                placeholder="example@email.com"
+                value={email}
+                onChange={e => {
+                  const raw = e.target.value;
+                  if (ARABIC_RE.test(raw)) emailHint.show('لا يُسمح بالأحرف العربية في البريد الإلكتروني');
+                  else emailHint.clear();
+                  setEmail(raw.replace(ARABIC_RE, ''));
+                }}
+                onBlur={() => {
+                  if (email.trim() && !EMAIL_RE.test(email.trim())) {
+                    emailHint.show('بريد إلكتروني غير صحيح — مثال: example@email.com');
+                  } else {
+                    emailHint.clear();
+                  }
+                }}
+              />
+              {emailHint.hint && <p className="co-field-hint">{emailHint.hint}</p>}
             </div>
             <div className="co-field">
-              <label>رقم الهاتف</label>
-              <input type="tel" placeholder="+970 5x xxx xxxx" value={formData.phone}
-                onChange={update('phone')} />
+              <label>رقم الهاتف <span className="co-req">*</span></label>
+              <div className="co-phone-split" dir="ltr">
+                <select
+                  title="رمز الدولة"
+                  className="co-phone-code"
+                  value={phoneCode}
+                  onChange={e => {
+                    const code = e.target.value;
+                    setPhoneCode(code);
+                    setFormData(prev => ({ ...prev, phone: phoneLocal ? `${code}5${phoneLocal}` : '' }));
+                  }}
+                >
+                  <option value="970">+970</option>
+                  <option value="972">+972</option>
+                </select>
+                <span className="co-phone-prefix">05</span>
+                <input
+                  type="text"
+                  className="co-phone-local"
+                  dir="ltr"
+                  inputMode="numeric"
+                  placeholder="XXXXXXXX"
+                  value={phoneLocal}
+                  onChange={e => {
+                    const raw = e.target.value;
+                    const digits = raw.replace(/\D/g, '');
+                    if (/[^\d]/.test(raw)) phoneHint.show('أرقام فقط');
+                    else if (digits.length > 8) phoneHint.show('الحد الأقصى 8 أرقام');
+                    else phoneHint.clear();
+                    const local = digits.slice(0, 8);
+                    setPhoneLocal(local);
+                    setFormData(prev => ({ ...prev, phone: local ? `${phoneCode}5${local}` : '' }));
+                  }}
+                />
+              </div>
+              {phoneHint.hint && <p className="co-field-hint">{phoneHint.hint}</p>}
             </div>
           </section>
 
@@ -224,42 +389,90 @@ export default function CheckoutPage() {
           <section className="co-section">
             <h2 className="co-section-title">
               <span className="material-symbols-outlined">local_shipping</span>
-              التوصيل والشحن
+              عنوان التوصيل
             </h2>
-            <div className="co-field">
-              <label>العنوان</label>
-              <input placeholder="اسم الشارع ورقم المنزل" value={formData.street}
-                onChange={update('street')} />
-            </div>
-            <div className="co-field">
-              <label>الشقة / الدور (اختياري)</label>
-              <input placeholder="رقم الشقة أو الدور" value={formData.apartment}
-                onChange={update('apartment')} />
-            </div>
-            <div className="co-row">
-              <div className="co-field">
-                <label>المدينة</label>
-                <input placeholder="مثال: رام الله" value={formData.city}
-                  onChange={update('city')} />
-              </div>
-              <div className="co-field">
-                <label>الرمز البريدي</label>
-                <input placeholder="12345" value={formData.postalCode}
-                  onChange={update('postalCode')} />
-              </div>
-            </div>
 
-            {/* Dynamic "save as default" checkbox — only rendered once the user
-                has changed something vs. their saved profile (hasChanges). */}
-            {hasChanges && (
-              <label className="co-save-default">
-                <input
-                  type="checkbox"
-                  checked={saveAsDefault}
-                  onChange={e => setSaveAsDefault(e.target.checked)}
-                />
-                <span>حفظ هذا العنوان كعنوان افتراضي في حسابي للطلبات القادمة</span>
-              </label>
+            {/* Saved default address — shown as a selectable card when complete. */}
+            {hasSavedAddress && !editingAddress ? (
+              <div className="co-saved-addr">
+                <div className="co-saved-addr-main">
+                  <span className="material-symbols-outlined co-saved-addr-icon">home_pin</span>
+                  <div className="co-saved-addr-text">
+                    <strong>{originalData.dropoffZone || 'العنوان المحفوظ'}</strong>
+                    {originalData.formattedAddress && <span>{originalData.formattedAddress}</span>}
+                    {originalData.deliveryDescription && (
+                      <span className="co-saved-addr-note">{originalData.deliveryDescription}</span>
+                    )}
+                  </div>
+                </div>
+                <button type="button" className="co-addr-edit-btn" onClick={() => setEditingAddress(true)}>
+                  <span className="material-symbols-outlined">edit_location_alt</span>
+                  تغيير العنوان
+                </button>
+              </div>
+            ) : (
+              <>
+                {hasSavedAddress && (
+                  <button
+                    type="button"
+                    className="co-addr-back-btn"
+                    onClick={() => { setFormData(originalData); setEditingAddress(false); }}
+                  >
+                    <span className="material-symbols-outlined">arrow_forward</span>
+                    استخدام العنوان المحفوظ
+                  </button>
+                )}
+
+                {/* 1. Zone — drives shipment grouping into delivery batches. */}
+                <div className="co-field">
+                  <label>المنطقة <span className="co-req">*</span></label>
+                  <select
+                    className="co-select"
+                    title="منطقة التوصيل"
+                    value={formData.dropoffZoneId ?? ''}
+                    onChange={onZoneChange}
+                  >
+                    <option value="">اختر المنطقة</option>
+                    {zones.map(z => (
+                      <option key={z.id} value={z.id}>{z.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 2. Exact location — search a place, use my location, or pick on the map. */}
+                <div className="co-field">
+                  <label>الموقع على الخريطة <span className="co-req">*</span></label>
+                  <LocationPicker
+                    value={{ lat: formData.latitude, lng: formData.longitude }}
+                    onChange={onPinChange}
+                    recenterTo={selectedZone ? zoneCenter(selectedZone) : null}
+                  />
+                  {pinOutsideZone && (
+                    <div className="co-zone-warning">
+                      <span className="material-symbols-outlined">warning</span>
+                      الموقع المحدد خارج حدود المنطقة المختارة. غيّر المنطقة أو حرّك المؤشر داخلها.
+                    </div>
+                  )}
+                </div>
+
+                {/* 3. Additional courier directions. */}
+                <div className="co-field">
+                  <label>تعليمات التوصيل <span className="co-req">*</span></label>
+                  <textarea
+                    className="co-textarea"
+                    rows={3}
+                    placeholder="اسم الشارع، رقم العمارة، أو أي وصف يساعد المندوب في الوصول إليك بسهولة"
+                    value={formData.deliveryDescription}
+                    onChange={update('deliveryDescription')}
+                  />
+                </div>
+
+                {/* Details are always saved back to the customer's profile. */}
+                <p className="co-save-note">
+                  <span className="material-symbols-outlined">cloud_done</span>
+                  سيتم حفظ هذه البيانات في إعداداتك الشخصية لاستخدامها في طلباتك القادمة
+                </p>
+              </>
             )}
           </section>
 

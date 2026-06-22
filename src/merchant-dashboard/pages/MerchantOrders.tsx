@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useMerchantAuth } from '../context/MerchantAuthContext';
 import supabase from '../../lib/supabase';
-import { insertTrackingEvent } from '../../lib/trackingEvents';
+import { type PayoutStatus, PayoutStatusPill, fmtMoney } from '../lib/payoutDisplay';
+
+const API_BASE = 'http://localhost:4000';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -14,6 +16,13 @@ interface OrderItem {
   unit_price: number;
 }
 
+/** The merchant's settlement share for this order (from the payouts ledger), if any. */
+interface OrderEarning {
+  amount: number;
+  currency: string;
+  status: PayoutStatus;
+}
+
 interface MerchantOrder {
   id: number;
   status: string;
@@ -21,6 +30,7 @@ interface MerchantOrder {
   created_at: string;
   ready_time: string | null;
   items: OrderItem[];
+  earning: OrderEarning | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -119,6 +129,33 @@ export default function MerchantOrders() {
         }
       }
 
+      // 4b. Fetch this shop's settlement shares (earnings) and key them by order.
+      //     Reuses the existing merchant payouts endpoint; failure here must not block orders.
+      const earningByOrder = new Map<number, OrderEarning>();
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (token) {
+          const res = await fetch(`${API_BASE}/api/payments/payout-onboarding/payouts`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const json = await res.json();
+          if (res.ok && Array.isArray(json.payouts)) {
+            for (const p of json.payouts as { order_id: number; amount: number; currency: string; status: PayoutStatus }[]) {
+              const existing = earningByOrder.get(p.order_id);
+              // A shop has one payout per order; if more, sum amounts and keep the first status.
+              earningByOrder.set(p.order_id, {
+                amount: (existing?.amount ?? 0) + (Number(p.amount) || 0),
+                currency: p.currency || existing?.currency || 'ILS',
+                status: existing?.status ?? p.status,
+              });
+            }
+          }
+        }
+      } catch {
+        /* earnings are supplementary — ignore fetch errors */
+      }
+
       // 5. Merge into final list
       const result: MerchantOrder[] = (ordersData ?? []).map(o => ({
         id:          o.id,
@@ -127,6 +164,7 @@ export default function MerchantOrders() {
         created_at:  o.created_at,
         ready_time:  readyTimeByOrder.get(o.id) ?? null,
         items:       itemsByOrder.get(o.id) ?? [],
+        earning:     earningByOrder.get(o.id) ?? null,
       }));
 
       setOrders(result);
@@ -137,51 +175,38 @@ export default function MerchantOrders() {
     setLoading(false);
   };
 
-  // Mark all this shop's order_details rows for the order as ready for pickup
+  // Mark all this shop's order_details rows for the order as ready for pickup.
+  // Done via the server (service-role) because RLS denies the merchant client a
+  // direct UPDATE on order_details — the old client update silently affected 0
+  // rows, so ready_time was never persisted and the shipment trigger never fired.
   const markReady = async (orderId: number) => {
     setMarking(orderId);
-    const now = new Date().toISOString();
+    setError('');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('no-session');
 
-    const { error } = await supabase
-      .from('order_details')
-      .update({ ready_time: now })
-      .eq('order_id', orderId)
-      .eq('shop_id', shopId);
-
-    if (error) {
-      setError('فشل تحديث حالة الطلب');
-      setMarking(null);
-      return;
-    }
-
-    // Update local UI
-    setOrders(prev =>
-      prev.map(o => o.id === orderId ? { ...o, ready_time: now } : o)
-    );
-
-    // Check if ALL shops for this order have now set ready_time
-    const { data: allDetails } = await supabase
-      .from('order_details')
-      .select('ready_time')
-      .eq('order_id', orderId);
-
-    const allReady = allDetails?.every(d => d.ready_time != null) ?? false;
-
-    if (allReady) {
-      // Insert "collecting" tracking event — visible on customer tracking page
-      await insertTrackingEvent(orderId, 'collecting', merchant?.shop?.name ?? 'المتجر', {
-        location: 'المتاجر المحلية',
-        note:     'جميع المتاجر جهّزت الطلب وهو جاهز للتجميع',
+      const res = await fetch(`${API_BASE}/api/orders/${orderId}/mark-ready`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
       });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.ok) throw new Error(json.error || 'failed');
 
-      // Advance order status
-      await supabase
-        .from('orders')
-        .update({ status: 'pending_collection' })
-        .eq('id', orderId);
+      // Only reflect success in the UI after the server confirms the write.
+      setOrders(prev =>
+        prev.map(o =>
+          o.id === orderId
+            ? { ...o, ready_time: json.ready_time as string, status: json.all_ready ? 'pending_collection' : o.status }
+            : o
+        )
+      );
+    } catch (err: any) {
+      setError(err?.message === 'no-session' ? 'انتهت الجلسة، يرجى تسجيل الدخول من جديد' : 'فشل تحديث حالة الطلب');
+    } finally {
+      setMarking(null);
     }
-
-    setMarking(null);
   };
 
   const toggleExpand = (id: number) => {
@@ -245,7 +270,7 @@ export default function MerchantOrders() {
             {visible.map(order => {
             const statusCfg = STATUS_LABEL[order.status] ?? { label: order.status, color: '#6b7280' };
             const isOpen    = expanded.has(order.id);
-            const canMark   = (order.status === 'pending' || order.status === 'pending_collection') && !order.ready_time;
+            const canMark   = (order.status === 'pending' || order.status === 'confirmed' || order.status === 'pending_collection') && !order.ready_time;
             const isMarked  = !!order.ready_time;
 
             return (
@@ -262,6 +287,18 @@ export default function MerchantOrders() {
                     </span>
                     {isMarked && (
                       <span className="mo-ready-badge">✔ جاهز للاستلام</span>
+                    )}
+                    {order.earning && (
+                      <span
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+                          fontSize: '0.8rem', fontWeight: 700, color: '#16b981',
+                        }}
+                        title="حصّتك من هذا الطلب بعد خصم عمولة المنصّة"
+                      >
+                        أرباحك: {fmtMoney(order.earning.amount, order.earning.currency)}
+                        <PayoutStatusPill status={order.earning.status} />
+                      </span>
                     )}
                   </div>
 

@@ -177,6 +177,83 @@
 .ps-field input:disabled { background: #f0efea; color: var(--ps-muted); cursor: not-allowed; }
 .ps-field input::placeholder { color: #c0bdb8; }
 .ps-field-note { font-size: 0.76rem; color: var(--ps-muted); }
+.ps-field-hint { font-size: 0.78rem; font-weight: 600; color: #b91c1c; }
+
+/* ── Phone split: country code + "05" prefix + 8 local digits ── */
+.ps-phone-split {
+  display: flex;
+  align-items: stretch;
+  border: 1.5px solid var(--ps-border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fafaf9;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.ps-phone-split:focus-within {
+  border-color: var(--ps-green);
+  box-shadow: 0 0 0 3px rgba(45, 106, 79, 0.1);
+  background: var(--ps-white);
+}
+.ps-phone-code {
+  padding: 11px 10px;
+  border: none;
+  border-right: 1.5px solid var(--ps-border);
+  border-radius: 0;
+  background: #f0efea;
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--ps-text);
+  outline: none;
+  cursor: pointer;
+}
+.ps-phone-prefix {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border-right: 1.5px solid var(--ps-border);
+  background: #f0efea;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--ps-muted);
+}
+.ps-phone-local {
+  flex: 1;
+  min-width: 0;
+  padding: 11px 14px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--ps-text);
+  outline: none;
+  direction: ltr;
+}
+.ps-phone-local::placeholder { color: #c0bdb8; letter-spacing: 0.05em; }
+
+/* Select + textarea inherit the input look. */
+.ps-select,
+.ps-textarea {
+  padding: 11px 14px;
+  border: 1.5px solid var(--ps-border);
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  background: #fafaf9;
+  color: var(--ps-text);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+  direction: rtl;
+  width: 100%;
+}
+.ps-textarea { resize: vertical; line-height: 1.6; }
+.ps-select:focus,
+.ps-textarea:focus {
+  border-color: var(--ps-green);
+  box-shadow: 0 0 0 3px rgba(45, 106, 79, 0.1);
+  background: var(--ps-white);
+}
+.ps-textarea::placeholder { color: #c0bdb8; }
 
 .ps-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 

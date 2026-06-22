@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useMerchantAuth } from '../context/MerchantAuthContext';
 import supabase from '../../lib/supabase';
+import { type PayoutStatus, payoutMeta, fmtMoney, fmtDate } from '../lib/payoutDisplay';
 import './MerchantPayouts.css';
 
 const API_BASE = 'http://localhost:4000';
-
-type PayoutStatus = 'pending' | 'queued' | 'submitted' | 'paid' | 'failed' | 'skipped' | 'reversed';
 
 interface PayoutRow {
   id: string;
@@ -32,23 +31,6 @@ interface PayoutsResponse {
   onboarding_status: string;
   payouts: PayoutRow[];
 }
-
-// Arabic label + colour bucket per ledger status.
-const STATUS_META: Record<PayoutStatus, { label: string; cls: string }> = {
-  pending:   { label: 'قيد الانتظار', cls: 'mpo-st--amber' },
-  queued:    { label: 'قيد التحويل',  cls: 'mpo-st--amber' },
-  submitted: { label: 'قيد التحويل',  cls: 'mpo-st--blue' },
-  paid:      { label: 'مدفوع',         cls: 'mpo-st--green' },
-  failed:    { label: 'فشل',           cls: 'mpo-st--red' },
-  skipped:   { label: 'معلّق',         cls: 'mpo-st--grey' },
-  reversed:  { label: 'ملغى',          cls: 'mpo-st--red' },
-};
-
-const fmtMoney = (n: number, ccy: string) =>
-  `${(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${ccy}`;
-
-const fmtDate = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
 
 async function getToken(): Promise<string | null> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -99,7 +81,10 @@ export default function MerchantPayouts() {
   return (
     <div className="mpo-root">
       <h1 className="mpo-title">أرباحي</h1>
-      <p className="mpo-subtitle">حصّتك من مبيعات متجرك بعد خصم عمولة المنصّة، وحالة تحويلها إلى حسابك البنكي.</p>
+      <p className="mpo-subtitle">
+        حصّتك من مبيعات متجرك بعد خصم عمولة المنصّة، وحالة تحويلها إلى حسابك البنكي.
+        تُحوَّل الأرباح تلقائيًا بعد تسليم الطلب وانتهاء فترة الإرجاع.
+      </p>
 
       {error && <div className="md-page-error md-page-error--spaced">{error}</div>}
 
@@ -141,12 +126,15 @@ export default function MerchantPayouts() {
             </thead>
             <tbody>
               {payouts.map(p => {
-                const meta = STATUS_META[p.status] ?? { label: p.status, cls: 'mpo-st--grey' };
+                const meta = payoutMeta(p.status);
+                const isPending = p.status === 'pending' || p.status === 'queued';
                 const dateLabel = p.status === 'paid'
                   ? `دُفع: ${fmtDate(p.paid_at)}`
-                  : p.settle_eligible_at
-                    ? `مستحق: ${fmtDate(p.settle_eligible_at)}`
-                    : '—';
+                  : isPending && p.settle_eligible_at
+                    ? `متوقّع: ${fmtDate(p.settle_eligible_at)}`
+                    : p.settle_eligible_at
+                      ? `مستحق: ${fmtDate(p.settle_eligible_at)}`
+                      : '—';
                 return (
                   <tr key={p.id}>
                     <td className="mpo-order">#{p.order_id}</td>

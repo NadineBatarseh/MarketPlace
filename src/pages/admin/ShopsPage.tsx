@@ -356,6 +356,16 @@ export default function ShopsPage() {
           transition: transform 0.15s, box-shadow 0.15s;
         }
         .admin-stat-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.1); }
+        .admin-stats-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
+        .admin-stat-icon { width: 30px; height: 30px; border-radius: 8px; }
+        .admin-stat-value { font-size: 26px; font-weight: 800; color: #111827; line-height: 1; }
+        .admin-stat-sub { font-size: 11px; color: #6b7280; font-weight: 500; margin-top: 2px; }
+        @media (max-width: 768px) {
+          .admin-stats-strip { grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px; }
+          .admin-stat-card { padding: 8px 10px 7px; border-radius: 11px; }
+          .admin-stat-icon { width: 26px; height: 26px; }
+          .admin-stat-value { font-size: 18px; }
+        }
 
         /* Owner expanded panel */
         .shop-owner-panel {
@@ -481,7 +491,7 @@ export default function ShopsPage() {
       </div>
 
       {/* Stats strip */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 18 }}>
+      <div className="admin-stats-strip">
         {[
           {
             label: 'الإجمالي', sub: 'إجمالي المتاجر', value: statusCounts.all,
@@ -507,12 +517,12 @@ export default function ShopsPage() {
           <div key={s.label} className="admin-stat-card">
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 6 }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>{s.label}</span>
-              <div style={{ width: 30, height: 30, borderRadius: 8, background: s.iconBg, color: s.iconColor, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+              <div className="admin-stat-icon" style={{ background: s.iconBg, color: s.iconColor, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
                 {s.icon}
               </div>
             </div>
-            <div style={{ fontSize: 26, fontWeight: 800, color: '#111827', lineHeight: 1 }}>{s.value}</div>
-            <div style={{ fontSize: 11, color: '#6b7280', fontWeight: 500, marginTop: 2 }}>{s.sub}</div>
+            <div className="admin-stat-value">{s.value}</div>
+            <div className="admin-stat-sub">{s.sub}</div>
           </div>
         ))}
       </div>

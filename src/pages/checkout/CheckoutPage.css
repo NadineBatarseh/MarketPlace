@@ -156,6 +156,147 @@
 
 .co-field input::placeholder { color: var(--co-outline); }
 
+/* Select + textarea share the input look. */
+.co-select,
+.co-textarea {
+  padding: 12px 14px;
+  border: 1px solid var(--co-outline-variant);
+  border-radius: var(--co-radius);
+  font-size: 16px;
+  font-family: inherit;
+  background: var(--co-surface-low);
+  color: var(--co-on-surface);
+  transition: border-color .2s, box-shadow .2s, background .2s;
+  outline: none;
+  direction: rtl;
+  width: 100%;
+}
+.co-textarea { resize: vertical; line-height: 1.6; }
+.co-select:focus,
+.co-textarea:focus {
+  border-color: var(--co-primary);
+  box-shadow: 0 0 0 3px rgba(6, 78, 59, 0.12);
+  background: var(--co-surface-lowest);
+}
+.co-textarea::placeholder { color: var(--co-outline); }
+.co-req { color: var(--co-error); }
+
+/* Inline validation hint (numbers in name, phone digits, bad email…). */
+.co-field-hint {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--co-error);
+}
+
+/* ── Phone split: country code + "05" prefix + 8 local digits ── */
+.co-phone-split {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--co-outline-variant);
+  border-radius: var(--co-radius);
+  overflow: hidden;
+  background: var(--co-surface-low);
+  transition: border-color .2s, box-shadow .2s, background .2s;
+}
+.co-phone-split:focus-within {
+  border-color: var(--co-primary);
+  box-shadow: 0 0 0 3px rgba(6, 78, 59, 0.12);
+  background: var(--co-surface-lowest);
+}
+.co-phone-code {
+  padding: 12px 10px;
+  border: none;
+  border-right: 1px solid var(--co-outline-variant);
+  border-radius: 0;
+  background: var(--co-surface-lowest);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--co-on-surface);
+  outline: none;
+  cursor: pointer;
+}
+.co-phone-prefix {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border-right: 1px solid var(--co-outline-variant);
+  background: var(--co-surface-lowest);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--co-outline);
+}
+.co-phone-local {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 16px;
+  color: var(--co-on-surface);
+  outline: none;
+  direction: ltr;
+}
+.co-phone-local::placeholder { color: var(--co-outline); letter-spacing: 0.05em; }
+
+/* Saved-address card */
+.co-saved-addr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--co-primary);
+  border-radius: var(--co-radius);
+  background: #f0fdf4;
+  flex-wrap: wrap;
+}
+.co-saved-addr-main { display: flex; align-items: flex-start; gap: 10px; }
+.co-saved-addr-icon { color: var(--co-primary); }
+.co-saved-addr-text { display: flex; flex-direction: column; gap: 2px; font-size: 14px; }
+.co-saved-addr-text strong { color: var(--co-on-surface); }
+.co-saved-addr-text span { color: var(--co-on-surface-variant); }
+.co-saved-addr-note { font-style: italic; }
+
+.co-addr-edit-btn,
+.co-addr-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--co-primary);
+  border-radius: var(--co-radius);
+  background: transparent;
+  color: var(--co-primary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .15s;
+}
+.co-addr-edit-btn:hover,
+.co-addr-back-btn:hover { background: rgba(6, 78, 59, 0.08); }
+.co-addr-back-btn { margin-bottom: 14px; }
+.co-addr-edit-btn .material-symbols-outlined,
+.co-addr-back-btn .material-symbols-outlined { font-size: 18px; }
+
+/* Outside-zone warning */
+.co-zone-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: var(--co-error-container);
+  color: var(--co-error);
+  border-radius: var(--co-radius);
+  font-size: 13px;
+  font-weight: 600;
+}
+.co-zone-warning .material-symbols-outlined { font-size: 18px; }
+
 .co-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -228,11 +369,12 @@
 }
 
 /* ── Save-as-default checkbox ── */
-.co-save-default {
+/* Info note: details are always saved back to the customer's profile. */
+.co-save-note {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  margin-top: 16px;
+  margin: 16px 0 0;
   padding: 14px 16px;
   background: #f0fdf4;
   border: 1px solid var(--co-outline-variant);
@@ -240,18 +382,14 @@
   font-size: 14px;
   font-weight: 600;
   color: var(--co-primary-container);
-  cursor: pointer;
   line-height: 1.6;
-  animation: coFade .2s ease;
 }
 
-.co-save-default input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  margin-top: 1px;
-  accent-color: var(--co-primary);
-  cursor: pointer;
+.co-save-note .material-symbols-outlined {
+  font-size: 20px;
   flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--co-primary);
 }
 
 /* ── Summary ── */
@@ -497,4 +635,10 @@
   .co-row { grid-template-columns: 1fr; }
   .co-payment-options { grid-template-columns: 1fr; }
   .co-page-title { font-size: 28px; line-height: 36px; }
+}
+
+@media (max-width: 560px) {
+  .co-shell { padding: 0 14px; }
+  .co-section { padding: 18px 16px; }
+  .co-page-title { font-size: 24px; line-height: 32px; margin: 0 0 20px; }
 }

@@ -132,3 +132,8 @@
   font-size: 0.82rem;
   line-height: 1.7;
 }
+
+@media (max-width: 900px) {
+  .mpd-root { padding: 0.75rem 1rem 2rem 1rem; }
+  .mpd-card { padding: 1.25rem 1.1rem 1.4rem; }
+}

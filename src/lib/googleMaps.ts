@@ -46,7 +46,8 @@ export function loadGoogleMaps(): Promise<void> {
 
     const script = document.createElement('script');
     script.id = SCRIPT_ID;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
+    // `libraries=places` enables the Autocomplete search box in LocationPicker.
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
     script.async = true;
     script.defer = true;
     script.onload = finish;

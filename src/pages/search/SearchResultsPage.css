@@ -975,6 +975,8 @@
 
 @media (max-width: 480px) {
   .srp-container { padding: 0 14px; }
+  .srp-title-row { flex-direction: column; gap: 8px; padding: 16px 0 14px; }
+  .srp-title-side { align-items: flex-start; }
   .srp-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .srp-card-name { font-size: 12px; }
   .srp-cur-price { font-size: 15px; }

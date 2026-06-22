@@ -124,6 +124,29 @@
   cursor: help;
 }
 
+@media (max-width: 900px) {
+  .mpo-root { padding: 0.75rem 1rem 2rem 1rem; }
+}
+
 @media (max-width: 640px) {
-  .mpo-cards { grid-template-columns: 1fr; }
+  /* Compact horizontal rows instead of tall full-width boxes */
+  .mpo-cards {
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+    margin-bottom: 1.25rem;
+  }
+  .mpo-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.7rem 1rem;
+    border-radius: 12px;
+  }
+  .mpo-card-label { margin-bottom: 0; font-size: 0.82rem; }
+  .mpo-card-value { font-size: 1.15rem; }
+
+  /* Let a wide table scroll inside its card rather than the whole page */
+  .mpo-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .mpo-table { min-width: 520px; }
 }

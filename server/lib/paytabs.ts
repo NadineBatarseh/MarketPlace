@@ -71,11 +71,39 @@ function publicUrlOrUndefined(url: string | undefined): string | undefined {
   }
 }
 
+/**
+ * One Split Payout stakeholder, in PayTabs' exact field shape. Sent inline in
+ * `split_payout[]` on /payment/request so PayTabs collects the charge AND distributes
+ * each beneficiary's `item_total` to their bank at settlement — there is no separate
+ * payout call. The platform keeps whatever isn't allocated here (commission + delivery).
+ * `account_number` is the raw IBAN (decrypted in memory by the caller) — NEVER logged.
+ */
+export interface SplitPayoutEntity {
+  entity_id: number;
+  entity_name: string;
+  item_description: string;
+  item_total: string;        // "10.00" — beneficiary's share
+  msc_flag: 'F' | 'P' | 'Z' | 'R'; // how PayTabs' processing fee (MSC) is allocated to this item
+  beneficiary: {
+    name: string;
+    account_number: string;  // IBAN — pass-through only
+    country: string;
+    bank: string;
+    bank_branch?: string;
+    mobile_number?: string;
+    email?: string;
+    address_1?: string;
+    address_2?: string;
+  };
+}
+
 export interface CreatePaymentArgs {
   cartId: string;          // our order id (as string)
   amount: number;          // authoritative total computed server-side
   description: string;
   customer: CustomerDetails;
+  /** Marketplace Split Payout entities (one per onboarded shop). Omitted → no split. */
+  splitPayout?: SplitPayoutEntity[];
 }
 
 export interface PaytabsCreateResponse {
@@ -111,6 +139,9 @@ export async function createHostedPayment(
       zip: args.customer.zip || undefined,
       country: args.customer.country || cfg.country,
     },
+    // Marketplace split: distribute each shop's share to its bank at settlement.
+    // Only attached when present so single-/no-beneficiary orders charge normally.
+    split_payout: args.splitPayout && args.splitPayout.length ? args.splitPayout : undefined,
   };
 
   const res = await fetch(`${cfg.baseUrl}/payment/request`, {

@@ -20,6 +20,12 @@ export interface ProfileData {
   // Exact delivery pin captured from the Address Book map. null = no pin yet.
   latitude: number | null;
   longitude: number | null;
+  // Saved default delivery destination (zone + Google Maps metadata + directions).
+  dropoffZoneId: string | null;   // zones.id — groups shipments into batches
+  dropoffZone: string;            // zones.name (denormalised for display)
+  placeId: string;                // Google Maps place_id (when picked via search)
+  formattedAddress: string;       // Google Maps formatted address
+  deliveryDescription: string;    // free-text courier directions
 }
 
 // snake_case shape exchanged with the API (matches the customer_profiles table).
@@ -33,6 +39,11 @@ interface ApiProfile {
   postal_code?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  dropoff_zone_id?: string | null;
+  dropoff_zone?: string | null;
+  place_id?: string | null;
+  formatted_address?: string | null;
+  delivery_address_description?: string | null;
 }
 
 /** A fully-blank profile — safe defaults so inputs are always controlled. */
@@ -40,6 +51,8 @@ export function emptyProfile(): ProfileData {
   return {
     firstName: '', lastName: '', phone: '', city: '', street: '', apartment: '',
     postalCode: '', latitude: null, longitude: null,
+    dropoffZoneId: null, dropoffZone: '', placeId: '', formattedAddress: '',
+    deliveryDescription: '',
   };
 }
 
@@ -56,6 +69,11 @@ function fromApi(api: ApiProfile | null | undefined): ProfileData {
     postalCode: api?.postal_code ?? '',
     latitude:   api?.latitude  ?? null,
     longitude:  api?.longitude ?? null,
+    dropoffZoneId:       api?.dropoff_zone_id ?? null,
+    dropoffZone:         api?.dropoff_zone ?? '',
+    placeId:             api?.place_id ?? '',
+    formattedAddress:    api?.formatted_address ?? '',
+    deliveryDescription: api?.delivery_address_description ?? '',
   };
 }
 
@@ -71,6 +89,11 @@ function toApi(p: ProfileData): ApiProfile {
     postal_code: p.postalCode,
     latitude:    p.latitude,
     longitude:   p.longitude,
+    dropoff_zone_id:              p.dropoffZoneId,
+    dropoff_zone:                 p.dropoffZone,
+    place_id:                     p.placeId,
+    formatted_address:            p.formattedAddress,
+    delivery_address_description: p.deliveryDescription,
   };
 }
 

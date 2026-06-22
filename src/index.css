@@ -55,6 +55,15 @@
   box-sizing: border-box;
 }
 
+html, body {
+  /* Hard guard against horizontal scrolling on mobile.
+     No customer page should ever require left/right panning.
+     `clip` (not `hidden`) avoids creating a scroll container, so
+     position:sticky sidebars/subnavs keep working. */
+  max-width: 100%;
+  overflow-x: clip;
+}
+
 body {
   margin: 0;
   padding-top: 68px; /* matches fixed Topbar height */
@@ -68,6 +77,16 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   direction: rtl;
+}
+
+/* Media never forces the viewport wider than the screen */
+img, video, canvas, svg {
+  max-width: 100%;
+}
+
+/* On phones the fixed Topbar is shorter — keep body padding in sync */
+@media (max-width: 560px) {
+  body { padding-top: 56px; }
 }
 
 /* Big page/section titles */

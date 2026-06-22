@@ -23,15 +23,27 @@ import { supabase } from '../supabase.js';
 import {
   getPaytabsPayoutConfig,
   createPayoutBatch,
-  addDepositRequest,
-  closePayoutBatch,
   queryPayoutBatch,
   sanitizePayoutResponse,
   isDepositPaid,
   isDepositFailed,
   type PaytabsPayoutConfig,
+  type PayoutBeneficiaryLine,
 } from './paytabsPayout.js';
+import { decryptSecret } from './payoutCrypto.js';
 import { PC, loadPaymentConfig } from './paymentConfig.js';
+
+/** A shop's decrypted payout destination, ready to become a batch request line. */
+interface ShopBeneficiary {
+  name: string;
+  country: string;
+  iban: string;
+  bank: string;
+  bankBranch?: string;
+  email?: string;
+  mobile?: string;
+  address1?: string;
+}
 
 export interface SettlementSummary {
   batch_id: string | null;       // our settlement_batches.id (null when nothing to do)
@@ -57,6 +69,14 @@ interface EligiblePayout {
 export async function runSettlementSweep(
   opts: { triggeredBy?: string | null } = {},
 ): Promise<SettlementSummary> {
+  // DEFERRED SETTLEMENT RETIRED (2026-06-23): vendor payouts now happen at pay-in via
+  // PayTabs Split Payout (see server/routes/paytabsRouter.ts). This sweep would call the
+  // External Payouts API the account doesn't have enabled ("Payout not enabled"), and
+  // could otherwise double-pay leftover eligible rows from earlier testing. Hard-disabled.
+  void opts;
+  return { batch_id: null, paytabs_batch_id: null, claimed: 0, skipped: 0, total_amount: 0, currency: null, status: 'noop' };
+
+  // eslint-disable-next-line no-unreachable
   const nowIso = new Date().toISOString();
 
   // Refresh admin-editable knobs (max attempts, etc.) before each sweep.
@@ -79,22 +99,40 @@ export async function runSettlementSweep(
     return { batch_id: null, paytabs_batch_id: null, claimed: 0, skipped: 0, total_amount: 0, currency: null, status: 'noop' };
   }
 
-  // 2. Split into payable (shop has an active beneficiary) vs not.
+  // 2. Split into payable (shop has active, decryptable bank details) vs not.
   const shopIds = [...new Set(candidates.map((c) => c.payee_id).filter(Boolean))] as string[];
   const { data: shops } = await supabase
     .from('shops')
-    .select('shop_id, paytabs_entity_id, payout_onboarding_status')
+    .select('shop_id, payout_onboarding_status, payout_iban_enc, payout_beneficiary_name, payout_bank_name, payout_bank_branch, payout_country, payout_email, payout_mobile, payout_address1')
     .in('shop_id', shopIds);
 
-  const entityByShop = new Map<string, string>();
+  const beneficiaryByShop = new Map<string, ShopBeneficiary>();
   for (const s of shops ?? []) {
-    if (s.paytabs_entity_id && s.payout_onboarding_status === 'active') {
-      entityByShop.set(s.shop_id, s.paytabs_entity_id);
+    if (s.payout_onboarding_status !== 'active' || !s.payout_iban_enc) continue;
+    // A line missing the minimally-required beneficiary fields (or that fails to decrypt)
+    // is left unpayable rather than risking a whole-batch rejection at PayTabs.
+    if (!s.payout_beneficiary_name || !s.payout_bank_name || !s.payout_country) continue;
+    let iban: string;
+    try {
+      iban = decryptSecret(s.payout_iban_enc);
+    } catch (e) {
+      console.error(`[settlement] IBAN decrypt failed for shop ${s.shop_id}:`, (e as Error).message);
+      continue;
     }
+    beneficiaryByShop.set(s.shop_id, {
+      name: s.payout_beneficiary_name,
+      country: s.payout_country,
+      iban,
+      bank: s.payout_bank_name,
+      bankBranch: s.payout_bank_branch ?? undefined,
+      email: s.payout_email ?? undefined,
+      mobile: s.payout_mobile ?? undefined,
+      address1: s.payout_address1 ?? undefined,
+    });
   }
 
-  const payable = candidates.filter((c) => c.payee_id && entityByShop.has(c.payee_id)) as EligiblePayout[];
-  const unpayable = candidates.filter((c) => !c.payee_id || !entityByShop.has(c.payee_id));
+  const payable = candidates.filter((c) => c.payee_id && beneficiaryByShop.has(c.payee_id)) as EligiblePayout[];
+  const unpayable = candidates.filter((c) => !c.payee_id || !beneficiaryByShop.has(c.payee_id));
 
   // Mark eligible-but-unpayable lines 'skipped' so they don't churn every tick.
   // (They're picked up automatically once the shop completes onboarding — a future
@@ -166,61 +204,49 @@ export async function runSettlementSweep(
     return { batch_id: batchId, paytabs_batch_id: null, claimed: 0, skipped: unpayable.length, total_amount: 0, currency, status: 'failed' };
   }
 
+  // Build one request line per claimed payout. merchant_reference='payout:<id>' makes
+  // reconciliation deterministic. The IBAN is decrypted in memory here and never logged.
+  const lines: PayoutBeneficiaryLine[] = claimed.map((line) => {
+    const b = beneficiaryByShop.get(line.payee_id)!;
+    return {
+      reference: `payout:${line.id}`,
+      amount: Number(line.amount),
+      name: b.name,
+      country: b.country,
+      iban: b.iban,
+      bank: b.bank,
+      bankBranch: b.bankBranch,
+      email: b.email,
+      mobile: b.mobile,
+      address1: b.address1,
+    };
+  });
+
+  // Create + close the batch in ONE call (PayTabs External Payouts). If it throws, the
+  // whole batch failed — release the claimed lines for a later retry. Per-line outcomes
+  // (e.g. a single rejected transfer) surface later via reconcileBatch().
   let paytabsBatchId: string;
   try {
-    const created = await createPayoutBatch(cfg, { idempotencyKey, currency });
+    const created = await createPayoutBatch(cfg, { orderId: batchId, lines, closeBatch: true });
     paytabsBatchId = created.paytabs_batch_id;
+    await supabase
+      .from('payouts')
+      .update({ status: 'submitted', failure_reason: null })
+      .in('id', claimed.map((c) => c.id));
     await supabase
       .from('settlement_batches')
       .update({
         paytabs_batch_id: paytabsBatchId,
-        status: 'open',
+        status: 'closed',
         payout_count: claimed.length,
         total_amount: totalAmount,
+        closed_at: new Date().toISOString(),
         paytabs_response: created.raw,
       })
       .eq('id', batchId);
   } catch (e) {
     await failBatch(batchId, claimed, (e as Error).message);
     return { batch_id: batchId, paytabs_batch_id: null, claimed: 0, skipped: unpayable.length, total_amount: 0, currency, status: 'failed' };
-  }
-
-  // Add one deposit request per claimed payout. reference='payout:<id>' makes
-  // reconciliation deterministic. A single line failing doesn't abort the batch;
-  // that line is marked failed and excluded.
-  for (const line of claimed) {
-    const entityId = entityByShop.get(line.payee_id)!;
-    try {
-      const dep = await addDepositRequest(cfg, {
-        paytabsBatchId,
-        entityId,
-        amount: Number(line.amount),
-        currency: line.currency || currency,
-        reference: `payout:${line.id}`,
-      });
-      await supabase
-        .from('payouts')
-        .update({ status: 'submitted', paytabs_payout_ref: dep.deposit_ref, failure_reason: null })
-        .eq('id', line.id);
-    } catch (e) {
-      await supabase
-        .from('payouts')
-        .update({ status: 'failed', failure_reason: (e as Error).message, settlement_batch_id: null })
-        .eq('id', line.id);
-    }
-  }
-
-  try {
-    const closed = await closePayoutBatch(cfg, paytabsBatchId);
-    await supabase
-      .from('settlement_batches')
-      .update({ status: 'closed', closed_at: new Date().toISOString(), paytabs_response: closed.raw })
-      .eq('id', batchId);
-  } catch (e) {
-    await supabase
-      .from('settlement_batches')
-      .update({ status: 'failed', error: (e as Error).message })
-      .eq('id', batchId);
   }
 
   // 6. Best-effort immediate reconcile (also re-runnable later via reconcileBatch).
@@ -271,22 +297,22 @@ export async function reconcileBatch(batchId: string): Promise<{ paid: number; f
 
   // Map our reference (`payout:<id>`) → outcome.
   let paid = 0, failed = 0, pending = 0;
-  for (const dep of result.deposits) {
-    const m = /^payout:(.+)$/.exec(dep.reference);
+  for (const reqStatus of result.requests) {
+    const m = /^payout:(.+)$/.exec(reqStatus.reference);
     if (!m) continue;
     const payoutId = m[1];
 
-    if (isDepositPaid(dep.status)) {
+    if (isDepositPaid(reqStatus.status)) {
       await supabase
         .from('payouts')
-        .update({ status: 'paid', paid_at: new Date().toISOString(), paytabs_payout_ref: dep.ref ?? undefined, failure_reason: null })
+        .update({ status: 'paid', paid_at: new Date().toISOString(), paytabs_payout_ref: reqStatus.ref ?? undefined, failure_reason: null })
         .eq('id', payoutId)
         .neq('status', 'paid');
       paid++;
-    } else if (isDepositFailed(dep.status)) {
+    } else if (isDepositFailed(reqStatus.status)) {
       await supabase
         .from('payouts')
-        .update({ status: 'failed', failure_reason: `PayTabs deposit ${dep.status}` })
+        .update({ status: 'failed', failure_reason: `PayTabs payout ${reqStatus.status}` })
         .eq('id', payoutId);
       failed++;
     } else {

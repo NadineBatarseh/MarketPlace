@@ -274,11 +274,11 @@ logisticsRouter.post('/deliver-shipment', async (req: Request, res: Response) =>
     return;
   }
 
-  // Vendor-settlement eligibility hook (best-effort; never blocks the courier flow).
-  // Map this shipment → its order + shop, then arm the shop's 'pending' payout for that
-  // order: settle_eligible_at = delivered_at + return window. The deferred settlement
-  // sweep (server/lib/settlementExecutor.ts) pays it out once this timestamp passes.
-  void markPayoutEligibleForShipment(shipment.order_detail_id as number | null);
+  // DEFERRED SETTLEMENT DISABLED (2026-06-23): vendor payouts now happen at pay-in via
+  // PayTabs Split Payout (split_payout[] in server/routes/paytabsRouter.ts), not via the
+  // post-delivery External Payouts sweep — which the account doesn't have enabled anyway.
+  // Leaving settle_eligible_at unset keeps the obsolete settlementExecutor sweep a no-op.
+  // void markPayoutEligibleForShipment(shipment.order_detail_id as number | null);
 
   // Auto-complete batch if every shipment is now delivered
   const allIds = [

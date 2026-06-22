@@ -64,6 +64,7 @@ export default function MerchantDashboard() {
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unreadMsgCount, setUnreadMsgCount] = useState(0);
   const avatarRef = useRef<HTMLDivElement>(null);
 
@@ -179,9 +180,24 @@ export default function MerchantDashboard() {
     <div className="md-root">
       {/* Top bar */}
       <header className="md-topbar">
-        <div className="md-topbar-brand" onClick={handleGoToStore}>
-          <img src="/logo.png" alt="سوق لينك" className="md-topbar-logo" />
-          <div className="md-topbar-brand-text">سوق <span>لينك</span></div>
+        <div className="md-topbar-left">
+          <button
+            type="button"
+            className="md-topbar-burger"
+            aria-label="القائمة"
+            aria-expanded={sidebarOpen}
+            onClick={() => setSidebarOpen(v => !v)}
+          >
+            <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
+          <div className="md-topbar-brand" onClick={handleGoToStore}>
+            <img src="/logo.png" alt="سوق لينك" className="md-topbar-logo" />
+            <div className="md-topbar-brand-text">سوق <span>لينك</span></div>
+          </div>
         </div>
 
         <div className="md-topbar-actions">
@@ -275,8 +291,16 @@ export default function MerchantDashboard() {
 
       {/* Body */}
       <div className="md-body">
+        {/* Mobile overlay behind the drawer */}
+        {sidebarOpen && (
+          <div className="md-sidebar-overlay" onClick={() => setSidebarOpen(false)} />
+        )}
+
         {/* Sidebar */}
-        <aside className="md-sidebar">
+        <aside
+          className={`md-sidebar${sidebarOpen ? ' md-sidebar-open' : ''}`}
+          onClick={() => setSidebarOpen(false)}
+        >
           {/* Greeting */}
           <div className="md-sidebar-greeting">
             <div className="md-sidebar-greeting-name">مرحباً، <strong>{shop?.name ?? merchant.displayName}</strong></div>

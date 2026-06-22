@@ -720,6 +720,19 @@
   .pt-coupon-input { width: 150px; }
 }
 
+@media (max-width: 560px) {
+  /* Stop the product cell forcing the table wider than the screen */
+  .pt-th-product, .pt-cell-product { min-width: 0; }
+  .pt-cell { white-space: normal; padding: 10px 8px; }
+  .pt-product-info { gap: 10px; }
+  .pt-product-img-wrap { width: 50px; height: 50px; }
+  .pt-product-name { font-size: .8rem; }
+  .pt-qty-btn { width: 30px; height: 32px; }
+  .pt-qty-value { width: 32px; }
+  .pt-cell-remove { width: 36px; padding: 10px 4px; }
+  .pt-btn-add-cart { padding: 7px 12px; font-size: .75rem; }
+}
+
 @media (max-width: 480px) {
   .pt-th-price, .pt-cell-price { display: none; }
   .pt-bottom-actions { flex-direction: column; align-items: stretch; }

@@ -10,7 +10,10 @@ import {
 } from '../../lib/profile';
 import Topbar from '../../components/Topbar';
 import ChangePasswordModal from '../../components/ChangePasswordModal';
-import LocationPicker from '../../components/LocationPicker';
+import LocationPicker, { type PlaceMeta } from '../../components/LocationPicker';
+import { fetchZones, zoneCenter, type Zone } from '../../lib/zones';
+import { parsePhone } from '../../lib/formValidation';
+import { useFieldHint } from '../auth/useFieldHint';
 import './ProfileSettingsPage.css';
 
 /**
@@ -73,6 +76,19 @@ export default function ProfileSettingsPage() {
   // Working copy + the last-saved snapshot (to detect unsaved changes).
   const [form, setForm] = useState<ProfileData>(emptyProfile());
   const [saved, setSavedSnapshot] = useState<ProfileData>(emptyProfile());
+  const [zones, setZones] = useState<Zone[]>([]);
+
+  // Phone is edited via a split control (country code + "05" prefix + 8 digits)
+  // and recomposed into form.phone. Inline hints mirror the checkout form.
+  const [phoneCode, setPhoneCode]   = useState('970');
+  const [phoneLocal, setPhoneLocal] = useState('');
+  const phoneHint     = useFieldHint();
+  const firstNameHint = useFieldHint();
+  const lastNameHint  = useFieldHint();
+
+  useEffect(() => {
+    fetchZones().then(setZones).catch(() => setZones([]));
+  }, []);
 
   const [loading, setLoading] = useState(true);
   const [savingState, setSavingState] = useState(false);
@@ -87,7 +103,16 @@ export default function ProfileSettingsPage() {
     (async () => {
       try {
         const data = await fetchProfile();
-        if (!cancelled) { setForm(data); setSavedSnapshot(data); }
+        if (!cancelled) {
+          // Normalise the saved phone into the split control's canonical form so
+          // the recomposed value doesn't read as an unsaved change.
+          const { code, local } = parsePhone(data.phone);
+          setPhoneCode(code);
+          setPhoneLocal(local);
+          const normalized = { ...data, phone: local ? `${code}5${local}` : '' };
+          setForm(normalized);
+          setSavedSnapshot(normalized);
+        }
       } catch (e: unknown) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'خطأ في التحميل');
       } finally {
@@ -97,24 +122,72 @@ export default function ProfileSettingsPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Text-field updater.
-  const update = (field: keyof ProfileData) => (e: React.ChangeEvent<HTMLInputElement>) => {
-    setForm((prev) => ({ ...prev, [field]: e.target.value }));
+  // Text-field updater (inputs, selects, textareas).
+  const update = (field: keyof ProfileData) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+      setForm((prev) => ({ ...prev, [field]: e.target.value }));
+      setJustSaved(false);
+    };
+
+  // Name updater — strips digits and flashes a hint (names can't contain numbers).
+  const updateName = (field: 'firstName' | 'lastName', hint: ReturnType<typeof useFieldHint>) =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const raw = e.target.value;
+      if (/[0-9]/.test(raw)) hint.show('لا يُسمح بالأرقام في هذا الحقل');
+      else hint.clear();
+      setForm((prev) => ({ ...prev, [field]: raw.replace(/[0-9]/g, '') }));
+      setJustSaved(false);
+    };
+
+  // Phone split → recompose into form.phone as `${code}5${local}`.
+  const onPhoneCode = (code: string) => {
+    setPhoneCode(code);
+    setForm((prev) => ({ ...prev, phone: phoneLocal ? `${code}5${phoneLocal}` : '' }));
+    setJustSaved(false);
+  };
+  const onPhoneLocal = (raw: string) => {
+    const digits = raw.replace(/\D/g, '');
+    if (/[^\d]/.test(raw)) phoneHint.show('أرقام فقط');
+    else if (digits.length > 8) phoneHint.show('الحد الأقصى 8 أرقام');
+    else phoneHint.clear();
+    const local = digits.slice(0, 8);
+    setPhoneLocal(local);
+    setForm((prev) => ({ ...prev, phone: local ? `${phoneCode}5${local}` : '' }));
     setJustSaved(false);
   };
 
-  // Map-pin updater.
-  const setCoords = (latitude: number, longitude: number) => {
-    setForm((prev) => ({ ...prev, latitude, longitude }));
+  // Zone dropdown → store both id and name.
+  const setZone = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const z = zones.find(zz => zz.id === e.target.value) ?? null;
+    setForm((prev) => ({ ...prev, dropoffZoneId: z?.id ?? null, dropoffZone: z?.name ?? '' }));
+    setJustSaved(false);
+  };
+
+  // Map-pin updater — also captures place metadata from a search.
+  const setCoords = (latitude: number, longitude: number, meta?: PlaceMeta) => {
+    setForm((prev) => ({
+      ...prev,
+      latitude,
+      longitude,
+      placeId: meta?.placeId ?? '',
+      formattedAddress: meta?.formattedAddress ?? prev.formattedAddress,
+    }));
     setJustSaved(false);
   };
 
   const clearCoords = () => {
-    setForm((prev) => ({ ...prev, latitude: null, longitude: null }));
+    setForm((prev) => ({ ...prev, latitude: null, longitude: null, placeId: '' }));
     setJustSaved(false);
   };
 
+  const selectedZone = zones.find(z => z.id === form.dropoffZoneId) ?? null;
+
   const handleSave = async () => {
+    // A phone, if entered, must be the full 8 digits after "05".
+    if (phoneLocal.length > 0 && phoneLocal.length !== 8) {
+      setError('رقم الهاتف غير صحيح — أدخل 8 أرقام بعد 05');
+      return;
+    }
     setSavingState(true);
     setError(null);
     setJustSaved(false);
@@ -179,7 +252,18 @@ export default function ProfileSettingsPage() {
             {/* ── Active section ─────────────────────────────────── */}
             <section className="ps-panel">
               {tab === 'account' && (
-                <AccountSection form={form} email={customer?.email ?? ''} update={update} />
+                <AccountSection
+                  form={form}
+                  email={customer?.email ?? ''}
+                  updateName={updateName}
+                  firstNameHint={firstNameHint}
+                  lastNameHint={lastNameHint}
+                  phoneCode={phoneCode}
+                  phoneLocal={phoneLocal}
+                  onPhoneCode={onPhoneCode}
+                  onPhoneLocal={onPhoneLocal}
+                  phoneHint={phoneHint}
+                />
               )}
 
               {tab === 'address' && (
@@ -188,6 +272,9 @@ export default function ProfileSettingsPage() {
                   update={update}
                   setCoords={setCoords}
                   clearCoords={clearCoords}
+                  zones={zones}
+                  setZone={setZone}
+                  selectedZone={selectedZone}
                 />
               )}
 
@@ -239,11 +326,20 @@ export default function ProfileSettingsPage() {
 /* ───────────────────────── Account ───────────────────────── */
 
 function AccountSection({
-  form, email, update,
+  form, email, updateName, firstNameHint, lastNameHint,
+  phoneCode, phoneLocal, onPhoneCode, onPhoneLocal, phoneHint,
 }: {
   form: ProfileData;
   email: string;
-  update: (f: keyof ProfileData) => (e: React.ChangeEvent<HTMLInputElement>) => void;
+  updateName: (f: 'firstName' | 'lastName', hint: ReturnType<typeof useFieldHint>) =>
+    (e: React.ChangeEvent<HTMLInputElement>) => void;
+  firstNameHint: ReturnType<typeof useFieldHint>;
+  lastNameHint: ReturnType<typeof useFieldHint>;
+  phoneCode: string;
+  phoneLocal: string;
+  onPhoneCode: (code: string) => void;
+  onPhoneLocal: (raw: string) => void;
+  phoneHint: ReturnType<typeof useFieldHint>;
 }) {
   return (
     <div className="ps-card">
@@ -254,10 +350,12 @@ function AccountSection({
 
       <div className="ps-row">
         <Field label="الاسم الأول">
-          <input placeholder="أدخل الاسم الأول" value={form.firstName} onChange={update('firstName')} />
+          <input placeholder="أدخل الاسم الأول" value={form.firstName} onChange={updateName('firstName', firstNameHint)} />
+          {firstNameHint.hint && <span className="ps-field-hint">{firstNameHint.hint}</span>}
         </Field>
         <Field label="الاسم الأخير">
-          <input placeholder="أدخل الاسم الأخير" value={form.lastName} onChange={update('lastName')} />
+          <input placeholder="أدخل الاسم الأخير" value={form.lastName} onChange={updateName('lastName', lastNameHint)} />
+          {lastNameHint.hint && <span className="ps-field-hint">{lastNameHint.hint}</span>}
         </Field>
       </div>
 
@@ -266,7 +364,28 @@ function AccountSection({
       </Field>
 
       <Field label="رقم الهاتف">
-        <input type="tel" placeholder="+970 5x xxx xxxx" value={form.phone} onChange={update('phone')} />
+        <div className="ps-phone-split" dir="ltr">
+          <select
+            title="رمز الدولة"
+            className="ps-phone-code"
+            value={phoneCode}
+            onChange={(e) => onPhoneCode(e.target.value)}
+          >
+            <option value="970">+970</option>
+            <option value="972">+972</option>
+          </select>
+          <span className="ps-phone-prefix">05</span>
+          <input
+            type="text"
+            className="ps-phone-local"
+            dir="ltr"
+            inputMode="numeric"
+            placeholder="XXXXXXXX"
+            value={phoneLocal}
+            onChange={(e) => onPhoneLocal(e.target.value)}
+          />
+        </div>
+        {phoneHint.hint && <span className="ps-field-hint">{phoneHint.hint}</span>}
       </Field>
     </div>
   );
@@ -275,12 +394,15 @@ function AccountSection({
 /* ───────────────────────── Address Book ───────────────────────── */
 
 function AddressSection({
-  form, update, setCoords, clearCoords,
+  form, update, setCoords, clearCoords, zones, setZone, selectedZone,
 }: {
   form: ProfileData;
-  update: (f: keyof ProfileData) => (e: React.ChangeEvent<HTMLInputElement>) => void;
-  setCoords: (lat: number, lng: number) => void;
+  update: (f: keyof ProfileData) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => void;
+  setCoords: (lat: number, lng: number, meta?: PlaceMeta) => void;
   clearCoords: () => void;
+  zones: Zone[];
+  setZone: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  selectedZone: Zone | null;
 }) {
   const hasPin = form.latitude != null && form.longitude != null;
 
@@ -288,25 +410,15 @@ function AddressSection({
     <div className="ps-card">
       <div className="ps-card-head">
         <h2 className="ps-card-title">عنوان التسليم</h2>
-        <p className="ps-card-desc">العنوان النصّي يساعد المندوب، وتحديد الموقع على الخريطة يضمن وصوله بدقة.</p>
+        <p className="ps-card-desc">اختر المنطقة وحدّد موقعك على الخريطة بدقة، وأضف تعليمات تساعد المندوب على الوصول.</p>
       </div>
 
-      <Field label="العنوان (الشارع ورقم المنزل)">
-        <input placeholder="اسم الشارع ورقم المنزل" value={form.street} onChange={update('street')} />
+      <Field label="المنطقة">
+        <select className="ps-select" title="المنطقة" value={form.dropoffZoneId ?? ''} onChange={setZone}>
+          <option value="">اختر المنطقة</option>
+          {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
+        </select>
       </Field>
-
-      <Field label="الشقة / الدور (اختياري)">
-        <input placeholder="رقم الشقة أو الدور" value={form.apartment} onChange={update('apartment')} />
-      </Field>
-
-      <div className="ps-row">
-        <Field label="المدينة">
-          <input placeholder="مثال: رام الله" value={form.city} onChange={update('city')} />
-        </Field>
-        <Field label="الرمز البريدي">
-          <input placeholder="12345" value={form.postalCode} onChange={update('postalCode')} />
-        </Field>
-      </div>
 
       {/* Map pin */}
       <div className="ps-map-block">
@@ -321,8 +433,19 @@ function AddressSection({
         <LocationPicker
           value={{ lat: form.latitude, lng: form.longitude }}
           onChange={setCoords}
+          recenterTo={selectedZone ? zoneCenter(selectedZone) : null}
         />
       </div>
+
+      <Field label="تعليمات توصيل إضافية">
+        <textarea
+          className="ps-textarea"
+          rows={3}
+          placeholder="اسم الشارع، رقم العمارة، الطابق، رقم الشقة، أقرب معلم، أو أي تعليمات للمندوب."
+          value={form.deliveryDescription}
+          onChange={update('deliveryDescription')}
+        />
+      </Field>
     </div>
   );
 }

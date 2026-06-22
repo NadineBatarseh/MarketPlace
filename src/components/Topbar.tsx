@@ -208,7 +208,7 @@ export default function Topbar({
         <nav className="nav-actions">
           {/* Home */}
           <div
-            className={`nav-action${pathname === '/home' ? ' nav-action--active' : ''}`}
+            className={`nav-action nav-action--home${pathname === '/home' ? ' nav-action--active' : ''}`}
             onClick={() => navigate('/home')}
             title="الرئيسية"
           >

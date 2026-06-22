@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import LogisticsSettingsPage from '../../pages/admin/logistics/LogisticsSettingsPage';
 import PaymentSettingsPage from '../../pages/admin/PaymentSettingsPage';
 import SalesLedgerPage from '../../pages/admin/SalesLedgerPage';
+import SettlementBatchesPage from '../../pages/admin/SettlementBatchesPage';
 import FinancialAnalyticsPage from '../../pages/admin/FinancialAnalyticsPage';
 import BatchMonitorPage from '../../pages/admin/BatchMonitorPage';
 import CouriersPage from '../../pages/admin/CouriersPage';
@@ -74,7 +75,7 @@ interface DeliveryApp {
 }
 
 type FilterTab = 'all' | 'pending' | 'approved' | 'rejected';
-type Section = 'merchant' | 'delivery' | 'batches' | 'logistics' | 'couriers' | 'shops' | 'categories' | 'messages' | 'payments' | 'ledger' | 'analytics';
+type Section = 'merchant' | 'delivery' | 'batches' | 'logistics' | 'couriers' | 'shops' | 'categories' | 'messages' | 'payments' | 'ledger' | 'settlements' | 'analytics';
 
 interface BatchConfigForm {
   max_driver_capacity: number;
@@ -941,6 +942,18 @@ export default function AdminDashboard() {
             <SidebarItem
               icon={
                 <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <rect x="2" y="5" width="20" height="14" rx="2" />
+                  <path d="M2 10h20M6 15h4" />
+                </svg>
+              }
+              label="تحويلات التجار"
+              active={activeSection === 'settlements'}
+              onClick={() => setActiveSection('settlements')}
+            />
+
+            <SidebarItem
+              icon={
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                   <path d="M3 3v18h18" />
                   <path d="M7 14l4-4 3 3 5-6" />
                 </svg>
@@ -1268,6 +1281,11 @@ export default function AdminDashboard() {
           {/* ── Sales ledger section ── */}
           {activeSection === 'ledger' && (
             <SalesLedgerPage embedded />
+          )}
+
+          {/* ── Settlement batches (vendor payouts) section ── */}
+          {activeSection === 'settlements' && (
+            <SettlementBatchesPage embedded />
           )}
 
           {/* ── Financial analytics section ── */}

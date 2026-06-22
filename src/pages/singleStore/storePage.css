@@ -4,76 +4,10 @@
   --gold: #c8a951;
 }
 
-/* ── TOPBAR ── */
-.topbar {
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
-  padding: 0 32px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  height: 68px;
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  box-shadow: 0 1px 6px rgba(0,0,0,0.06);
-}
-
-.logo {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  text-decoration: none;
-}
-.logo-img {
-  height: 42px;
-  width: auto;
-  object-fit: contain;
-}
-.logo-text { line-height: 1.1; }
-.logo-text .ar { font-size: 17px; font-weight: 800; color: var(--color-primary); }
-.logo-text .en { font-size: 11px; font-weight: 500; color: var(--color-muted); letter-spacing: 1px; }
-
-.search-bar {
-  flex: 1; max-width: 460px; margin: 0 32px;
-  position: relative;
-}
-.search-bar input {
-  width: 100%;
-  padding: 10px 44px 10px 16px;
-  border: 1.5px solid var(--color-border);
-  border-radius: 50px;
-  font-family: var(--font-main);
-  font-size: 14px;
-  background: var(--color-bg);
-  color: var(--color-text);
-  outline: none;
-  transition: border-color 0.2s;
-}
-.search-bar input:focus { border-color: var(--color-primary); }
-.search-bar .search-icon {
-  position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
-  color: var(--color-muted);
-}
-
-.nav-actions { display: flex; align-items: center; gap: 20px; }
-.nav-action {
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-  cursor: pointer; position: relative; text-decoration: none; color: var(--color-text);
-}
-.nav-action svg { width: 22px; height: 22px; }
-.nav-action span { font-size: 11px; color: var(--color-muted); }
-.badge {
-  position: absolute; top: -4px; left: -4px;
-  background: var(--color-badge);
-  color: white; border-radius: 50%; width: 16px; height: 16px;
-  font-size: 9px; display: flex; align-items: center; justify-content: center;
-  font-weight: 700;
-}
-
-/* ── NAV ── */
+/* NOTE: Topbar styling lives in components/Topbar.css (the shared <Topbar/>
+   component is rendered here). The duplicate topbar rules that used to live
+   in this file were removed so they no longer override the responsive
+   Topbar.css rules on mobile. */
 
 /* ── STORE HERO ── */
 .store-hero {
@@ -1249,10 +1183,38 @@ input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.15); }
   .products-grid { grid-template-columns: repeat(2, 1fr); }
   .sidebar { display: none; }
   .products-section { padding-right: 0; }
+  .page-body { padding: 18px 16px; }
+  /* Store hero: stack and centre instead of a wide single row */
+  .store-hero {
+    margin: 14px 16px 0;
+    padding: 24px 20px;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+    text-align: center;
+  }
+  .sh-identity { justify-content: center; }
+  .sh-stats { flex: 1 1 100%; order: 3; justify-content: space-around; }
+  .sh-stat { padding: 0 16px; }
+  .sh-actions { flex: 1 1 100%; order: 4; justify-content: center; flex-wrap: wrap; }
+}
+
+@media (max-width: 560px) {
+  .page-body { padding: 14px 12px; }
+  .store-hero { margin: 12px 12px 0; padding: 18px 14px; }
+  .sh-name { font-size: 19px; }
+  .sh-desc { max-width: none; }
+  .sh-stat { padding: 0 10px; }
+  .sh-stat-divider { display: none; }
+  .products-toolbar { flex-wrap: wrap; gap: 10px; }
 }
 
 @media (max-width: 480px) {
   .products-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
   .pagination { gap: 4px; }
   .page-btn { min-width: 34px; height: 34px; font-size: 12px; }
+}
+
+@media (max-width: 360px) {
+  .products-grid { grid-template-columns: 1fr; }
 }

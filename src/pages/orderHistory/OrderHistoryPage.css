@@ -331,3 +331,22 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ── Responsive ──────────────────────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .oh-page { padding: 1.5rem 1rem 3rem; }
+  .oh-header { margin-bottom: 1.5rem; }
+  .oh-header h1 { font-size: 23px; }
+  .oh-search-wrap { max-width: none; }
+}
+
+@media (max-width: 460px) {
+  .oh-stats { grid-template-columns: 1fr 1fr; }
+  .oh-order-meta { gap: 8px; flex-wrap: wrap; }
+  .oh-thumb, .oh-thumb-more { width: 60px; height: 60px; }
+  /* Stack the footer so the action buttons don't overflow */
+  .oh-card-foot { flex-direction: column; align-items: stretch; gap: 10px; }
+  .oh-actions { gap: 8px; }
+  .oh-actions .oh-btn { flex: 1; text-align: center; }
+  .oh-guest-actions { flex-direction: column; }
+}

@@ -26,20 +26,33 @@ const TEXT_FIELDS = [
   'street',
   'apartment',
   'postal_code',
+  // Saved default delivery address (zone name + Google Maps metadata + directions).
+  'dropoff_zone',
+  'place_id',
+  'formatted_address',
+  'delivery_address_description',
 ] as const;
 
 // Numeric fields (the delivery map pin). Handled separately from text because
 // they need range validation, not string-trimming.
 const COORD_FIELDS = ['latitude', 'longitude'] as const;
 
+// UUID fields — validated against a uuid shape (or null to clear).
+const UUID_FIELDS = ['dropoff_zone_id'] as const;
+
 type TextField = (typeof TEXT_FIELDS)[number];
 type CoordField = (typeof COORD_FIELDS)[number];
+type UuidField = (typeof UUID_FIELDS)[number];
 
 // Columns selected/returned to the client.
-const SELECT = [...TEXT_FIELDS, ...COORD_FIELDS].join(', ');
+const SELECT = [...TEXT_FIELDS, ...COORD_FIELDS, ...UUID_FIELDS].join(', ');
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type ProfilePayload = Partial<
-  Record<TextField, string | null> & Record<CoordField, number | null>
+  Record<TextField, string | null> &
+  Record<CoordField, number | null> &
+  Record<UuidField, string | null>
 >;
 
 /** Empty profile shape returned when the user has no row yet (first visit). */
@@ -52,8 +65,13 @@ function emptyProfile(): ProfilePayload {
     street: '',
     apartment: '',
     postal_code: '',
+    dropoff_zone: '',
+    place_id: '',
+    formatted_address: '',
+    delivery_address_description: '',
     latitude: null,
     longitude: null,
+    dropoff_zone_id: null,
   };
 }
 
@@ -99,6 +117,14 @@ router.put('/', requireCustomer, async (req: Request, res: Response) => {
       } else {
         return res.status(400).json({ ok: false, error: `Invalid ${field}` });
       }
+    }
+  }
+
+  // UUID fields (e.g. the saved zone): accept a valid uuid, or null to clear.
+  for (const field of UUID_FIELDS) {
+    if (field in body) {
+      const raw = body[field];
+      updates[field] = typeof raw === 'string' && UUID_RE.test(raw) ? raw : null;
     }
   }
 

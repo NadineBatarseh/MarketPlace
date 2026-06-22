@@ -317,8 +317,12 @@
 @media (max-width: 900px) {
   /* Stack the rail above the grid (matches the category page behaviour). */
   .els-grid { grid-template-columns: repeat(2, 1fr); }
+  .els-footer { padding: 32px 16px; }
   .els-footer-inner { grid-template-columns: 1fr; gap: 24px; }
 }
 @media (max-width: 560px) {
+  .els-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+}
+@media (max-width: 380px) {
   .els-grid { grid-template-columns: 1fr; }
 }
