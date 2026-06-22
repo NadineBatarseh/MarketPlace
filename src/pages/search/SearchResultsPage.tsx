@@ -102,11 +102,12 @@ function DualRange({
       <input type="range" min={0} max={PRICE_MAX} value={minVal}
         className="srp-dr-input"
         style={{ zIndex: minVal > PRICE_MAX - 60 ? 5 : 3 }}
+        aria-label="الحد الأدنى للسعر"
         onChange={e => onMin(Math.min(+e.target.value, maxVal - 10))}
       />
       <input type="range" min={0} max={PRICE_MAX} value={maxVal}
-        className="srp-dr-input"
-        style={{ zIndex: 4 }}
+        className="srp-dr-input srp-dr-input--max"
+        aria-label="الحد الأقصى للسعر"
         onChange={e => onMax(Math.max(+e.target.value, minVal + 10))}
       />
     </div>
@@ -120,9 +121,10 @@ function FSection({ title, children }: { title: string; children: ReactNode }) {
   const [open, setOpen] = useState(true);
   return (
     <div className="srp-fsec">
-      <button className="srp-fsec-hdr" onClick={() => setOpen(v => !v)}>
+      <button type="button" className="srp-fsec-hdr" onClick={() => setOpen(v => !v)}>
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5"
-          style={{ transform: open ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform .2s' }}>
+          className="srp-fsec-chevron"
+          style={{ transform: open ? 'rotate(0deg)' : 'rotate(-90deg)' }}>
           <polyline points="6 9 12 15 18 9"/>
         </svg>
         <span className="srp-fsec-title">{title}</span>
@@ -192,9 +194,9 @@ function FilterPanel({
           <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/>
           <line x1="11" y1="18" x2="13" y2="18"/>
         </svg>
-        <span style={{ flex: 1 }}>تصفية النتائج</span>
+        <span className="srp-filter-title">تصفية النتائج</span>
         {activeCount > 0 && (
-          <button className="srp-clear-btn" onClick={onClear}>
+          <button type="button" className="srp-clear-btn" onClick={onClear}>
             مسح الكل
             <span className="srp-clear-badge">{activeCount}</span>
           </button>
@@ -217,6 +219,9 @@ function FilterPanel({
               onBlur={() => commitMin(minDraft)}
               onKeyDown={e => e.key === 'Enter' && commitMin(minDraft)}
               className="srp-price-in"
+              aria-label="الحد الأدنى للسعر"
+              title="الحد الأدنى للسعر"
+              placeholder="0"
             />
           </div>
           <div className="srp-price-box">
@@ -231,6 +236,9 @@ function FilterPanel({
               onBlur={() => commitMax(maxDraft)}
               onKeyDown={e => e.key === 'Enter' && commitMax(maxDraft)}
               className="srp-price-in"
+              aria-label="الحد الأقصى للسعر"
+              title="الحد الأقصى للسعر"
+              placeholder="200"
             />
             <span className="srp-price-cur">₪</span>
           </div>
@@ -292,6 +300,7 @@ function ProductCard({ product, rating, onView }: {
         }
 
         <button
+          type="button"
           className={`srp-heart${liked ? ' srp-heart--on' : ''}`}
           onClick={e => { e.stopPropagation(); setLiked(v => !v); }}
           aria-label="أضف للمفضلة"
@@ -326,10 +335,10 @@ function ProductCard({ product, rating, onView }: {
         </div>
 
         {oos
-          ? <button className="srp-btn srp-btn--oos" disabled onClick={e => e.stopPropagation()}>
+          ? <button type="button" className="srp-btn srp-btn--oos" disabled onClick={e => e.stopPropagation()}>
               نفدت الكمية
             </button>
-          : <button className="srp-btn srp-btn--add" onClick={e => e.stopPropagation()}>
+          : <button type="button" className="srp-btn srp-btn--add" onClick={e => e.stopPropagation()}>
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
                 <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
@@ -350,11 +359,11 @@ function SkeletonCard() {
     <div className="srp-card srp-card--skel" aria-hidden>
       <div className="srp-card-img srp-card-img--skel srp-shimmer" />
       <div className="srp-card-body">
-        <div className="srp-skel srp-shimmer" style={{ width: '80%', height: 14 }} />
-        <div className="srp-skel srp-shimmer" style={{ width: '55%', height: 11, marginTop: 7 }} />
-        <div className="srp-skel srp-shimmer" style={{ width: '65%', height: 11, marginTop: 6 }} />
-        <div className="srp-skel srp-shimmer" style={{ width: '40%', height: 15, marginTop: 8 }} />
-        <div className="srp-skel srp-shimmer" style={{ width: '100%', height: 36, borderRadius: 8, marginTop: 10 }} />
+        <div className="srp-skel srp-shimmer srp-skel--name" />
+        <div className="srp-skel srp-shimmer srp-skel--store" />
+        <div className="srp-skel srp-shimmer srp-skel--rating" />
+        <div className="srp-skel srp-shimmer srp-skel--price" />
+        <div className="srp-skel srp-shimmer srp-skel--btn" />
       </div>
     </div>
   );
@@ -376,7 +385,7 @@ function EmptyState({ onBrowse }: { onBrowse: () => void }) {
       </div>
       <h3 className="srp-empty-title">لم نجد نتائج مطابقة</h3>
       <p className="srp-empty-sub">جرّب البحث بكلمة أخرى أو تصفح الفئات لاكتشاف منتجات من السوق المحلي</p>
-      <button className="srp-empty-btn" onClick={onBrowse}>تصفح الفئات</button>
+      <button type="button" className="srp-empty-btn" onClick={onBrowse}>تصفح الفئات</button>
     </div>
   );
 }
@@ -620,6 +629,7 @@ export default function SearchResultsPage() {
             <div className="srp-toolbar">
               <div className="srp-view-grp">
                 <button
+                  type="button"
                   className={`srp-view-btn${viewMode === 'grid' ? ' srp-view-btn--on' : ''}`}
                   onClick={() => setViewMode('grid')} title="شبكة"
                 >
@@ -629,6 +639,7 @@ export default function SearchResultsPage() {
                   </svg>
                 </button>
                 <button
+                  type="button"
                   className={`srp-view-btn${viewMode === 'list' ? ' srp-view-btn--on' : ''}`}
                   onClick={() => setViewMode('list')} title="قائمة"
                 >
@@ -647,6 +658,7 @@ export default function SearchResultsPage() {
                     value={sortBy}
                     onChange={e => setSortBy(e.target.value as SortOption)}
                     className="srp-select"
+                    aria-label="ترتيب النتائج"
                   >
                     <option value="newest">الأحدث</option>
                     <option value="price_asc">السعر الأقل</option>
@@ -667,7 +679,7 @@ export default function SearchResultsPage() {
 
             {/* Mobile bar */}
             <div className="srp-mobile-bar">
-              <button className="srp-mob-filter" onClick={() => setDrawerOpen(true)}>
+              <button type="button" className="srp-mob-filter" onClick={() => setDrawerOpen(true)}>
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/>
                   <line x1="11" y1="18" x2="13" y2="18"/>
@@ -676,7 +688,7 @@ export default function SearchResultsPage() {
                 {activeCount > 0 && <span className="srp-mob-badge">{activeCount}</span>}
               </button>
               <select value={sortBy} onChange={e => setSortBy(e.target.value as SortOption)}
-                className="srp-select srp-select--sm">
+                className="srp-select srp-select--sm" aria-label="ترتيب النتائج">
                 <option value="newest">الأحدث</option>
                 <option value="price_asc">السعر ↑</option>
                 <option value="price_desc">السعر ↓</option>
@@ -709,7 +721,7 @@ export default function SearchResultsPage() {
                 </div>
                 <h3 className="srp-empty-title">لا توجد نتائج بهذه الفلاتر</h3>
                 <p className="srp-empty-sub">جرّب تغيير الفلاتر أو مسحها للاطلاع على جميع النتائج</p>
-                <button className="srp-empty-btn" onClick={clearFilters}>مسح الفلاتر</button>
+                <button type="button" className="srp-empty-btn" onClick={clearFilters}>مسح الفلاتر</button>
               </div>
             )}
 
@@ -725,8 +737,8 @@ export default function SearchResultsPage() {
             {/* Pagination */}
             {totalPages > 1 && (
               <nav className="srp-pagination" aria-label="تنقل بين الصفحات">
-                <button className="srp-pg-arrow" disabled={page <= 1}
-                  onClick={() => goToPage(page - 1)}>
+                <button type="button" className="srp-pg-arrow" disabled={page <= 1}
+                  aria-label="الصفحة السابقة" onClick={() => goToPage(page - 1)}>
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
                     stroke="currentColor" strokeWidth="2.2">
                     <polyline points="15 18 9 12 15 6"/>
@@ -737,14 +749,15 @@ export default function SearchResultsPage() {
                   n === '…'
                     ? <span key={`e${i}`} className="srp-pg-dots">...</span>
                     : <button
+                        type="button"
                         key={n}
                         className={`srp-pg-num${n === page ? ' srp-pg-num--on' : ''}`}
                         onClick={() => goToPage(n as number)}
                       >{n}</button>
                 )}
 
-                <button className="srp-pg-arrow" disabled={page >= totalPages}
-                  onClick={() => goToPage(page + 1)}>
+                <button type="button" className="srp-pg-arrow" disabled={page >= totalPages}
+                  aria-label="الصفحة التالية" onClick={() => goToPage(page + 1)}>
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
                     stroke="currentColor" strokeWidth="2.2">
                     <polyline points="9 18 15 12 9 6"/>
@@ -762,7 +775,7 @@ export default function SearchResultsPage() {
           <div className="srp-drawer" onClick={e => e.stopPropagation()}>
             <div className="srp-drawer-hdr">
               <span className="srp-drawer-title">تصفية النتائج</span>
-              <button className="srp-drawer-x" onClick={() => setDrawerOpen(false)} aria-label="إغلاق">
+              <button type="button" className="srp-drawer-x" onClick={() => setDrawerOpen(false)} aria-label="إغلاق">
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                 </svg>
@@ -772,7 +785,7 @@ export default function SearchResultsPage() {
               <FilterPanel {...fpProps} />
             </div>
             <div className="srp-drawer-foot">
-              <button className="srp-drawer-apply" onClick={() => setDrawerOpen(false)}>
+              <button type="button" className="srp-drawer-apply" onClick={() => setDrawerOpen(false)}>
                 عرض النتائج ({sorted.length})
               </button>
             </div>

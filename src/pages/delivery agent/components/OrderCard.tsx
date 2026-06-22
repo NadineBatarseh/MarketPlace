@@ -4,6 +4,7 @@
  */
 import { useRef, useState } from "react";
 import type { DelivererOrder } from "../api";
+import "./OrderCard.css";
 import supabase from "../../../lib/supabase";
 
 interface OrderCardProps {
@@ -146,7 +147,15 @@ export default function OrderCard({ order, onStart, onComplete }: OrderCardProps
                 >
                   {uploading ? "جاري الرفع..." : "📷 رفع صورة"}
                 </button>
-                <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={handlePhotoUpload} style={{ display: "none" }} />
+                <input
+                  ref={fileRef}
+                  className="order-card__photo-input"
+                  type="file"
+                  accept="image/*"
+                  aria-label="Upload delivery photo"
+                  title="Upload delivery photo"
+                  onChange={handlePhotoUpload}
+                />
                 {photoError && <div style={{ fontSize: "11px", color: "#ef4444", marginTop: "4px" }}>{photoError}</div>}
               </>
             )}
