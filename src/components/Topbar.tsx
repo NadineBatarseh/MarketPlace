@@ -301,10 +301,6 @@ export default function Topbar({
                   🚚 تقديم طلب كمندوب
                 </button>
                 <button type="button" className="topbar-dropdown-item"
-                  onClick={() => { navigate('/hubworker-application'); setDropdownOpen(false); }}>
-                  📦 تقديم طلب كعامل مستودع
-                </button>
-                <button type="button" className="topbar-dropdown-item"
                   onClick={() => { navigate('/admin-dashboard'); setDropdownOpen(false); }}>
                   🛡️ دخول كمشرف
                 </button>

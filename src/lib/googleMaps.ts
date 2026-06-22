@@ -1,7 +1,7 @@
 /**
  * One-time, promise-based loader for the Google Maps JS SDK.
  *
- * The delivery routing map (src/pages/delivery agent/components/MapView.tsx)
+ * The driver routing map (src/pages/delivery agent/DriverRouteMap.tsx)
  * injects a <script id="gmaps-script"> imperatively. This loader reuses the
  * SAME id and guards on `window.google.maps`, so whichever feature mounts first
  * loads the SDK and the other simply resolves against the already-loaded copy —

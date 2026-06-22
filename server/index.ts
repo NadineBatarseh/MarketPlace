@@ -20,6 +20,8 @@ import applicationUploadRouter from "./routes/applicationUploadRouter.js";
 import adminArchiveRouter from "./routes/adminArchiveRouter.js";
 import synonymsAdminRouter from "./routes/synonymsAdminRouter.js";
 import paytabsRouter from "./routes/paytabsRouter.js";
+import payoutOnboardingRouter from "./routes/payoutOnboardingRouter.js";
+import payoutAdminRouter from "./routes/payoutAdminRouter.js";
 import ordersRouter from "./routes/ordersRouter.js";
 import profileRouter from "./routes/profileRouter.js";
 import { requireAdmin } from "./middleware/requireAdmin.js";
@@ -544,6 +546,12 @@ app.use('/api/profile', profileRouter);
 /* ---------- PAYTABS PAYMENTS (Hosted Payment Page — Test Mode) ---------- */
 app.use('/api/payments/paytabs', paytabsRouter);
 
+/* ---------- VENDOR PAYOUT ONBOARDING (merchant self-serve IBAN → PayTabs entity) ---------- */
+app.use('/api/payments/payout-onboarding', payoutOnboardingRouter);
+
+/* ---------- VENDOR SETTLEMENT ADMIN (run sweep / batches / reconcile) ---------- */
+app.use('/api/payments/payouts', payoutAdminRouter);
+
 /* ---------- DEBUG (remove after fixing) ---------- */
 
 app.get("/api/debug/env-check", (_req: Request, res: Response) => {
@@ -841,9 +849,9 @@ app.post("/api/activate", async (req: Request, res: Response) => {
     return res.status(400).json({ ok: false, error: "Missing email or password" });
   }
 
-  // 1. Find approved application (merchant → delivery → hubworker)
+  // 1. Find approved application (merchant → delivery)
   let applicantName: string | null = null;
-  let role: "merchant" | "delivery" | "hubworker" = "merchant";
+  let role: "merchant" | "delivery" = "merchant";
 
   const { data: merchantApp } = await supabase
     .from("merchant_applications")
@@ -870,18 +878,6 @@ app.post("/api/activate", async (req: Request, res: Response) => {
     if (deliveryApp) {
       applicantName = deliveryApp.name;
       role = "delivery";
-    } else {
-      const { data: hubApp } = await supabase
-        .from("hubworker_applications")
-        .select("name")
-        .eq("platform_email", platformEmail.trim())
-        .eq("status", "approved")
-        .maybeSingle();
-
-      if (hubApp) {
-        applicantName = hubApp.name;
-        role = "hubworker";
-      }
     }
   }
 
@@ -1151,7 +1147,7 @@ const PORT = Number(process.env.PORT) || 4000;
 function startServer() {
   const server = app.listen(PORT, () => {
     console.log(`✅ Server running on http://localhost:${PORT}`);
-    bootstrapLogistics();
+    bootstrapLogistics().catch(e => console.error('[Logistics] bootstrap failed:', e));
   });
 
   server.on('error', async (err: NodeJS.ErrnoException) => {

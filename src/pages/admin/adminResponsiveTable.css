@@ -1,0 +1,50 @@
+/* Shared responsive-table styling for wide admin tables (Shops, Couriers, …).
+ *
+ * On phones the table reflows into stacked cards — one card per row, each value
+ * prefixed by its column name (from the cell's data-label) — so there is NO
+ * horizontal scrolling and everything fits the screen width.
+ *
+ * Usage: wrapper div gets class "adm-scroll", the <table> gets class "adm-rtable",
+ * and every <td> that should show a label carries data-label="…". A <td> WITHOUT
+ * data-label (e.g. a full-width expanded detail panel) stays a normal block.
+ */
+@media (max-width: 760px) {
+  .adm-scroll {
+    overflow: visible !important;
+    border: none !important;
+    background: transparent !important;
+  }
+
+  .adm-rtable thead { display: none; }
+
+  .adm-rtable,
+  .adm-rtable tbody,
+  .adm-rtable tr,
+  .adm-rtable td { display: block; width: 100%; }
+
+  .adm-rtable tr {
+    background: #ffffff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    padding: 6px 12px;
+  }
+
+  .adm-rtable td[data-label] {
+    border: none !important;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 7px 0 !important;
+    text-align: right;
+  }
+  .adm-rtable td[data-label]::before {
+    content: attr(data-label);
+    font-weight: 700;
+    color: #64748b;
+    font-size: 12px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+}

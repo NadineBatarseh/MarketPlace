@@ -1,0 +1,445 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { supabase } from '../../lib/supabase';
+import { SettingDef, CategoryDef, SettingsValues } from './logistics/settingsData';
+import SettingsSection from './logistics/components/SettingsSection';
+
+/**
+ * Admin — payment & settlement settings.
+ *
+ * Same visual language as the logistics settings page: it reuses SettingsSection /
+ * SettingRow and mirrors the toolbar + sidenav + sections layout. The difference is
+ * the data source: sensitive financial knobs are read/written through the
+ * requireAdmin-gated API (GET/PUT /api/payments/payouts/config), not direct supabase.
+ */
+
+const API_BASE = 'http://localhost:4000';
+
+const FONTS_CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+  * { box-sizing: border-box; }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: #F1F5F9; }
+  ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+  input[type=number]::-webkit-inner-spin-button { opacity: 0.5; }
+  input[type=number]::-webkit-outer-spin-button { opacity: 0.5; }
+`;
+
+// Categories shown in the sidenav (same shape as the logistics page).
+const CATEGORIES: CategoryDef[] = [
+  { key: 'fees',       label: 'العمولات والرسوم', icon: '₪' },
+  { key: 'settlement', label: 'التسوية والتحويل', icon: '⟳' },
+];
+
+// Field definitions. `key` is the payment_config DB column name (snake_case) and is
+// used directly when loading/saving via the API.
+const SETTINGS_DEFINITIONS: SettingDef[] = [
+  {
+    key: 'platform_commission_rate',
+    label: 'عمولة المنصّة',
+    unit: 'نسبة',
+    type: 'ratio',
+    defaultValue: 0.10,
+    min: 0,
+    step: 0.01,
+    explanation: 'النسبة المقتطعة من إجمالي مبيعات كل متجر (0.10 = 10%).',
+    category: 'fees',
+  },
+  {
+    key: 'delivery_fee',
+    label: 'أجرة التوصيل',
+    unit: '₪',
+    type: 'currency',
+    defaultValue: 25,
+    min: 0,
+    step: 1,
+    explanation: 'تُضاف على إجمالي طلب العميل وتُدفع للسائق المعيَّن.',
+    category: 'fees',
+  },
+  {
+    key: 'settlement_return_window_hours',
+    label: 'نافذة الإرجاع قبل التحويل',
+    unit: 'ساعة',
+    type: 'count',
+    defaultValue: 72,
+    min: 0,
+    step: 1,
+    explanation: 'المدة بعد تسليم الطلب قبل أن تصبح حصّة التاجر قابلة للصرف. تُخزَّن بالساعات.',
+    category: 'settlement',
+    timeUnits: [
+      { label: 'ساعة', factor: 1 },
+      { label: 'يوم', factor: 24, step: 1 },
+    ],
+  },
+  {
+    key: 'settlement_max_attempts',
+    label: 'أقصى عدد محاولات التحويل',
+    unit: 'محاولة',
+    type: 'count',
+    defaultValue: 3,
+    min: 1,
+    step: 1,
+    explanation: 'كم مرة يُعاد محاولة صرف دفعة فاشلة قبل تجاوزها.',
+    category: 'settlement',
+  },
+  {
+    key: 'settlement_sweep_interval_minutes',
+    label: 'فترة مسح التسوية',
+    unit: 'دقيقة',
+    type: 'minutes',
+    defaultValue: 15,
+    min: 1,
+    step: 1,
+    explanation: 'كل كم دقيقة يفحص النظام الدفعات المستحقّة. يُطبَّق بعد إعادة تشغيل الخادم. تُخزَّن بالدقائق.',
+    category: 'settlement',
+    timeUnits: [
+      { label: 'دقيقة', factor: 1 },
+      { label: 'ساعة', factor: 60, step: 0.5 },
+      { label: 'يوم', factor: 1440, step: 1 },
+    ],
+  },
+];
+
+function getDefaultValues(): SettingsValues {
+  return Object.fromEntries(SETTINGS_DEFINITIONS.map(s => [s.key, s.defaultValue]));
+}
+
+function validate(values: SettingsValues): Record<string, string> {
+  const errs: Record<string, string> = {};
+  for (const def of SETTINGS_DEFINITIONS) {
+    const v = Number(values[def.key]);
+    if (isNaN(v)) { errs[def.key] = 'يجب أن يكون رقماً'; continue; }
+    if (def.min !== undefined && v < def.min) errs[def.key] = `الحد الأدنى ${def.min}`;
+    else if (def.max !== undefined && v > def.max) errs[def.key] = `الحد الأقصى ${def.max}`;
+  }
+  return errs;
+}
+
+type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+
+async function getToken(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token ?? null;
+}
+
+const PaymentSettingsPage: React.FC<{ embedded?: boolean }> = ({ embedded = false }) => {
+  const [values, setValues] = useState<SettingsValues>(getDefaultValues);
+  const [savedValues, setSavedValues] = useState<SettingsValues>(getDefaultValues);
+  const [search, setSearch] = useState('');
+  const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [saveState, setSaveState] = useState<SaveState>('idle');
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      const token = await getToken();
+      if (!token) { setLoadError('انتهت الجلسة — يرجى تسجيل الدخول من جديد.'); return; }
+      try {
+        const res = await fetch(`${API_BASE}/api/payments/payouts/config`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const json = await res.json();
+        if (!res.ok) { setLoadError(json.error ?? 'تعذّر تحميل الإعدادات.'); return; }
+        const patch: SettingsValues = {};
+        for (const def of SETTINGS_DEFINITIONS) {
+          const v = json.config[def.key];
+          if (v !== null && v !== undefined) patch[def.key] = Number(v);
+        }
+        setValues(prev => ({ ...prev, ...patch }));
+        setSavedValues(prev => ({ ...prev, ...patch }));
+      } catch {
+        setLoadError('تعذّر الاتصال بالخادم.');
+      }
+    })();
+  }, []);
+
+  const isDirty = useMemo(
+    () => JSON.stringify(values) !== JSON.stringify(savedValues),
+    [values, savedValues]
+  );
+
+  const handleChange = (key: string, val: number | boolean | string) => {
+    setValues(prev => ({ ...prev, [key]: Number(val) }));
+    setErrors(prev => { const next = { ...prev }; delete next[key]; return next; });
+    if (saveState === 'saved') setSaveState('idle');
+  };
+
+  const handleSave = async () => {
+    const errs = validate(values);
+    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+    setSaveState('saving');
+    setSaveMessage(null);
+    try {
+      const token = await getToken();
+      if (!token) { setSaveState('error'); setSaveMessage({ type: 'error', text: 'انتهت الجلسة — يرجى تسجيل الدخول من جديد.' }); return; }
+      const patch: SettingsValues = {};
+      for (const def of SETTINGS_DEFINITIONS) patch[def.key] = values[def.key];
+      const res = await fetch(`${API_BASE}/api/payments/payouts/config`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'فشل الحفظ');
+      setSavedValues(values);
+      setSaveState('saved');
+      setSaveMessage({ type: 'success', text: 'تم حفظ الإعدادات بنجاح في قاعدة البيانات.' });
+      setTimeout(() => { setSaveState('idle'); setSaveMessage(null); }, 4000);
+    } catch (err: unknown) {
+      setSaveState('error');
+      const msg = err instanceof Error ? err.message : String(err);
+      setSaveMessage({ type: 'error', text: `فشل الحفظ: ${msg}` });
+      setTimeout(() => { setSaveState('idle'); setSaveMessage(null); }, 8000);
+    }
+  };
+
+  const handleReset = () => { setValues(savedValues); setErrors({}); };
+
+  const visibleCategories = useMemo(() => {
+    return CATEGORIES.filter(cat => {
+      if (activeCategory !== 'all' && cat.key !== activeCategory) return false;
+      const catSettings = SETTINGS_DEFINITIONS.filter(s => s.category === cat.key);
+      if (!search) return catSettings.length > 0;
+      const q = search.toLowerCase();
+      return catSettings.some(s => s.label.toLowerCase().includes(q) || s.key.toLowerCase().includes(q));
+    });
+  }, [activeCategory, search]);
+
+  const scrollToSection = (key: string) => {
+    const el = document.getElementById(`section-${key}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const totalErrors = Object.keys(errors).length;
+
+  // ── Save toast ───────────────────────────────────────────────────────────
+  const saveToast = saveMessage && (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px',
+      borderRadius: 8, fontSize: 13, fontFamily: "'Tajawal', sans-serif",
+      direction: 'rtl', lineHeight: 1.5,
+      background: saveMessage.type === 'success' ? '#F0FDF4' : '#FEF2F2',
+      border: `1.5px solid ${saveMessage.type === 'success' ? '#86EFAC' : '#FCA5A5'}`,
+      color: saveMessage.type === 'success' ? '#15803D' : '#B91C1C',
+    }}>
+      <span style={{ fontSize: 16, flexShrink: 0 }}>{saveMessage.type === 'success' ? '✓' : '✗'}</span>
+      <span>{saveMessage.text}</span>
+      <button
+        onClick={() => setSaveMessage(null)}
+        style={{ marginRight: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', fontSize: 16, lineHeight: 1, padding: 0, opacity: 0.6 }}
+      >×</button>
+    </div>
+  );
+
+  // ── Save button ───────────────────────────────────────────────────────────
+  const saveBtn = (
+    <button
+      onClick={handleSave}
+      disabled={saveState === 'saving' || (!isDirty && saveState === 'idle')}
+      style={{
+        background: saveState === 'saved'
+          ? 'linear-gradient(135deg,#16A34A,#15803D)'
+          : saveState === 'error'
+          ? 'linear-gradient(135deg,#DC2626,#B91C1C)'
+          : 'linear-gradient(135deg,#F97316,#EA580C)',
+        border: 'none', borderRadius: 7, color: '#fff', fontSize: 13, fontWeight: 700,
+        padding: '8px 20px',
+        cursor: saveState === 'saving' || (!isDirty && saveState === 'idle') ? 'not-allowed' : 'pointer',
+        opacity: !isDirty && saveState === 'idle' ? 0.45 : 1,
+        fontFamily: "'Tajawal', sans-serif",
+        boxShadow: isDirty ? '0 4px 14px rgba(249,115,22,0.35)' : 'none',
+        transition: 'all 0.2s', minWidth: 130, whiteSpace: 'nowrap',
+      }}
+    >
+      {saveState === 'saving' ? '...جاري الحفظ' : saveState === 'saved' ? '✓ تم الحفظ' : saveState === 'error' ? '✗ فشل الحفظ' : 'حفظ التغييرات'}
+    </button>
+  );
+
+  // ── Toolbar ───────────────────────────────────────────────────────────────
+  const toolbar = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', direction: 'rtl' }}>
+      <div style={{ position: 'relative', flex: '1 1 160px', maxWidth: 280 }}>
+        <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: '#94A3B8', fontSize: 14, pointerEvents: 'none' }}>⌕</span>
+        <input
+          type="text"
+          placeholder="...البحث في الإعدادات"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          dir="rtl"
+          style={{ width: '100%', background: '#FFFFFF', border: '1.5px solid #E2E8F0', borderRadius: 7, color: '#0F2B4E', fontSize: 13, padding: '7px 34px 7px 10px', outline: 'none', fontFamily: "'Tajawal', sans-serif", transition: 'border-color 0.15s' }}
+          onFocus={e => (e.currentTarget.style.borderColor = '#F97316')}
+          onBlur={e => (e.currentTarget.style.borderColor = '#E2E8F0')}
+        />
+        {search && (
+          <button onClick={() => setSearch('')} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', fontSize: 16, padding: 0, lineHeight: 1 }}>×</button>
+        )}
+      </div>
+
+      <div style={{ position: 'relative', flexShrink: 0 }}>
+        <select
+          value={activeCategory}
+          onChange={e => setActiveCategory(e.target.value)}
+          dir="rtl"
+          style={{ appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none', background: '#FFFFFF', border: '1.5px solid #E2E8F0', borderRadius: 7, color: '#0F2B4E', fontSize: 13, fontFamily: "'Tajawal', sans-serif", padding: '7px 14px 7px 36px', outline: 'none', cursor: 'pointer', minWidth: 150, transition: 'border-color 0.15s' }}
+          onFocus={e => (e.currentTarget.style.borderColor = '#F97316')}
+          onBlur={e => (e.currentTarget.style.borderColor = '#E2E8F0')}
+        >
+          <option value="all">جميع الفئات</option>
+          {CATEGORIES.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+        </select>
+        <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#64748B', fontSize: 10, lineHeight: 1 }}>▼</span>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginRight: 'auto' }}>
+        {isDirty && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#F97316', fontFamily: "'Tajawal', sans-serif" }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#F97316', display: 'inline-block', boxShadow: '0 0 6px rgba(249,115,22,0.5)' }} />
+            غير محفوظ
+          </div>
+        )}
+        {totalErrors > 0 && (
+          <div style={{ fontSize: 12, color: '#DC2626', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 5, padding: '3px 10px', fontFamily: "'Tajawal', sans-serif" }}>
+            {totalErrors} خطأ
+          </div>
+        )}
+        {isDirty && (
+          <button onClick={handleReset}
+            style={{ background: '#FFFFFF', border: '1.5px solid #E2E8F0', borderRadius: 7, color: '#64748B', fontSize: 13, padding: '7px 14px', cursor: 'pointer', fontFamily: "'Tajawal', sans-serif", transition: 'all 0.15s' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = '#CBD5E1'; e.currentTarget.style.color = '#0F2B4E'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.color = '#64748B'; }}>
+            استعادة
+          </button>
+        )}
+        {saveBtn}
+      </div>
+    </div>
+  );
+
+  // ── Sidenav ───────────────────────────────────────────────────────────────
+  const sidenav = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }} className="ps-sidenav">
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#94A3B8', marginBottom: 6, paddingRight: 8, direction: 'rtl', textTransform: 'uppercase' }}>
+        الفئات
+      </div>
+      {CATEGORIES.map(cat => {
+        const catSettings = SETTINGS_DEFINITIONS.filter(s => s.category === cat.key);
+        const hasError = catSettings.some(s => errors[s.key]);
+        const isActive = activeCategory === 'all' || activeCategory === cat.key;
+        return (
+          <button key={cat.key}
+            onClick={() => { setActiveCategory('all'); setSearch(''); setTimeout(() => scrollToSection(cat.key), 50); }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 7, border: 'none', background: isActive ? '#FFF7ED' : 'transparent', cursor: 'pointer', textAlign: 'right', width: '100%', direction: 'rtl', transition: 'background 0.15s' }}
+            onMouseEnter={e => (e.currentTarget.style.background = isActive ? '#FFF7ED' : '#F8FAFC')}
+            onMouseLeave={e => (e.currentTarget.style.background = isActive ? '#FFF7ED' : 'transparent')}
+          >
+            <span style={{ fontSize: 12, width: 18, textAlign: 'center', color: hasError ? '#DC2626' : '#F97316', flexShrink: 0 }}>{cat.icon}</span>
+            <span style={{ fontSize: 12, color: hasError ? '#DC2626' : '#1E3A5F', fontFamily: "'Tajawal', sans-serif", fontWeight: isActive ? 600 : 400, flex: 1, lineHeight: 1.3, textAlign: 'right' }}>{cat.label}</span>
+            <span style={{ fontSize: 10, color: '#94A3B8', fontFamily: 'monospace', flexShrink: 0 }}>{catSettings.length}</span>
+          </button>
+        );
+      })}
+
+      <div style={{ marginTop: 16, padding: 12, background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: 8 }}>
+        <div style={{ fontSize: 10, color: '#94A3B8', marginBottom: 8, letterSpacing: '0.06em', textTransform: 'uppercase', textAlign: 'right', direction: 'rtl' }}>ملخص</div>
+        {[
+          ['إجمالي الإعدادات', SETTINGS_DEFINITIONS.length],
+          ['الفئات', CATEGORIES.length],
+          ['الأخطاء', totalErrors],
+        ].map(([label, value]) => (
+          <div key={String(label)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5, direction: 'rtl' }}>
+            <span style={{ fontSize: 12, color: '#64748B', fontFamily: "'Tajawal', sans-serif" }}>{label}</span>
+            <span style={{ fontSize: 12, fontFamily: 'monospace', color: label === 'الأخطاء' && Number(value) > 0 ? '#DC2626' : '#0F2B4E', fontWeight: 600 }}>{value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  // ── Sections grid ─────────────────────────────────────────────────────────
+  const sectionsGrid = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {loadError && (
+        <div style={{ padding: '10px 16px', borderRadius: 8, fontSize: 13, fontFamily: "'Tajawal', sans-serif", direction: 'rtl', background: '#FEF2F2', border: '1.5px solid #FCA5A5', color: '#B91C1C' }}>
+          {loadError}
+        </div>
+      )}
+      {visibleCategories.length === 0 && !loadError && (
+        <div style={{ textAlign: 'center', padding: '60px 20px', color: '#94A3B8' }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>◎</div>
+          <div style={{ fontSize: 14, fontFamily: "'Tajawal', sans-serif", color: '#64748B' }}>
+            لا توجد إعدادات تطابق "{search}"
+          </div>
+          <button onClick={() => setSearch('')}
+            style={{ marginTop: 12, background: '#FFFFFF', border: '1.5px solid #E2E8F0', borderRadius: 6, color: '#64748B', fontSize: 13, padding: '7px 16px', cursor: 'pointer', fontFamily: "'Tajawal', sans-serif" }}>
+            مسح البحث
+          </button>
+        </div>
+      )}
+      {visibleCategories.map(cat => (
+        <SettingsSection
+          key={cat.key}
+          category={cat}
+          settings={SETTINGS_DEFINITIONS.filter(s => s.category === cat.key)}
+          values={values}
+          errors={errors}
+          onChange={handleChange}
+          searchQuery={search}
+        />
+      ))}
+      <div style={{ height: 40 }} />
+    </div>
+  );
+
+  const responsiveCss = `@media(max-width:768px){.ps-sidenav{display:none!important}.ps-grid{grid-template-columns:1fr!important}}`;
+
+  // ── Embedded mode (inside AdminDashboard) ─────────────────────────────────
+  if (embedded) {
+    return (
+      <div style={{ fontFamily: "'Tajawal', sans-serif", color: '#0F2B4E', background: '#F8FAFC', borderRadius: 8, padding: 16 }}>
+        <style>{FONTS_CSS}</style>
+        <style>{responsiveCss}</style>
+        <div style={{ marginBottom: saveToast ? 8 : 16 }}>{toolbar}</div>
+        {saveToast && <div style={{ marginBottom: 16 }}>{saveToast}</div>}
+        <div style={{ display: 'grid', gridTemplateColumns: '190px 1fr', gap: 20, alignItems: 'start' }} className="ps-grid">
+          <div style={{ position: 'sticky', top: 8 }}>{sidenav}</div>
+          {sectionsGrid}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Standalone mode ───────────────────────────────────────────────────────
+  return (
+    <div style={{ minHeight: '100vh', background: '#F8FAFC', fontFamily: "'Tajawal', sans-serif", color: '#0F2B4E' }}>
+      <style>{FONTS_CSS}</style>
+      <style>{responsiveCss}</style>
+
+      <div style={{ position: 'sticky', top: 0, zIndex: 100, background: 'rgba(248,250,252,0.95)', backdropFilter: 'blur(10px)', borderBottom: '1.5px solid #E2E8F0', padding: '0 24px' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto', height: 64, display: 'flex', alignItems: 'center', gap: 16, direction: 'rtl' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 8, background: 'linear-gradient(135deg,#F97316,#EA580C)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(249,115,22,0.35)' }}>
+              <span style={{ fontSize: 16 }}>₪</span>
+            </div>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: '#0F2B4E', lineHeight: 1.1 }}>إعدادات الدفع</div>
+              <div style={{ fontSize: 11, color: '#94A3B8', lineHeight: 1.1 }}>ضبط العمولة، أجرة التوصيل وتوقيت التسوية</div>
+            </div>
+          </div>
+          <div style={{ flex: 1 }}>{toolbar}</div>
+        </div>
+      </div>
+
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px' }}>
+        {saveToast && <div style={{ marginBottom: 16 }}>{saveToast}</div>}
+        <div style={{ display: 'grid', gridTemplateColumns: '190px 1fr', gap: 20, alignItems: 'start' }} className="ps-grid">
+          <div style={{ position: 'sticky', top: 80 }}>{sidenav}</div>
+          {sectionsGrid}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default PaymentSettingsPage;

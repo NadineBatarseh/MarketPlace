@@ -48,15 +48,14 @@ interface Order {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const STEPS = ['تم الطلب', 'في المخزن', 'بانتظار التجميع', 'في الطريق إليك', 'تم التوصيل'];
+const STEPS = ['تم الطلب', 'في المخزن', 'في الطريق إليك', 'تم التوصيل'];
 
 type StatusCfg = { label: string; badgeClass: string; step: number; filterKey: string };
 
 const STATUS_CONFIG: Record<string, StatusCfg> = {
   pending_collection: { label: 'في المخزن',          badgeClass: 'badge-processing', step: 1, filterKey: 'processing' },
-  at_hub:            { label: 'بانتظار التجميع',     badgeClass: 'badge-shipped',    step: 2, filterKey: 'shipped'    },
-  delivering:        { label: 'في الطريق إليك',      badgeClass: 'badge-shipped',    step: 3, filterKey: 'shipped'    },
-  completed:         { label: 'تم التوصيل',        badgeClass: 'badge-delivered',  step: 4, filterKey: 'delivered'  },
+  delivering:        { label: 'في الطريق إليك',      badgeClass: 'badge-shipped',    step: 2, filterKey: 'shipped'    },
+  completed:         { label: 'تم التوصيل',        badgeClass: 'badge-delivered',  step: 3, filterKey: 'delivered'  },
   cancelled:         { label: 'ملغي',              badgeClass: 'badge-cancelled',  step: 0, filterKey: 'cancelled'  },
 };
 
@@ -428,7 +427,7 @@ function OrderCard({ order, idx }: { order: Order; idx: number }) {
           {(order.status === 'completed' || order.status === 'cancelled') && (
             <button className="oh-btn oh-btn-primary">إعادة الطلب</button>
           )}
-          {(order.status === 'pending_collection' || order.status === 'at_hub' || order.status === 'delivering') && (
+          {(order.status === 'pending_collection' || order.status === 'delivering') && (
             <button className="oh-btn oh-btn-primary" onClick={() => navigate(`/orders/${order.id}`)}>تتبّع الطلب</button>
           )}
         </div>

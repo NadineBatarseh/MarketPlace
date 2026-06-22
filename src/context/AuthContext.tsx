@@ -85,7 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // No public.Users row but user exists in auth and email is confirmed
-      // Only auto-create for customers — merchants/delivery/hub go through admin approval
+      // Only auto-create for customers — merchants/delivery go through admin approval
       if (rawUser.email_confirmed_at) {
         const role = rawUser.user_metadata?.role?.trim() || 'customer';
         if (role === 'customer') {

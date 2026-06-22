@@ -8,6 +8,7 @@ import {
   queryTransaction,
   isApproved,
 } from '../lib/paytabs.js';
+import { PC } from '../lib/paymentConfig.js';
 
 /**
  * PayTabs Hosted Payment Page — Phase 1 (Test Mode).
@@ -28,8 +29,8 @@ import {
  */
 const router = Router();
 
-const DELIVERY_FEE = Number(process.env.DELIVERY_FEE ?? 25);
-const COMMISSION_RATE = Number(process.env.PLATFORM_COMMISSION_RATE ?? 0.1);
+// Financial knobs (commission rate, delivery fee) are admin-editable and read at
+// runtime from PC (server/lib/paymentConfig.ts), NOT captured once at module load.
 
 /* ─────────────────────────── totals (server-authoritative) ─────────────────────────── */
 
@@ -82,8 +83,8 @@ async function computeOrderTotals(orderId: number | string): Promise<OrderTotals
   const round = (n: number) => Math.round(n * 100) / 100;
   return {
     subtotal: round(subtotal),
-    deliveryFee: DELIVERY_FEE,
-    total: round(subtotal + DELIVERY_FEE),
+    deliveryFee: PC.deliveryFee,
+    total: round(subtotal + PC.deliveryFee),
     perShop,
   };
 }
@@ -146,7 +147,7 @@ async function createPayoutRecords(
 
   for (const [shopId, gross] of totals.perShop.entries()) {
     if (shopId === 'unknown') continue;
-    const commission = round(gross * COMMISSION_RATE);
+    const commission = round(gross * PC.platformCommissionRate);
     platformCommission += commission;
     rows.push({
       order_id: orderId,
@@ -156,7 +157,7 @@ async function createPayoutRecords(
       amount: round(gross - commission),
       currency,
       status: 'pending',
-      note: `Shop revenue ${gross} − ${Math.round(COMMISSION_RATE * 100)}% commission`,
+      note: `Shop revenue ${gross} − ${Math.round(PC.platformCommissionRate * 100)}% commission`,
     });
   }
 

@@ -78,16 +78,6 @@ const TRACK_STEPS = [
     ),
   },
   {
-    key: 'packed',
-    label: 'تم التجهيز',
-    icon: (
-      <svg width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-        <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
-        <path d="m3.3 7 8.7 5 8.7-5M12 22V12"/>
-      </svg>
-    ),
-  },
-  {
     key: 'shipping',
     label: 'في الطريق',
     icon: (
@@ -114,16 +104,14 @@ const TRACK_STEPS = [
 const STATUS_STEP: Record<string, number> = {
   pending:            0,   // just paid — order placed, not yet collected
   pending_collection: 1,
-  at_hub:             2,
-  delivering:         3,
-  completed:          4,
+  delivering:         2,
+  completed:          3,
   cancelled:          -1,
 };
 
 // Status → display label
 const STATUS_LABEL: Record<string, string> = {
   pending_collection: 'في المخزن',
-  at_hub:             'بانتظار التجميع',
   delivering:         'في الطريق إليك',
   completed:          'تم التوصيل',
   cancelled:          'ملغي',
@@ -132,7 +120,6 @@ const STATUS_LABEL: Record<string, string> = {
 // Status → badge class
 const STATUS_CLASS: Record<string, string> = {
   pending_collection: 'ot-badge--processing',
-  at_hub:             'ot-badge--hub',
   delivering:         'ot-badge--shipping',
   completed:          'ot-badge--delivered',
   cancelled:          'ot-badge--cancelled',
@@ -141,7 +128,6 @@ const STATUS_CLASS: Record<string, string> = {
 // Status → hero message
 const STATUS_MESSAGE: Record<string, string> = {
   pending_collection: 'طلبك في المخزن 📦',
-  at_hub:             'طلبك في مركز التجميع 🏭',
   delivering:         'طلبك في الطريق إليك 🚚',
   completed:          'تم توصيل طلبك بنجاح 🎉',
   cancelled:          'تم إلغاء الطلب',
@@ -150,7 +136,6 @@ const STATUS_MESSAGE: Record<string, string> = {
 // Status → ETA text (illustrative — replace with real data when available)
 const STATUS_ETA: Record<string, string | null> = {
   pending_collection: 'متوقع خلال 1–2 يوم عمل',
-  at_hub:             'متوقع غداً بين 10:00 – 14:00',
   delivering:         'اليوم بين 17:00 – 20:00',
   completed:          null,
   cancelled:          null,
@@ -599,48 +584,9 @@ const TIMELINE_ROWS = [
     ),
   },
   {
-    key:      'hub',
-    label:    'وصل الطلب إلى المستودع',
-    atStep:   2,
-    location: 'مستودع رام الله',
-    by:       'موظف المستودع',
-    icon: (
-      <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-        <path d="M9 22V12h6v10"/>
-      </svg>
-    ),
-  },
-  {
-    key:      'packing',
-    label:    'جارٍ الفرز والتعبئة والتغليف',
-    atStep:   2,
-    location: 'مستودع رام الله',
-    by:       'فريق التعبئة',
-    icon: (
-      <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-        <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
-        <path d="m3.3 7 8.7 5 8.7-5M12 22V12"/>
-      </svg>
-    ),
-  },
-  {
-    key:      'driver',
-    label:    'تم تسليم الطلب للسائق',
-    atStep:   3,
-    location: 'مستودع رام الله',
-    by:       'موظف المستودع',
-    icon: (
-      <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-        <circle cx="12" cy="7" r="4"/>
-      </svg>
-    ),
-  },
-  {
     key:      'ontheway',
     label:    'الطلب في الطريق إليك',
-    atStep:   3,
+    atStep:   2,
     location: 'في الطريق',
     by:       'السائق',
     icon: (
@@ -654,7 +600,7 @@ const TIMELINE_ROWS = [
   {
     key:      'delivered',
     label:    'تم التوصيل بنجاح',
-    atStep:   4,
+    atStep:   3,
     location: 'عنوان التوصيل',
     by:       'السائق',
     icon: (

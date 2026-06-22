@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import LogisticsSettingsPage from '../../pages/admin/logistics/LogisticsSettingsPage';
+import PaymentSettingsPage from '../../pages/admin/PaymentSettingsPage';
+import SalesLedgerPage from '../../pages/admin/SalesLedgerPage';
+import FinancialAnalyticsPage from '../../pages/admin/FinancialAnalyticsPage';
 import BatchMonitorPage from '../../pages/admin/BatchMonitorPage';
 import CouriersPage from '../../pages/admin/CouriersPage';
 import ShopsPage from '../../pages/admin/ShopsPage';
@@ -70,21 +73,8 @@ interface DeliveryApp {
   is_archived?: boolean;
 }
 
-interface HubWorkerApp {
-  id: string;
-  name: string;
-  email: string;
-  phone_number: string;
-  ID_number: string;
-  place_of_residence: string;
-  status: 'pending' | 'approved' | 'rejected';
-  created_at: string;
-  platform_email: string | null;
-  is_archived?: boolean;
-}
-
 type FilterTab = 'all' | 'pending' | 'approved' | 'rejected';
-type Section = 'merchant' | 'delivery' | 'hubworker' | 'batches' | 'logistics' | 'couriers' | 'shops' | 'categories' | 'messages';
+type Section = 'merchant' | 'delivery' | 'batches' | 'logistics' | 'couriers' | 'shops' | 'categories' | 'messages' | 'payments' | 'ledger' | 'analytics';
 
 interface BatchConfigForm {
   max_driver_capacity: number;
@@ -171,7 +161,6 @@ const VEHICLE_TYPES: Record<string, string> = {
 const SECTION_HEADERS: Record<string, { title: string; subtitle: string }> = {
   merchant:  { title: 'طلبات التجار',     subtitle: 'إدارة ومراجعة طلبات انضمام التجار إلى المنصة' },
   delivery:  { title: 'طلبات المناديب',   subtitle: 'إدارة ومراجعة طلبات انضمام مناديب التوصيل إلى المنصة' },
-  hubworker: { title: 'عمال المستودع',    subtitle: 'إدارة ومراجعة طلبات انضمام عمال المستودع إلى المنصة' },
 };
 
 /* Table column headers for the applications list (per kind) */
@@ -199,6 +188,7 @@ type RejectModalState<T> = {
 
 export default function AdminDashboard() {
   const [activeSection, setActiveSection] = useState<Section>('merchant');
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const contentRef = useRef<HTMLElement>(null);
   const avatarRef  = useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = useState<FilterTab>('pending');
@@ -239,19 +229,6 @@ export default function AdminDashboard() {
     { app: null, platformEmail: '', message: '', sending: false, error: '' }
   );
   const [deliveryRejectModal, setDeliveryRejectModal] = useState<RejectModalState<DeliveryApp>>(
-    { app: null, reason: '', message: '', sending: false, error: '' }
-  );
-
-  // Hub worker state
-  const [hubApps, setHubApps] = useState<HubWorkerApp[]>([]);
-  const [hubLoading, setHubLoading] = useState(true);
-  const [hubError, setHubError] = useState('');
-  const [hubActionLoading, setHubActionLoading] = useState<string | null>(null);
-
-  const [hubApproveModal, setHubApproveModal] = useState<ApproveModalState<HubWorkerApp>>(
-    { app: null, platformEmail: '', message: '', sending: false, error: '' }
-  );
-  const [hubRejectModal, setHubRejectModal] = useState<RejectModalState<HubWorkerApp>>(
     { app: null, reason: '', message: '', sending: false, error: '' }
   );
 
@@ -304,7 +281,6 @@ export default function AdminDashboard() {
 
   useEffect(() => { loadApps(); }, []);
   useEffect(() => { loadDeliveryApps(); }, []);
-  useEffect(() => { loadHubApps(); }, []);
   useEffect(() => {
     contentRef.current?.scrollTo({ top: 0 });
     setSearchQuery('');
@@ -326,17 +302,9 @@ export default function AdminDashboard() {
       })
       .subscribe();
 
-    const hubSub = supabase
-      .channel('admin-hub-apps')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'hubworker_applications' }, payload => {
-        setHubApps(prev => [payload.new as HubWorkerApp, ...prev]);
-      })
-      .subscribe();
-
     return () => {
       supabase.removeChannel(merchantSub);
       supabase.removeChannel(deliverySub);
-      supabase.removeChannel(hubSub);
     };
   }, []);
 
@@ -459,7 +427,7 @@ export default function AdminDashboard() {
 
   const generateUniqueEmail = async (
     name: string,
-    table: 'merchant_applications' | 'delivery_applications' | 'hubworker_applications'
+    table: 'merchant_applications' | 'delivery_applications'
   ): Promise<string> => {
     const base = normalizeName(name);
     let email = `${base}${randomShortCode()}@souqlink.com`;
@@ -486,12 +454,6 @@ export default function AdminDashboard() {
     setDeliveryApproveModal(prev => ({ ...prev, platformEmail: email, generatingEmail: false }));
   };
 
-  const generateHubEmail = async () => {
-    if (!hubApproveModal.app) return;
-    setHubApproveModal(prev => ({ ...prev, generatingEmail: true }));
-    const email = await generateUniqueEmail(hubApproveModal.app.name, 'hubworker_applications');
-    setHubApproveModal(prev => ({ ...prev, platformEmail: email, generatingEmail: false }));
-  };
 
   // ── Merchant loaders / actions ──────────────────────────────────────────────
 
@@ -715,116 +677,6 @@ export default function AdminDashboard() {
     setDeliveryActionLoading(null);
   };
 
-  // ── Hub worker loaders / actions ────────────────────────────────────────────
-
-  const loadHubApps = async () => {
-    setHubLoading(true);
-    setHubError('');
-    const { data, error } = await supabase
-      .from('hubworker_applications')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) setHubError('تعذّر تحميل الطلبات: ' + error.message);
-    else setHubApps((data ?? []) as HubWorkerApp[]);
-    setHubLoading(false);
-  };
-
-  const updateHubStatus = async (id: string, newStatus: 'approved' | 'rejected') => {
-    setHubActionLoading(id);
-    const { error } = await supabase
-      .from('hubworker_applications')
-      .update({ status: newStatus })
-      .eq('id', id);
-    if (!error) setHubApps(prev => prev.map(a => a.id === id ? { ...a, status: newStatus } : a));
-    setHubActionLoading(null);
-  };
-
-  const openHubApproveModal = (app: HubWorkerApp) => {
-    setHubApproveModal({
-      app,
-      platformEmail: '',
-      message: `عزيزي/عزيزتي ${app.name}،\n\nيسعدنا إبلاغكم بقبول طلبكم للانضمام إلى منصة سوق لينك كعامل مستودع معتمد!\n\nتم تخصيص بريد إلكتروني رسمي لحسابكم، يرجى مراجعته أدناه.\n\nلتفعيل حسابكم وإنشاء كلمة المرور، يرجى زيارة:\n${window.location.origin}/activate\n\nنتطلع إلى تعاون مثمر معكم،\nفريق سوق لينك`,
-      sending: false,
-      error: '',
-    });
-  };
-
-  const handleSendHubApproval = async () => {
-    if (!hubApproveModal.app || !hubApproveModal.platformEmail.trim()) return;
-    setHubApproveModal(prev => ({ ...prev, sending: true, error: '' }));
-
-    const finalMessage = (hubApproveModal.message + `\n\nبريدك الإلكتروني الرسمي: ${hubApproveModal.platformEmail}`);
-    try {
-      await emailjs.send(
-        import.meta.env.VITE_EMAILJS_SERVICE_ID,
-        import.meta.env.VITE_EMAILJS_TEMPLATE_ID,
-        { name: hubApproveModal.app.name, email: hubApproveModal.app.email, message: finalMessage },
-        { publicKey: import.meta.env.VITE_EMAILJS_PUBLIC_KEY }
-      );
-    } catch {
-      setHubApproveModal(prev => ({ ...prev, sending: false, error: 'تعذّر إرسال البريد الإلكتروني' }));
-      return;
-    }
-
-    const { error: dbError } = await supabase
-      .from('hubworker_applications')
-      .update({ status: 'approved', platform_email: hubApproveModal.platformEmail.trim() })
-      .eq('id', hubApproveModal.app.id);
-
-    if (dbError) {
-      const msg = dbError.message.includes('unique') || dbError.message.includes('duplicate')
-        ? 'هذا البريد الإلكتروني الرسمي مخصص لموظف آخر — يرجى اختيار بريد مختلف'
-        : 'تعذّر تحديث الطلب: ' + dbError.message;
-      setHubApproveModal(prev => ({ ...prev, sending: false, error: msg }));
-      return;
-    }
-
-    setHubApps(prev => prev.map(a => a.id === hubApproveModal.app!.id ? { ...a, status: 'approved' } : a));
-    setHubApproveModal({ app: null, platformEmail: '', message: '', sending: false, error: '' });
-  };
-
-  const openHubRejectModal = (app: HubWorkerApp) => {
-    setHubRejectModal({ app, reason: '', message: '', sending: false, error: '' });
-  };
-
-  const handleSendHubRejection = async () => {
-    if (!hubRejectModal.app) return;
-    setHubRejectModal(prev => ({ ...prev, sending: true, error: '' }));
-
-    try {
-      await emailjs.send(
-        import.meta.env.VITE_EMAILJS_SERVICE_ID,
-        import.meta.env.VITE_EMAILJS_TEMPLATE_ID,
-        { name: hubRejectModal.app.name, email: hubRejectModal.app.email, message: hubRejectModal.message },
-        { publicKey: import.meta.env.VITE_EMAILJS_PUBLIC_KEY }
-      );
-    } catch {
-      setHubRejectModal(prev => ({ ...prev, sending: false, error: 'تعذّر إرسال البريد — سيتم تسجيل الرفض بدون إشعار' }));
-      return;
-    }
-
-    await updateHubStatus(hubRejectModal.app.id, 'rejected');
-    setHubRejectModal({ app: null, reason: '', message: '', sending: false, error: '' });
-  };
-
-  const archiveHubApp = async (app: HubWorkerApp) => {
-    if (!confirm(`هل أنت متأكد من حذف طلب "${app.name}"؟ لن يظهر في القوائم الرئيسية، ويمكن استعادته لاحقًا من سلة المحذوفات.`)) return;
-    setHubActionLoading(app.id);
-    const res = await archiveApplication('hubworker', app.id);
-    if (res.ok) setHubApps(prev => prev.map(a => a.id === app.id ? { ...a, is_archived: true } : a));
-    else setHubError('فشل الحذف: ' + (res.error ?? ''));
-    setHubActionLoading(null);
-  };
-
-  const restoreHubApp = async (app: HubWorkerApp) => {
-    setHubActionLoading(app.id);
-    const res = await restoreApplication('hubworker', app.id);
-    if (res.ok) setHubApps(prev => prev.map(a => a.id === app.id ? { ...a, is_archived: false } : a));
-    else setHubError('فشل الاستعادة: ' + (res.error ?? ''));
-    setHubActionLoading(null);
-  };
-
   // ── Derived ─────────────────────────────────────────────────────────────────
 
   const search = searchQuery.trim().toLowerCase();
@@ -852,20 +704,13 @@ export default function AdminDashboard() {
     .filter(a => typeFilter === 'all' || a.type_of_vehicle === typeFilter)
     .filter(a => matchesSearch([a.name, a.phone_number, a.email, a.ID_number])));
 
-  const filteredHub = byDate(hubApps
-    .filter(a => byArchived(a.is_archived))
-    .filter(a => byStatus(a.status))
-    .filter(a => matchesSearch([a.name, a.phone_number, a.email, a.place_of_residence])));
-
   const archivedCount =
     activeSection === 'merchant' ? apps.filter(a => a.is_archived).length :
-    activeSection === 'delivery' ? deliveryApps.filter(a => a.is_archived).length :
-    activeSection === 'hubworker' ? hubApps.filter(a => a.is_archived).length : 0;
+    activeSection === 'delivery' ? deliveryApps.filter(a => a.is_archived).length : 0;
 
   const refreshCurrent = () => {
     if (activeSection === 'merchant') loadApps();
     else if (activeSection === 'delivery') loadDeliveryApps();
-    else if (activeSection === 'hubworker') loadHubApps();
   };
 
   // Type-filter options for the toolbar dropdown (varies per section)
@@ -876,11 +721,11 @@ export default function AdminDashboard() {
         ? Object.entries(VEHICLE_TYPES).map(([value, label]) => ({ value, label }))
         : [];
 
-  const loading = activeSection === 'merchant' ? appsLoading : activeSection === 'delivery' ? deliveryLoading : activeSection === 'hubworker' ? hubLoading : false;
-  const loadError = activeSection === 'merchant' ? appsError : activeSection === 'delivery' ? deliveryError : activeSection === 'hubworker' ? hubError : '';
-  const currentApps = activeSection === 'merchant' ? filteredMerchants : activeSection === 'delivery' ? filteredDelivery : filteredHub;
-  const allCurrentApps = activeSection === 'merchant' ? apps : activeSection === 'delivery' ? deliveryApps : hubApps;
-  const isAppSection = activeSection === 'merchant' || activeSection === 'delivery' || activeSection === 'hubworker';
+  const loading = activeSection === 'merchant' ? appsLoading : activeSection === 'delivery' ? deliveryLoading : false;
+  const loadError = activeSection === 'merchant' ? appsError : activeSection === 'delivery' ? deliveryError : '';
+  const currentApps = activeSection === 'merchant' ? filteredMerchants : filteredDelivery;
+  const allCurrentApps = activeSection === 'merchant' ? apps : deliveryApps;
+  const isAppSection = activeSection === 'merchant' || activeSection === 'delivery';
   const sectionHeader = SECTION_HEADERS[activeSection];
 
   return (
@@ -889,6 +734,18 @@ export default function AdminDashboard() {
       {/* ── Topbar (mirrors MerchantDashboard) ── */}
       <header className="ad-topbar">
         <div className="ad-topbar-brand">
+          <button
+            type="button"
+            className="ad-menu-toggle"
+            aria-label="القائمة"
+            onClick={() => setMobileNavOpen(true)}
+          >
+            <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
           <img src="/logo.png" alt="سوق لينك" className="ad-topbar-logo" />
           <div className="ad-topbar-brand-text">سوق <span>لينك</span></div>
         </div>
@@ -949,8 +806,11 @@ export default function AdminDashboard() {
       {/* ── Body: sidebar + content ── */}
       <div className="ad-body">
 
+        {/* Mobile drawer backdrop */}
+        {mobileNavOpen && <div className="ad-sidebar-overlay" onClick={() => setMobileNavOpen(false)} />}
+
         {/* Sidebar (mirrors MerchantDashboard) */}
-        <aside className="ad-sidebar">
+        <aside className={`ad-sidebar${mobileNavOpen ? ' ad-sidebar--open' : ''}`}>
 
           {/* Greeting */}
           <div className="ad-sidebar-greeting">
@@ -958,8 +818,8 @@ export default function AdminDashboard() {
             <div className="ad-sidebar-greeting-date">{today}</div>
           </div>
 
-          {/* Navigation */}
-          <nav className="ad-sidebar-nav">
+          {/* Navigation — clicking any item also closes the mobile drawer (bubbles up) */}
+          <nav className="ad-sidebar-nav" onClick={() => setMobileNavOpen(false)}>
             <SidebarItem
               icon={
                 <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -986,18 +846,6 @@ export default function AdminDashboard() {
               active={activeSection === 'delivery'}
               badge={deliveryApps.filter(a => a.status === 'pending').length}
               onClick={() => setActiveSection('delivery')}
-            />
-
-            <SidebarItem
-              icon={
-                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                </svg>
-              }
-              label="عمال المستودع"
-              active={activeSection === 'hubworker'}
-              badge={hubApps.filter(a => a.status === 'pending').length}
-              onClick={() => setActiveSection('hubworker')}
             />
 
             <div className="ad-sidebar-divider" />
@@ -1069,6 +917,42 @@ export default function AdminDashboard() {
             <SidebarItem
               icon={
                 <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <rect x="2" y="5" width="20" height="14" rx="2" />
+                  <path d="M2 10h20" />
+                </svg>
+              }
+              label="إعدادات الدفع"
+              active={activeSection === 'payments'}
+              onClick={() => setActiveSection('payments')}
+            />
+
+            <SidebarItem
+              icon={
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <path d="M14 2v6h6M9 13h6M9 17h6M9 9h1" />
+                </svg>
+              }
+              label="كشف المبيعات"
+              active={activeSection === 'ledger'}
+              onClick={() => setActiveSection('ledger')}
+            />
+
+            <SidebarItem
+              icon={
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 3v18h18" />
+                  <path d="M7 14l4-4 3 3 5-6" />
+                </svg>
+              }
+              label="التحليلات"
+              active={activeSection === 'analytics'}
+              onClick={() => setActiveSection('analytics')}
+            />
+
+            <SidebarItem
+              icon={
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                 </svg>
               }
@@ -1104,7 +988,7 @@ export default function AdminDashboard() {
 
         {/* Main content */}
         <main className="ad-content" ref={contentRef}>
-          {loadError && <div className="ad-error">{loadError}</div>}
+          {isAppSection && loadError && <div className="ad-error">{loadError}</div>}
 
           {/* Page header — application sections */}
           {isAppSection && sectionHeader && (
@@ -1209,7 +1093,7 @@ export default function AdminDashboard() {
             </div>
           )}
 
-          {activeSection !== 'batches' && activeSection !== 'logistics' && activeSection !== 'couriers' && activeSection !== 'shops' && activeSection !== 'categories' && activeSection !== 'messages' && (loading ? (
+          {activeSection !== 'batches' && activeSection !== 'logistics' && activeSection !== 'couriers' && activeSection !== 'shops' && activeSection !== 'categories' && activeSection !== 'messages' && activeSection !== 'payments' && activeSection !== 'ledger' && activeSection !== 'analytics' && (loading ? (
             <div className="ad-state" role="status" aria-live="polite">
               <span className="ad-state-spin" aria-hidden="true" />
               <div className="ad-state-title">جاري تحميل الطلبات…</div>
@@ -1229,7 +1113,7 @@ export default function AdminDashboard() {
               </div>
             </div>
           ) : (
-        <div className={activeSection === 'hubworker' ? 'ad-cards' : 'ad-table'}>
+        <div className="ad-table">
           {/* ── Table header (merchant / delivery) ── */}
           {(activeSection === 'merchant' || activeSection === 'delivery') && (
             <div className="ad-table-head" aria-hidden="true">
@@ -1298,77 +1182,6 @@ export default function AdminDashboard() {
             );
           })}
 
-          {/* ── Hub worker cards ── */}
-          {activeSection === 'hubworker' && (filteredHub as HubWorkerApp[]).map(app => (
-            <div key={app.id} className="ad-card">
-              <div className="ad-card-body">
-                <div className="ad-card-header-row">
-                  <div className="ad-card-name">{app.name}</div>
-                  <span className="ad-type-chip">عامل مستودع</span>
-                </div>
-                <div className="ad-card-owner">
-                  <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
-                    <polyline points="22,6 12,13 2,6"/>
-                  </svg>
-                  {app.email}
-                </div>
-                <div className="ad-meta-row">
-                  <div className="ad-card-detail">
-                    <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.1 19.79 19.79 0 0 1 1.62 4.5 2 2 0 0 1 3.6 2.3h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.08 6.08l.97-.97a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.73 2.02z"/>
-                    </svg>
-                    {app.phone_number}
-                  </div>
-                  <div className="ad-card-detail">
-                    <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 1 1 18 0z"/><circle cx="12" cy="10" r="3"/>
-                    </svg>
-                    {app.place_of_residence}
-                  </div>
-                  <div className="ad-card-detail">
-                    <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                      <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
-                    </svg>
-                    هوية: {app.ID_number}
-                  </div>
-                </div>
-                <div className="ad-card-date">
-                  تاريخ الطلب:{' '}
-                  {new Date(app.created_at).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}
-                </div>
-              </div>
-              <div className="ad-card-actions">
-                {app.is_archived ? (
-                  <button type="button" className="ad-btn ad-btn--approve" disabled={hubActionLoading === app.id} onClick={() => restoreHubApp(app)}>
-                    {hubActionLoading === app.id ? '...' : '♻️ استعادة'}
-                  </button>
-                ) : (
-                  <>
-                    {app.status !== 'approved' && (
-                      <button type="button" className="ad-btn ad-btn--approve" disabled={hubActionLoading === app.id} onClick={() => openHubApproveModal(app)}>
-                        ✅ موافقة
-                      </button>
-                    )}
-                    {app.status === 'approved' && (
-                      <button type="button" className="ad-btn ad-btn--reject" disabled={hubActionLoading === app.id} onClick={() => updateHubStatus(app.id, 'rejected')}>
-                        {hubActionLoading === app.id ? '...' : '↩ سحب الموافقة'}
-                      </button>
-                    )}
-                    {app.status !== 'rejected' && (
-                      <button type="button" className="ad-btn ad-btn--reject" disabled={hubActionLoading === app.id} onClick={() => openHubRejectModal(app)}>
-                        ❌ رفض
-                      </button>
-                    )}
-                    <button type="button" className="ad-btn ad-btn--delete" disabled={hubActionLoading === app.id} onClick={() => archiveHubApp(app)}>
-                      🗑️ حذف
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          ))}
 
           {/* ── Delivery cards ── */}
           {activeSection === 'delivery' && (filteredDelivery as DeliveryApp[]).map(app => {
@@ -1445,6 +1258,21 @@ export default function AdminDashboard() {
           {/* ── Logistics settings section ── */}
           {activeSection === 'logistics' && (
             <LogisticsSettingsPage embedded />
+          )}
+
+          {/* ── Payment settings section ── */}
+          {activeSection === 'payments' && (
+            <PaymentSettingsPage embedded />
+          )}
+
+          {/* ── Sales ledger section ── */}
+          {activeSection === 'ledger' && (
+            <SalesLedgerPage embedded />
+          )}
+
+          {/* ── Financial analytics section ── */}
+          {activeSection === 'analytics' && (
+            <FinancialAnalyticsPage embedded />
           )}
 
           {/* ── Sent messages section ── */}
@@ -1931,101 +1759,6 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
-      {/* ── Hub worker approve modal ── */}
-      {hubApproveModal.app && (
-        <div className="ad-modal-overlay" onClick={() => !hubApproveModal.sending && setHubApproveModal({ app: null, platformEmail: '', message: '', sending: false, error: '' })}>
-          <div className="ad-modal" dir="rtl" onClick={e => e.stopPropagation()}>
-            <h3 className="ad-modal-title">✅ إرسال إشعار القبول — عامل مستودع</h3>
-            <p className="ad-modal-to">إلى: <strong>{hubApproveModal.app.email}</strong></p>
-            <div className="ad-modal-field">
-              <label className="ad-modal-label">البريد الإلكتروني الرسمي للعامل *</label>
-              <div className="ad-modal-input-row">
-                <input
-                  type="email"
-                  className="ad-modal-input"
-                  placeholder="hub@souqlink.com"
-                  value={hubApproveModal.platformEmail}
-                  onChange={e => setHubApproveModal(prev => ({ ...prev, platformEmail: e.target.value }))}
-                  disabled={hubApproveModal.sending || !!hubApproveModal.generatingEmail}
-                />
-                <button
-                  type="button"
-                  className="ad-btn ad-btn--generate"
-                  onClick={generateHubEmail}
-                  disabled={hubApproveModal.sending || !!hubApproveModal.generatingEmail}
-                >
-                  {hubApproveModal.generatingEmail ? '...' : 'توليد'}
-                </button>
-              </div>
-            </div>
-            <div className="ad-modal-field">
-              <label className="ad-modal-label">نص الرسالة</label>
-              <textarea
-                className="ad-modal-textarea"
-                value={hubApproveModal.message}
-                onChange={e => setHubApproveModal(prev => ({ ...prev, message: e.target.value }))}
-                rows={8}
-                disabled={hubApproveModal.sending}
-                title="نص رسالة القبول"
-                placeholder="اكتب رسالة القبول هنا..."
-              />
-            </div>
-            {hubApproveModal.error && <p className="ad-modal-error">{hubApproveModal.error}</p>}
-            <div className="ad-modal-actions">
-              <button type="button" className="ad-btn ad-btn--approve" onClick={handleSendHubApproval} disabled={hubApproveModal.sending || !hubApproveModal.platformEmail.trim()}>
-                {hubApproveModal.sending ? 'جارٍ الإرسال...' : 'إرسال وتسجيل القبول'}
-              </button>
-              <button type="button" className="ad-btn ad-btn--delete" onClick={() => setHubApproveModal({ app: null, platformEmail: '', message: '', sending: false, error: '' })} disabled={hubApproveModal.sending}>
-                إلغاء
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Hub worker reject modal ── */}
-      {hubRejectModal.app && (
-        <div className="ad-modal-overlay" onClick={() => !hubRejectModal.sending && setHubRejectModal({ app: null, reason: '', message: '', sending: false, error: '' })}>
-          <div className="ad-modal" dir="rtl" onClick={e => e.stopPropagation()}>
-            <h3 className="ad-modal-title">📧 إرسال إشعار رفض — عامل مستودع</h3>
-            <p className="ad-modal-to">إلى: <strong>{hubRejectModal.app.email}</strong></p>
-            <div className="ad-modal-field">
-              <label className="ad-modal-label">سبب الرفض <span className="ad-required">*</span></label>
-              <textarea
-                className="ad-modal-textarea"
-                rows={3}
-                disabled={hubRejectModal.sending}
-                placeholder="مثال: المستندات المرفقة غير مكتملة..."
-                onChange={e => {
-                  const reason = e.target.value;
-                  const app = hubRejectModal.app!;
-                  setHubRejectModal(prev => ({
-                    ...prev,
-                    reason,
-                    message: `عزيزي/عزيزتي ${app.name}،\n\nنشكركم على اهتمامكم بالانضمام إلى منصة سوق لينك كعامل مستودع.\n\nبعد مراجعة طلبكم بعناية، نأسف لإبلاغكم بأننا غير قادرين على قبول طلبكم للسبب التالي:\n${reason}\n\nنتمنى لكم التوفيق والنجاح في مساعيكم.\n\nمع تحياتنا،\nفريق سوق لينك`,
-                  }));
-                }}
-              />
-            </div>
-            {hubRejectModal.message && (
-              <div className="ad-modal-field">
-                <label className="ad-modal-label">معاينة الرسالة</label>
-                <pre className="ad-modal-preview">{hubRejectModal.message}</pre>
-              </div>
-            )}
-            {hubRejectModal.error && <p className="ad-modal-error">{hubRejectModal.error}</p>}
-            <div className="ad-modal-actions">
-              <button type="button" className="ad-btn ad-btn--reject" onClick={handleSendHubRejection} disabled={hubRejectModal.sending || !hubRejectModal.reason.trim()}>
-                {hubRejectModal.sending ? 'جارٍ الإرسال...' : 'إرسال وتسجيل الرفض'}
-              </button>
-              <button type="button" className="ad-btn ad-btn--delete" onClick={() => setHubRejectModal({ app: null, reason: '', message: '', sending: false, error: '' })} disabled={hubRejectModal.sending}>
-                إلغاء
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {showChangePassword && (
         <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
       )}

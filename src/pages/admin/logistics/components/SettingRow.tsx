@@ -99,14 +99,19 @@ const SettingRow: React.FC<SettingRowProps> = ({
   const val = values[def.key];
   const error = errors[def.key];
 
-  // Minutes ↔ Hours toggle (only for 'minutes' type)
-  const [useHours, setUseHours] = useState(false);
-  const isMinutes = def.type === 'minutes';
+  // Time-unit toggle. Use the field's custom units if provided, else fall back to the
+  // legacy minute/hour toggle for 'minutes'-type fields. First unit is the stored base.
+  const units = def.timeUnits ?? (def.type === 'minutes'
+    ? [{ label: 'دقيقة', factor: 1 }, { label: 'ساعة', factor: 60, step: 0.5 }]
+    : null);
+  const hasUnits = !!units && units.length > 1;
+  const [unitIdx, setUnitIdx] = useState(0);
+  const factor = hasUnits ? units![unitIdx].factor : 1;
 
-  const minutesVal = Number(val);
-  const displayVal = isMinutes && useHours
-    ? parseFloat((minutesVal / 60).toFixed(4))
-    : minutesVal;
+  const baseVal = Number(val);
+  const displayVal = hasUnits
+    ? parseFloat((baseVal / factor).toFixed(6))
+    : baseVal;
 
   const handleFocus = useCallback((e: React.FocusEvent<HTMLSelectElement>) => {
     e.currentTarget.style.borderColor = '#F97316';
@@ -119,7 +124,7 @@ const SettingRow: React.FC<SettingRowProps> = ({
   }, [error]);
 
   const handleNumericChange = (parsed: number) => {
-    const stored = isMinutes && useHours ? Math.round(parsed * 60) : parsed;
+    const stored = hasUnits && factor !== 1 ? Math.round(parsed * factor) : parsed;
     onChange(def.key, stored);
   };
 
@@ -150,56 +155,43 @@ const SettingRow: React.FC<SettingRowProps> = ({
     return (
       <NumericInput
         value={displayVal}
-        min={isMinutes && useHours && def.min !== undefined ? def.min / 60 : def.min}
-        max={isMinutes && useHours && def.max !== undefined ? def.max / 60 : def.max}
-        step={isMinutes && useHours ? 0.5 : (def.step ?? 1)}
+        min={def.min !== undefined ? def.min / factor : def.min}
+        max={def.max !== undefined ? def.max / factor : def.max}
+        step={hasUnits ? (units![unitIdx].step ?? def.step ?? 1) : (def.step ?? 1)}
         hasError={!!error}
         onChange={handleNumericChange}
       />
     );
   };
 
-  // Unit cell: for minutes fields show min/hr toggle buttons
-  const unitCell = isMinutes ? (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
-      <button
-        type="button"
-        onClick={() => setUseHours(false)}
-        style={{
-          fontSize: 10,
-          fontFamily: "'Tajawal', sans-serif",
-          fontWeight: useHours ? 400 : 700,
-          color: useHours ? '#CBD5E1' : '#F97316',
-          background: useHours ? 'transparent' : '#FFF7ED',
-          border: useHours ? '1px solid transparent' : '1px solid #FED7AA',
-          borderRadius: 4,
-          padding: '2px 5px',
-          cursor: 'pointer',
-          transition: 'all 0.15s',
-          lineHeight: 1.4,
-        }}
-      >
-        دقيقة
-      </button>
-      <button
-        type="button"
-        onClick={() => setUseHours(true)}
-        style={{
-          fontSize: 10,
-          fontFamily: "'Tajawal', sans-serif",
-          fontWeight: useHours ? 700 : 400,
-          color: useHours ? '#F97316' : '#CBD5E1',
-          background: useHours ? '#FFF7ED' : 'transparent',
-          border: useHours ? '1px solid #FED7AA' : '1px solid transparent',
-          borderRadius: 4,
-          padding: '2px 5px',
-          cursor: 'pointer',
-          transition: 'all 0.15s',
-          lineHeight: 1.4,
-        }}
-      >
-        ساعة
-      </button>
+  // Unit cell: render a toggle button per time unit, else show the static unit label.
+  const unitCell = hasUnits ? (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, flexWrap: 'wrap' }}>
+      {units!.map((u, i) => {
+        const active = unitIdx === i;
+        return (
+          <button
+            key={u.label}
+            type="button"
+            onClick={() => setUnitIdx(i)}
+            style={{
+              fontSize: 10,
+              fontFamily: "'Tajawal', sans-serif",
+              fontWeight: active ? 700 : 400,
+              color: active ? '#F97316' : '#CBD5E1',
+              background: active ? '#FFF7ED' : 'transparent',
+              border: active ? '1px solid #FED7AA' : '1px solid transparent',
+              borderRadius: 4,
+              padding: '2px 5px',
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+              lineHeight: 1.4,
+            }}
+          >
+            {u.label}
+          </button>
+        );
+      })}
     </div>
   ) : (
     <div

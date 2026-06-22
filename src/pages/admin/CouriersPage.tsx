@@ -3,6 +3,7 @@ import supabase from '../../lib/supabase';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import AdminMessageModal from '../../components/AdminMessageModal';
 import { archiveCourier, restoreCourier } from '../../lib/adminArchive';
+import './adminResponsiveTable.css';
 
 interface Courier {
   id: string;
@@ -511,8 +512,8 @@ export default function CouriersPage() {
       ) : visible.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8', fontSize: 14 }}>لا يوجد مناديب</div>
       ) : (
-        <div style={{ overflowX: 'auto', borderRadius: 10, border: '1.5px solid #E2E8F0', background: '#fff' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="adm-scroll" style={{ overflowX: 'auto', borderRadius: 10, border: '1.5px solid #E2E8F0', background: '#fff' }}>
+          <table className="adm-rtable" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
                 <th style={thStyle}>المندوب</th>
@@ -545,7 +546,7 @@ export default function CouriersPage() {
                       onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = '#fff'; }}
                     >
                       {/* Name + vehicle badge */}
-                      <td style={tdStyle}>
+                      <td style={tdStyle} data-label="المندوب">
                         <div style={{ display: 'flex', alignItems: 'center' }}>
                           <Dot status={courier.status} />
                           <div>
@@ -565,36 +566,36 @@ export default function CouriersPage() {
                       </td>
 
                       {/* Status */}
-                      <td style={tdStyle}><StatusBadge status={courier.status} /></td>
+                      <td style={tdStyle} data-label="الحالة"><StatusBadge status={courier.status} /></td>
 
                       {/* Zone */}
-                      <td style={tdStyle}>
+                      <td style={tdStyle} data-label="المنطقة الرئيسية">
                         {courier.home_base_zone
                           ? <span style={{ background: '#F1F5F9', color: '#0F2B4E', borderRadius: 5, padding: '2px 8px', fontSize: 12, fontWeight: 600 }}>{courier.home_base_zone}</span>
                           : <span style={{ color: '#CBD5E1' }}>—</span>}
                       </td>
 
                       {/* Active batches */}
-                      <td style={tdStyle}>
+                      <td style={tdStyle} data-label="الدفعات النشطة">
                         {courier.activeBatches > 0
                           ? <span style={{ background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #93C5FD', borderRadius: 5, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>{courier.activeBatches}</span>
                           : <span style={{ color: '#CBD5E1', fontSize: 12 }}>0</span>}
                       </td>
 
                       {/* Max volume */}
-                      <td style={{ ...tdStyle, fontFamily: 'monospace' }}>
+                      <td style={{ ...tdStyle, fontFamily: 'monospace' }} data-label="الطاقة">
                         {courier.max_volume != null ? `${courier.max_volume} وحدة` : <span style={{ color: '#CBD5E1' }}>—</span>}
                       </td>
 
                       {/* Hours today */}
-                      <td style={{ ...tdStyle, fontFamily: 'monospace' }}>
+                      <td style={{ ...tdStyle, fontFamily: 'monospace' }} data-label="ساعات اليوم">
                         {courier.hours_driven_today != null
                           ? `${courier.hours_driven_today.toFixed(1)} س`
                           : <span style={{ color: '#CBD5E1' }}>—</span>}
                       </td>
 
                       {/* Location */}
-                      <td style={tdStyle}>
+                      <td style={tdStyle} data-label="آخر موقع">
                         {!hasLoc ? (
                           <span style={{ color: '#CBD5E1', fontSize: 12 }}>غير معروف</span>
                         ) : (
@@ -617,7 +618,7 @@ export default function CouriersPage() {
                       </td>
 
                       {/* Actions */}
-                      <td style={{ ...tdStyle, textAlign: 'center' }}>
+                      <td style={{ ...tdStyle, textAlign: 'center' }} data-label="إجراءات">
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'center', alignItems: 'center' }}>
                           {/* Expand personal info toggle */}
                           {hasPersonal && (

@@ -13,6 +13,13 @@ export interface SettingDef {
   explanation: string;
   category: string;
   weightGroup?: string;
+  /**
+   * Optional time-unit toggle. When set, the value cell shows a button per unit and
+   * the entered value is converted to the stored base unit via `factor` (base units
+   * per this unit). The FIRST entry is the stored base unit (factor must be 1).
+   * If omitted, a 'minutes'-type field falls back to a minute/hour toggle.
+   */
+  timeUnits?: { label: string; factor: number; step?: number }[];
 }
 
 export interface CategoryDef {

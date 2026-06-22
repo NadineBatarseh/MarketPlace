@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { supabase } from '../supabase.js';
 import { requireCustomer } from '../middleware/requireCustomer.js';
+import { PC } from '../lib/paymentConfig.js';
 
 /**
  * Orders router — server-authoritative order placement.
@@ -16,8 +17,6 @@ import { requireCustomer } from '../middleware/requireCustomer.js';
  * first 'placed' tracking event in one trusted place.
  */
 const router = Router();
-
-const DELIVERY_FEE = Number(process.env.DELIVERY_FEE ?? 25);
 
 // products.id is a uuid — a single malformed value makes Postgres reject the
 // whole `.in('id', …)` query, so we drop anything that isn't a valid uuid.
@@ -104,7 +103,7 @@ router.post('/create', requireCustomer, async (req: Request, res: Response) => {
   }
 
   const round = (n: number) => Math.round(n * 100) / 100;
-  const total = round(subtotal + DELIVERY_FEE);
+  const total = round(subtotal + PC.deliveryFee);
 
   // 1. Create the order (owned by the authenticated customer).
   const { data: order, error: ordErr } = await supabase

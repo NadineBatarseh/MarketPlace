@@ -9,8 +9,6 @@ export async function insertTrackingEvent(
   step:
     | 'placed'
     | 'collecting'
-    | 'arrived_hub'
-    | 'packing'
     | 'handed_driver'
     | 'on_the_way'
     | 'delivered',

@@ -15,7 +15,7 @@ import { requireAdmin } from '../middleware/requireAdmin.js';
  *   POST /api/admin/shops/:id/restore
  *   POST /api/admin/couriers/:id/archive         body: { reason?, force? }
  *   POST /api/admin/couriers/:id/restore
- *   POST /api/admin/applications/:type/:id/archive   type: merchant|delivery|hubworker
+ *   POST /api/admin/applications/:type/:id/archive   type: merchant|delivery
  *   POST /api/admin/applications/:type/:id/restore
  */
 const router = Router();
@@ -23,13 +23,12 @@ const router = Router();
 router.use(requireAdmin);
 
 // Order/batch statuses that mean "still in flight" — archiving the parent is risky.
-const ACTIVE_ORDER_STATUSES = ['pending', 'pending_collection', 'at_hub', 'consolidated', 'delivering'];
+const ACTIVE_ORDER_STATUSES = ['pending', 'pending_collection', 'delivering'];
 const ACTIVE_BATCH_STATUSES = ['pending_assignment', 'assigned', 'in_transit'];
 
 const APP_TABLES: Record<string, string> = {
   merchant: 'merchant_applications',
   delivery: 'delivery_applications',
-  hubworker: 'hubworker_applications',
 };
 
 function archivePayload(adminId: string | undefined, reason: unknown) {

@@ -3,6 +3,7 @@ import supabase from '../../lib/supabase';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import AdminMessageModal from '../../components/AdminMessageModal';
 import { archiveShop, restoreShop } from '../../lib/adminArchive';
+import './adminResponsiveTable.css';
 
 interface MerchantInfo {
   user_id: string | null;
@@ -598,8 +599,8 @@ export default function ShopsPage() {
       ) : visible.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8', fontSize: 14 }}>لا توجد متاجر</div>
       ) : (
-        <div style={{ overflowX: 'auto', borderRadius: 10, border: '1.5px solid #E2E8F0', background: '#fff' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div className="adm-scroll" style={{ overflowX: 'auto', borderRadius: 10, border: '1.5px solid #E2E8F0', background: '#fff' }}>
+          <table className="adm-rtable" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
                 <th style={{ ...thStyle, width: '18%' }}>المتجر</th>
@@ -628,7 +629,7 @@ export default function ShopsPage() {
                       onMouseLeave={e => { if (!isOwnerExpanded) e.currentTarget.style.background = '#fff'; }}
                     >
                       {/* Shop name + logo */}
-                      <td style={tdStyle}>
+                      <td style={tdStyle} data-label="المتجر">
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                           <ShopAvatar logo={shop.shopLogo} name={shop.name} />
                           <div style={{ minWidth: 0 }}>
@@ -646,7 +647,7 @@ export default function ShopsPage() {
                       </td>
 
                       {/* Owner name — click to expand details */}
-                      <td style={tdStyle}>
+                      <td style={tdStyle} data-label="صاحب المتجر">
                         {m?.owner_name ? (
                           <button
                             onClick={() => setExpandedOwnerId(prev => prev === shop.shop_id ? null : shop.shop_id)}
@@ -676,7 +677,7 @@ export default function ShopsPage() {
                       </td>
 
                       {/* Store type */}
-                      <td style={tdStyle}>
+                      <td style={tdStyle} data-label="النوع">
                         {shop.Type_of_store
                           ? <span style={{ background: '#F1F5F9', color: '#334155', borderRadius: 5, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>
                               {STORE_TYPE_LABELS[shop.Type_of_store] ?? shop.Type_of_store}
@@ -685,7 +686,7 @@ export default function ShopsPage() {
                       </td>
 
                       {/* Location */}
-                      <td style={tdStyle}>
+                      <td style={tdStyle} data-label="الموقع">
                         {shop.shop_lat && shop.shop_lng ? (
                           <a
                             href={`https://www.google.com/maps?q=${shop.shop_lat},${shop.shop_lng}`}
@@ -710,10 +711,10 @@ export default function ShopsPage() {
                       </td>
 
                       {/* Status */}
-                      <td style={tdStyle}><StatusBadge status={shop.status} /></td>
+                      <td style={tdStyle} data-label="الحالة"><StatusBadge status={shop.status} /></td>
 
                       {/* Product count */}
-                      <td style={{ ...tdStyle, textAlign: 'center' }}>
+                      <td style={{ ...tdStyle, textAlign: 'center' }} data-label="المنتجات">
                         <span style={{
                           background: shop.product_count > 0 ? '#EFF6FF' : '#F8FAFC',
                           color:      shop.product_count > 0 ? '#1D4ED8' : '#94A3B8',
@@ -725,7 +726,7 @@ export default function ShopsPage() {
                       </td>
 
                       {/* Rating */}
-                      <td style={tdStyle}>
+                      <td style={tdStyle} data-label="التقييم">
                         <div>
                           <Stars rating={shop.avg_rating} />
                           {shop.review_count > 0 && (
@@ -735,7 +736,7 @@ export default function ShopsPage() {
                       </td>
 
                       {/* Social links */}
-                      <td style={{ ...tdStyle, textAlign: 'center' }}>
+                      <td style={{ ...tdStyle, textAlign: 'center' }} data-label="التواصل">
                         <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'center' }}>
                           {shop.whatsapp && (
                             <a href={`https://wa.me/${shop.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" title="واتساب" style={{ color: '#16a34a', display: 'flex' }}>
@@ -766,14 +767,14 @@ export default function ShopsPage() {
                       </td>
 
                       {/* Created at */}
-                      <td style={{ ...tdStyle, fontSize: 11, color: '#64748B', whiteSpace: 'nowrap' }}>
+                      <td style={{ ...tdStyle, fontSize: 11, color: '#64748B', whiteSpace: 'nowrap' }} data-label="تاريخ الإنشاء">
                         {new Date(shop.created_at).toLocaleDateString('ar-EG', {
                           year: 'numeric', month: 'short', day: 'numeric',
                         })}
                       </td>
 
                       {/* Actions */}
-                      <td style={{ ...tdStyle, textAlign: 'center' }}>
+                      <td style={{ ...tdStyle, textAlign: 'center' }} data-label="إجراءات">
                         <div style={{ position: 'relative', display: 'inline-block' }}
                           ref={openMenuId === shop.shop_id ? menuRef : null}>
                           <button

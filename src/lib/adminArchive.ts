@@ -44,7 +44,7 @@ async function post(path: string, body?: Record<string, unknown>): Promise<Archi
   }
 }
 
-export type ApplicationType = 'merchant' | 'delivery' | 'hubworker';
+export type ApplicationType = 'merchant' | 'delivery';
 
 export const archiveShop   = (shopId: string, opts?: { reason?: string; force?: boolean }) =>
   post(`/api/admin/shops/${shopId}/archive`, opts);
