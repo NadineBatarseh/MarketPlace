@@ -1,11 +1,10 @@
 /**
  * Symmetric encryption for vendor payout bank details (IBAN).
  *
- * PayTabs External Payouts has NO beneficiary-vault: the raw IBAN must be sent inside
- * every payout batch (see server/lib/paytabsPayout.ts), which happens days/weeks after
- * onboarding. So unlike the original entity_id design, we MUST custody the IBAN. It is
- * stored encrypted at rest (AES-256-GCM, authenticated) and only ever decrypted in
- * memory at settlement time.
+ * PayTabs Split Payout sends the raw IBAN inline in the split_payout[] of each pay-in
+ * request (see server/routes/paytabsRouter.ts buildSplitPayout). So we custody the IBAN:
+ * stored encrypted at rest (AES-256-GCM, authenticated) and only ever decrypted in memory
+ * at checkout to build the split.
  *
  *   - Key comes from PAYOUT_ENC_KEY (64 hex chars = 32 bytes preferred; any other string
  *     is hashed to 32 bytes via SHA-256 so a passphrase also works).

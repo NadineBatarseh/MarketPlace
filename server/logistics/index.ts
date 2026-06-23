@@ -9,77 +9,9 @@ import { atomicAssign } from './driverAssignment.js';
 import { autoAssignUnbatchedShipments } from './phases/phase0a_autoAssignUnbatched.js';
 import { supabase } from '../supabase.js';
 import { C } from './constants.js';
-import { startSettlementScheduler } from '../lib/settlementExecutor.js';
-import { PC, loadPaymentConfig } from '../lib/paymentConfig.js';
-import type { TrackingEventType } from '../../shared/trackingEvents.js';
+import { loadPaymentConfig } from '../lib/paymentConfig.js';
 
 export const logisticsRouter = Router();
-
-/**
- * Arm vendor settlement for a just-delivered shipment: resolve order_detail → its
- * order + shop, then set settle_eligible_at on that shop's still-pending payout for the
- * order. Per-shop (not per-order) so one slow shop never blocks another. Best-effort:
- * any failure is logged and swallowed so delivery confirmation never breaks.
- */
-async function markPayoutEligibleForShipment(orderDetailId: number | null): Promise<void> {
-  try {
-    if (orderDetailId == null) return;
-
-    const { data: detail } = await supabase
-      .from('order_details')
-      .select('order_id, shop_id')
-      .eq('id', orderDetailId)
-      .maybeSingle();
-
-    if (!detail?.order_id || !detail.shop_id) return;
-
-    const eligibleAt = new Date(Date.now() + PC.settlementReturnWindowHours * 3_600_000).toISOString();
-
-    await supabase
-      .from('payouts')
-      .update({ settle_eligible_at: eligibleAt })
-      .eq('order_id', detail.order_id)
-      .eq('payee_type', 'shop')
-      .eq('payee_id', detail.shop_id)
-      .eq('status', 'pending')
-      .is('settle_eligible_at', null);
-  } catch (err) {
-    console.error('[settlement] markPayoutEligibleForShipment error:', (err as Error).message);
-  }
-}
-
-/**
- * Log a driver pickup/delivery event to order_tracking_events — the central
- * audit trail for delivery-related actions (see shared/trackingEvents.ts).
- * Best-effort: a logging failure must never block the driver's pickup/delivery flow.
- */
-async function insertDriverTrackingEvent(
-  shipmentId: string,
-  orderDetailId: number | null,
-  eventType: TrackingEventType,
-): Promise<void> {
-  try {
-    if (orderDetailId == null) return;
-
-    const { data: detail } = await supabase
-      .from('order_details')
-      .select('order_id')
-      .eq('id', orderDetailId)
-      .maybeSingle();
-
-    if (!detail?.order_id) return;
-
-    await supabase.from('order_tracking_events').insert({
-      order_id: detail.order_id,
-      shipment_id: shipmentId,
-      step: eventType,
-      event_type: eventType,
-      triggered_by: 'driver',
-    });
-  } catch (err) {
-    console.error('[logistics] insertDriverTrackingEvent error:', (err as Error).message);
-  }
-}
 
 // â”€â”€ POST /api/logistics/cycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Manually trigger one full batch cycle
@@ -310,12 +242,8 @@ logisticsRouter.post('/deliver-shipment', async (req: Request, res: Response) =>
     return;
   }
 
-  // DEFERRED SETTLEMENT DISABLED (2026-06-23): vendor payouts now happen at pay-in via
-  // PayTabs Split Payout (split_payout[] in server/routes/paytabsRouter.ts), not via the
-  // post-delivery External Payouts sweep — which the account doesn't have enabled anyway.
-  // Leaving settle_eligible_at unset keeps the obsolete settlementExecutor sweep a no-op.
-  // void markPayoutEligibleForShipment(shipment.order_detail_id as number | null);
-  void insertDriverTrackingEvent(shipment_id, shipment.order_detail_id as number | null, 'driver_delivered');
+  // Vendor payouts happen at pay-in via PayTabs Split Payout (see paytabsRouter); there's
+  // no post-delivery settlement step here anymore.
 
   // Auto-complete batch if every shipment is now delivered
   const allIds = [
@@ -406,6 +334,5 @@ export async function bootstrapLogistics(): Promise<void> {
   startBackgroundJobs();
   startBatchCycleScheduler(C.CYCLE_INTERVAL_MINUTES);
   startShipmentWatcher();
-  startSettlementScheduler(PC.settlementSweepIntervalMinutes);
   console.log('[Logistics] Module bootstrapped.');
 }

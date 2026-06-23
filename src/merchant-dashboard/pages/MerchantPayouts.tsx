@@ -12,16 +12,14 @@ interface PayoutRow {
   amount: number;
   currency: string;
   status: PayoutStatus;
-  settle_eligible_at: string | null;
   paid_at: string | null;
   failure_reason: string | null;
   created_at: string;
 }
 
 interface Summary {
-  paid_total: number;
-  pending_total: number;
-  in_process_total: number;
+  distributed_total: number;
+  held_total: number;
   currency: string;
 }
 
@@ -83,7 +81,7 @@ export default function MerchantPayouts() {
       <h1 className="mpo-title">أرباحي</h1>
       <p className="mpo-subtitle">
         حصّتك من مبيعات متجرك بعد خصم عمولة المنصّة، وحالة تحويلها إلى حسابك البنكي.
-        تُحوَّل الأرباح تلقائيًا بعد تسليم الطلب وانتهاء فترة الإرجاع.
+        تُحوَّل حصّتك تلقائيًا عبر PayTabs لحظة دفع العميل ما دامت بيانات الدفع مكتملة.
       </p>
 
       {error && <div className="md-page-error md-page-error--spaced">{error}</div>}
@@ -97,16 +95,12 @@ export default function MerchantPayouts() {
       {/* Summary cards */}
       <div className="mpo-cards">
         <div className="mpo-card mpo-card--green">
-          <div className="mpo-card-label">إجمالي المدفوع</div>
-          <div className="mpo-card-value">{fmtMoney(summary?.paid_total ?? 0, ccy)}</div>
-        </div>
-        <div className="mpo-card mpo-card--blue">
-          <div className="mpo-card-label">قيد التحويل</div>
-          <div className="mpo-card-value">{fmtMoney(summary?.in_process_total ?? 0, ccy)}</div>
+          <div className="mpo-card-label">محوّلة عبر PayTabs</div>
+          <div className="mpo-card-value">{fmtMoney(summary?.distributed_total ?? 0, ccy)}</div>
         </div>
         <div className="mpo-card mpo-card--amber">
-          <div className="mpo-card-label">قيد الانتظار</div>
-          <div className="mpo-card-value">{fmtMoney(summary?.pending_total ?? 0, ccy)}</div>
+          <div className="mpo-card-label">محتجزة لدى المنصّة</div>
+          <div className="mpo-card-value">{fmtMoney(summary?.held_total ?? 0, ccy)}</div>
         </div>
       </div>
 
@@ -121,20 +115,13 @@ export default function MerchantPayouts() {
                 <th>رقم الطلب</th>
                 <th>المبلغ</th>
                 <th>الحالة</th>
-                <th>تاريخ الاستحقاق / الدفع</th>
+                <th>التاريخ</th>
               </tr>
             </thead>
             <tbody>
               {payouts.map(p => {
                 const meta = payoutMeta(p.status);
-                const isPending = p.status === 'pending' || p.status === 'queued';
-                const dateLabel = p.status === 'paid'
-                  ? `دُفع: ${fmtDate(p.paid_at)}`
-                  : isPending && p.settle_eligible_at
-                    ? `متوقّع: ${fmtDate(p.settle_eligible_at)}`
-                    : p.settle_eligible_at
-                      ? `مستحق: ${fmtDate(p.settle_eligible_at)}`
-                      : '—';
+                const dateLabel = fmtDate(p.paid_at ?? p.created_at);
                 return (
                   <tr key={p.id}>
                     <td className="mpo-order">#{p.order_id}</td>
