@@ -17,12 +17,6 @@ export const PC = {
   platformCommissionRate:         Number(process.env.PLATFORM_COMMISSION_RATE ?? 0.10),
   /** Flat delivery fee: charged to the customer AND paid to the assigned courier. */
   deliveryFee:                    Number(process.env.DELIVERY_FEE ?? 25),
-  /** Return window (hours) after delivery before a vendor payout becomes settle-eligible. */
-  settlementReturnWindowHours:    Number(process.env.SETTLEMENT_RETURN_WINDOW_HOURS ?? 72),
-  /** Max retry attempts per payout line in the settlement sweep. */
-  settlementMaxAttempts:          Number(process.env.SETTLEMENT_MAX_ATTEMPTS ?? 3),
-  /** How often the in-process settlement sweep runs (minutes). Applied at server start. */
-  settlementSweepIntervalMinutes: Number(process.env.SETTLEMENT_SWEEP_INTERVAL_MINUTES ?? 15),
 };
 
 export type PaymentConfig = typeof PC;
@@ -35,7 +29,7 @@ export type PaymentConfig = typeof PC;
 export async function loadPaymentConfig(): Promise<void> {
   const { data, error } = await supabase
     .from('payment_config')
-    .select('platform_commission_rate, delivery_fee, settlement_return_window_hours, settlement_max_attempts, settlement_sweep_interval_minutes')
+    .select('platform_commission_rate, delivery_fee')
     .eq('id', 1)
     .single();
 
@@ -44,9 +38,6 @@ export async function loadPaymentConfig(): Promise<void> {
     return;
   }
 
-  PC.platformCommissionRate         = Number(data.platform_commission_rate);
-  PC.deliveryFee                    = Number(data.delivery_fee);
-  PC.settlementReturnWindowHours    = Number(data.settlement_return_window_hours);
-  PC.settlementMaxAttempts          = Number(data.settlement_max_attempts);
-  PC.settlementSweepIntervalMinutes = Number(data.settlement_sweep_interval_minutes);
+  PC.platformCommissionRate = Number(data.platform_commission_rate);
+  PC.deliveryFee            = Number(data.delivery_fee);
 }

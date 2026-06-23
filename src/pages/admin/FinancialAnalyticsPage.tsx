@@ -22,7 +22,7 @@ interface LedgerRow { payee_type: PayeeType; amount: number; currency: string | 
 interface Group { payee_type: PayeeType; payee_name: string; total: number; }
 interface Summary {
   customer_paid_total: number; merchants_total: number; couriers_total: number;
-  platform_total: number; paid: number; pending: number; in_process: number; failed: number; count: number;
+  platform_total: number; distributed: number; held: number; count: number;
 }
 
 const CAT = { merchants: '#0F766E', couriers: '#7C3AED', platform: '#EA580C' };

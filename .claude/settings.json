@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Write-Output \"PYTHONHOME=$env:PYTHONHOME\"; Write-Output \"PYTHONPATH=$env:PYTHONPATH\"; $env:PYTHONHOME=$null; $env:PYTHONPATH=$null; & \"C:\\\\Python313\\\\python.exe\" -m ensurepip 2>&1 | Select-Object -Last 3; & \"C:\\\\Python313\\\\python.exe\" -c \"print\\('works now'\\)\")",
+      "PowerShell(& \"C:\\\\Python313\\\\python.exe\" -m pip install --quiet Pillow 2>&1)",
+      "PowerShell(& \"C:\\\\Python313\\\\python.exe\" -c \"from PIL import Image; print\\('PIL ready'\\)\")",
+      "PowerShell($env:PYTHONHOME=$null; $env:PYTHONPATH=$null; & \"C:\\\\Python313\\\\python.exe\" \"C:\\\\Users\\\\hp\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-hp-Desktop-SOUQLINK\\\\c9b5cad3-43a2-4c7f-8d47-5d8314990ac0\\\\scratchpad\\\\analyze.py\" 2>$null)",
+      "PowerShell($env:PYTHONHOME=$null; $env:PYTHONPATH=$null; & \"C:\\\\Python313\\\\python.exe\" \"C:\\\\Users\\\\hp\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-hp-Desktop-SOUQLINK\\\\c9b5cad3-43a2-4c7f-8d47-5d8314990ac0\\\\scratchpad\\\\widen.py\" 2>$null)",
+      "PowerShell($env:PYTHONHOME=$null; $env:PYTHONPATH=$null; & \"C:\\\\Python313\\\\python.exe\" \"C:\\\\Users\\\\hp\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-hp-Desktop-SOUQLINK\\\\c9b5cad3-43a2-4c7f-8d47-5d8314990ac0\\\\scratchpad\\\\whiten.py\" 2>$null)",
+      "PowerShell($env:PYTHONHOME=$null; $env:PYTHONPATH=$null; & \"C:\\\\Python313\\\\python.exe\" \"C:\\\\Users\\\\hp\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-hp-Desktop-SOUQLINK\\\\c9b5cad3-43a2-4c7f-8d47-5d8314990ac0\\\\scratchpad\\\\widen2.py\" 2>$null)",
+      "PowerShell($env:PYTHONHOME=$null; $env:PYTHONPATH=$null; & \"C:\\\\Python313\\\\python.exe\" \"C:\\\\Users\\\\hp\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-hp-Desktop-SOUQLINK\\\\c9b5cad3-43a2-4c7f-8d47-5d8314990ac0\\\\scratchpad\\\\darker2.py\" 2>$null)",
+      "PowerShell($env:PYTHONHOME=$null; $env:PYTHONPATH=$null; & \"C:\\\\Python313\\\\python.exe\" \"C:\\\\Users\\\\hp\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-hp-Desktop-SOUQLINK\\\\c9b5cad3-43a2-4c7f-8d47-5d8314990ac0\\\\scratchpad\\\\lighter.py\" 2>$null)",
+      "PowerShell($env:PYTHONHOME=$null; $env:PYTHONPATH=$null; & \"C:\\\\Python313\\\\python.exe\" \"C:\\\\Users\\\\hp\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-hp-Desktop-SOUQLINK\\\\c9b5cad3-43a2-4c7f-8d47-5d8314990ac0\\\\scratchpad\\\\rebuild.py\" 2>$null)",
+      "PowerShell($env:PYTHONHOME=$null; $env:PYTHONPATH=$null; & \"C:\\\\Python313\\\\python.exe\" \"C:\\\\Users\\\\hp\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-hp-Desktop-SOUQLINK\\\\c9b5cad3-43a2-4c7f-8d47-5d8314990ac0\\\\scratchpad\\\\bbox.py\" 2>$null)",
+      "PowerShell($env:PYTHONHOME=$null; $env:PYTHONPATH=$null; & \"C:\\\\Python313\\\\python.exe\" \"C:\\\\Users\\\\hp\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-hp-Desktop-SOUQLINK\\\\c9b5cad3-43a2-4c7f-8d47-5d8314990ac0\\\\scratchpad\\\\bbox2.py\" 2>$null)",
+      "PowerShell($env:PYTHONHOME=$null; $env:PYTHONPATH=$null; & \"C:\\\\Python313\\\\python.exe\" \"C:\\\\Users\\\\hp\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-hp-Desktop-SOUQLINK\\\\c9b5cad3-43a2-4c7f-8d47-5d8314990ac0\\\\scratchpad\\\\crop.py\" 2>$null)",
+      "PowerShell($env:PYTHONHOME=$null; $env:PYTHONPATH=$null; & \"C:\\\\Python313\\\\python.exe\" \"C:\\\\Users\\\\hp\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-hp-Desktop-SOUQLINK\\\\c9b5cad3-43a2-4c7f-8d47-5d8314990ac0\\\\scratchpad\\\\lighten.py\" 2>$null)",
+      "PowerShell($env:PYTHONHOME=$null; $env:PYTHONPATH=$null; & \"C:\\\\Python313\\\\python.exe\" \"C:\\\\Users\\\\hp\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-hp-Desktop-SOUQLINK\\\\c9b5cad3-43a2-4c7f-8d47-5d8314990ac0\\\\scratchpad\\\\bbox_new.py\" 2>$null)",
+      "PowerShell(git status --short | Group-Object { $_.Substring\\(0,2\\) } | Select-Object Count, Name)"
+    ]
+  }
+}

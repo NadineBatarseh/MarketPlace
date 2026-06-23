@@ -121,6 +121,27 @@ function getPlatformBeneficiary(): SplitPayoutEntity['beneficiary'] | null {
 }
 
 /**
+ * A shop is included in the PayTabs split (→ its payout is 'distributed') only when its
+ * beneficiary fields are complete. Shared by buildSplitPayout (who to split to) and
+ * createPayoutRecords (what status to stamp) so the two never disagree.
+ */
+function shopBeneficiaryFieldsPresent(s: {
+  payout_onboarding_status: string | null;
+  payout_iban_enc: string | null;
+  payout_beneficiary_name: string | null;
+  payout_bank_name: string | null;
+  payout_country: string | null;
+}): boolean {
+  return (
+    s.payout_onboarding_status === 'active' &&
+    !!s.payout_iban_enc &&
+    !!s.payout_beneficiary_name &&
+    !!s.payout_bank_name &&
+    !!s.payout_country
+  );
+}
+
+/**
  * Build the PayTabs `split_payout[]` for an order. PayTabs distributes the WHOLE charge
  * across the entities at settlement — the item_totals MUST sum exactly to the charged
  * total. So the split has two kinds of entity:
@@ -158,8 +179,7 @@ async function buildSplitPayout(totals: OrderTotals): Promise<SplitPayoutEntity[
   const fbAddress = process.env.PAYOUT_PLATFORM_ADDRESS1 || process.env.PAYTABS_COUNTRY || 'PS';
 
   for (const s of shops ?? []) {
-    if (s.payout_onboarding_status !== 'active' || !s.payout_iban_enc) continue;
-    if (!s.payout_beneficiary_name || !s.payout_bank_name || !s.payout_country) continue;
+    if (!shopBeneficiaryFieldsPresent(s)) continue;
 
     const gross = totals.perShop.get(s.shop_id) ?? 0;
     const net = round(gross * (1 - rate));
@@ -260,12 +280,14 @@ async function findAssignedCourier(orderId: number | string): Promise<string | n
 /* ─────────────────────────── internal payout ledger ─────────────────────────── */
 
 /**
- * Create the internal marketplace settlement records for a paid order:
- *   - one 'shop' payout per shop (gross − platform commission)
- *   - one 'platform' commission payout (sum of commissions)
- *   - one 'courier' payout (delivery fee) IF a courier is already assigned
- *
- * Phase 1 only records them; the real PayTabs Split Payout API is NOT called.
+ * Record the marketplace settlement ledger for a paid order — the source of truth for the
+ * admin/merchant "transfer status" views. Money movement itself is done by PayTabs Split
+ * Payout at pay-in (see buildSplitPayout); these rows mirror that outcome:
+ *   - one 'shop' payout per shop: 'distributed' if it was in the PayTabs split, else
+ *     'platform_held' (shop not onboarded / unsupported payout country → platform keeps it).
+ *   - one 'platform' commission payout ('distributed' — received via the split's platform entity).
+ *   - one 'courier' payout (delivery fee) IF a courier is assigned ('platform_held' — the
+ *     platform pays the courier outside PayTabs).
  * Idempotent: skips entirely when payout rows for the order already exist.
  */
 async function createPayoutRecords(
@@ -281,6 +303,19 @@ async function createPayoutRecords(
   if ((count ?? 0) > 0) return; // already created — stay idempotent
 
   const round = (n: number) => Math.round(n * 100) / 100;
+  const pct = Math.round(PC.platformCommissionRate * 100);
+
+  // Which shops were actually in the PayTabs split (same criterion as buildSplitPayout).
+  const shopIds = [...totals.perShop.keys()].filter((k) => k && k !== 'unknown') as string[];
+  const distributedShops = new Set<string>();
+  if (shopIds.length) {
+    const { data: shops } = await supabase
+      .from('shops')
+      .select('shop_id, payout_onboarding_status, payout_iban_enc, payout_beneficiary_name, payout_bank_name, payout_country')
+      .in('shop_id', shopIds);
+    for (const s of shops ?? []) if (shopBeneficiaryFieldsPresent(s)) distributedShops.add(s.shop_id);
+  }
+
   const rows: Array<Record<string, unknown>> = [];
   let platformCommission = 0;
 
@@ -288,6 +323,7 @@ async function createPayoutRecords(
     if (shopId === 'unknown') continue;
     const commission = round(gross * PC.platformCommissionRate);
     platformCommission += commission;
+    const distributed = distributedShops.has(shopId);
     rows.push({
       order_id: orderId,
       payment_id: paymentId,
@@ -295,8 +331,10 @@ async function createPayoutRecords(
       payee_id: shopId,
       amount: round(gross - commission),
       currency,
-      status: 'pending',
-      note: `Shop revenue ${gross} − ${Math.round(PC.platformCommissionRate * 100)}% commission`,
+      status: distributed ? 'distributed' : 'platform_held',
+      note: distributed
+        ? `Shop revenue ${gross} − ${pct}% commission (paid via PayTabs split)`
+        : `Shop revenue ${gross} − ${pct}% commission (held — shop not onboarded for payout)`,
     });
   }
 
@@ -309,8 +347,8 @@ async function createPayoutRecords(
       payee_id: courierId,
       amount: round(totals.deliveryFee),
       currency,
-      status: 'pending',
-      note: 'Delivery fee',
+      status: 'platform_held',
+      note: 'Delivery fee (paid by platform)',
     });
   }
 
@@ -321,12 +359,63 @@ async function createPayoutRecords(
     payee_id: null,
     amount: round(platformCommission),
     currency,
-    status: 'pending',
-    note: 'Platform commission',
+    status: 'distributed',
+    note: 'Platform commission (via PayTabs split)',
   });
 
   const { error } = await supabase.from('payouts').insert(rows);
   if (error) console.error('[paytabs] payout insert failed:', error.message);
+}
+
+/**
+ * Confirm each shop's distribution against what PayTabs ACTUALLY recorded in the paid
+ * transaction's `splitPayout`. createPayoutRecords marks a shop 'distributed' on intent
+ * (it was onboarded); here we re-query the transaction and downgrade to 'platform_held'
+ * any shop whose share PayTabs did not record — e.g. the split was never sent (missing
+ * platform beneficiary config) or PayTabs dropped a line.
+ *
+ * Matching is by amount (our `payouts.amount` == the entity's `item_total`), consuming each
+ * PayTabs line once so identical amounts across shops still match 1:1. The platform entity
+ * (entity_id 1000) is excluded.
+ *
+ * ⚠️ This proves PayTabs ACCEPTED/RECORDED the split line for this tran_ref — it does NOT
+ *    prove the bank transfer settled (that happens later on PayTabs' settlement cycle and
+ *    isn't exposed by /payment/query). So 'distributed' = "recorded in a successful split",
+ *    not "money landed in the vendor's bank".
+ */
+async function verifySplitDistribution(orderId: number, paytabsResult: Record<string, unknown>): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const split: any[] = Array.isArray((paytabsResult as any)?.splitPayout) ? (paytabsResult as any).splitPayout : [];
+
+  // Multiset of recorded beneficiary amounts (exclude the platform entity 1000).
+  const recorded = new Map<string, number>();
+  for (const e of split) {
+    if (Number(e?.entity_id) === 1000) continue;
+    const amt = Number(e?.item_total ?? e?.settlement_amount);
+    if (!Number.isFinite(amt)) continue;
+    const key = amt.toFixed(2);
+    recorded.set(key, (recorded.get(key) ?? 0) + 1);
+  }
+
+  const { data: shopRows } = await supabase
+    .from('payouts')
+    .select('id, amount, status')
+    .eq('order_id', orderId)
+    .eq('payee_type', 'shop');
+
+  for (const r of shopRows ?? []) {
+    if (r.status !== 'distributed') continue; // only the ones we intended to distribute
+    const key = Number(r.amount).toFixed(2);
+    const count = recorded.get(key) ?? 0;
+    if (count > 0) {
+      recorded.set(key, count - 1); // confirmed — consume the matching PayTabs line
+    } else {
+      await supabase
+        .from('payouts')
+        .update({ status: 'platform_held', note: 'Held — share not recorded in the PayTabs split (unconfirmed)' })
+        .eq('id', r.id);
+    }
+  }
 }
 
 /* ─────────────────────────── idempotent result applier ─────────────────────────── */
@@ -384,6 +473,13 @@ async function applyPaymentResult(tranRef: string): Promise<ApplyOutcome> {
     // Idempotent — recompute totals so payout amounts match the charged amount.
     const totals = await computeOrderTotals(orderId);
     await createPayoutRecords(orderId, payment.id, payment.currency, totals);
+
+    // Confirm each shop's share against the split PayTabs actually recorded for this
+    // transaction; downgrade any unconfirmed share to 'platform_held'. Best-effort —
+    // never block the payment flow (re-runs safely on every callback/return/status hit).
+    await verifySplitDistribution(orderId, result as unknown as Record<string, unknown>).catch(e =>
+      console.error('[paytabs] split verification failed for order', orderId, (e as Error).message),
+    );
 
     // Safety net: shipments are normally created at order placement, but retry
     // here (idempotent) in case that step failed — and so a callback firing

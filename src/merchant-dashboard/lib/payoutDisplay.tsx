@@ -7,7 +7,12 @@
  * the <PayoutStatusPill> component is CSS-independent (inline-styled) for reuse elsewhere.
  */
 
-export type PayoutStatus = 'pending' | 'queued' | 'submitted' | 'paid' | 'failed' | 'skipped' | 'reversed';
+// Split Payout statuses: 'distributed' (paid via PayTabs at pay-in), 'platform_held'
+// (platform holds the share — shop wasn't onboarded for payout). The remaining values are
+// legacy rows from the retired deferred-settlement model, kept so old data still renders.
+export type PayoutStatus =
+  | 'distributed' | 'platform_held'
+  | 'pending' | 'queued' | 'submitted' | 'paid' | 'failed' | 'skipped' | 'reversed';
 
 interface StatusMeta {
   label: string;  // Arabic label
@@ -18,6 +23,8 @@ interface StatusMeta {
 
 // Arabic label + colour bucket per ledger status (colours mirror MerchantPayouts.css pills).
 export const PAYOUT_STATUS_META: Record<PayoutStatus, StatusMeta> = {
+  distributed:   { label: 'محوّلة عبر PayTabs', cls: 'mpo-st--green', bg: '#ecfdf5', fg: '#16b981' },
+  platform_held: { label: 'محتجزة لدى المنصّة', cls: 'mpo-st--amber', bg: '#fffbeb', fg: '#b45309' },
   pending:   { label: 'قيد الانتظار', cls: 'mpo-st--amber', bg: '#fffbeb', fg: '#b45309' },
   queued:    { label: 'قيد التحويل',  cls: 'mpo-st--amber', bg: '#fffbeb', fg: '#b45309' },
   submitted: { label: 'قيد التحويل',  cls: 'mpo-st--blue',  bg: '#eff6ff', fg: '#2563eb' },

@@ -2,33 +2,25 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { supabase } from '../supabase.js';
 import { requireAdmin } from '../middleware/requireAdmin.js';
-import { runSettlementSweep, reconcileBatch } from '../lib/settlementExecutor.js';
 import { loadPaymentConfig } from '../lib/paymentConfig.js';
 
 /**
- * Vendor settlement admin API (mounted /api/payments/payouts, requireAdmin).
+ * Marketplace payouts admin API (mounted /api/payments/payouts, requireAdmin).
  *
- *   POST /run            → force a settlement sweep now (also how Vercel/serverless
- *                          deployments drive settlement, since setInterval won't run)
- *   GET  /batches        → recent settlement batches
- *   GET  /batches/:id    → one batch + its payout lines
- *   POST /reconcile/:id  → re-poll PayTabs for a batch and apply outcomes
- *   GET  /config         → read the admin-editable payment/settlement config
- *   PUT  /config         → update it (validated, audited via updated_by)
+ * Vendor money moves via PayTabs Split Payout at pay-in (see paytabsRouter); this API is
+ * read/reporting + the editable fee knobs:
+ *   GET  /config   → read the admin-editable fee config
+ *   PUT  /config   → update it (validated, audited via updated_by)
+ *   GET  /ledger   → the payouts ledger (per-shop transfer status) for admin views
  */
 const router = Router();
 
 /* ─────────────────────────── payment config (admin-editable knobs) ─────────────────────────── */
 
 // Editable fields → validation bounds. Keys are the payment_config column names.
-// No upper caps by design — admins may set any value (a lower bound + integer check
-// is kept only where a smaller value would be meaningless/break the math).
 const CONFIG_FIELDS: Record<string, { min: number; integer?: boolean }> = {
-  platform_commission_rate:          { min: 0 },
-  delivery_fee:                      { min: 0 },
-  settlement_return_window_hours:    { min: 0, integer: true },
-  settlement_max_attempts:          { min: 1, integer: true },
-  settlement_sweep_interval_minutes: { min: 1, integer: true },
+  platform_commission_rate: { min: 0 },
+  delivery_fee:             { min: 0 },
 };
 
 router.get('/config', requireAdmin, async (_req: Request, res: Response) => {
@@ -81,55 +73,6 @@ router.put('/config', requireAdmin, async (req: Request, res: Response) => {
   return res.json({ ok: true, config: data });
 });
 
-router.post('/run', requireAdmin, async (req: Request, res: Response) => {
-  try {
-    const summary = await runSettlementSweep({ triggeredBy: req.adminUserId ?? null });
-    return res.json({ ok: true, summary });
-  } catch (e) {
-    return res.status(500).json({ ok: false, error: (e as Error).message });
-  }
-});
-
-router.get('/batches', requireAdmin, async (_req: Request, res: Response) => {
-  const { data, error } = await supabase
-    .from('settlement_batches')
-    .select('id, paytabs_batch_id, status, payout_count, total_amount, currency, created_at, closed_at, completed_at, error')
-    .order('created_at', { ascending: false })
-    .limit(50);
-
-  if (error) return res.status(500).json({ ok: false, error: error.message });
-  return res.json({ ok: true, batches: data ?? [] });
-});
-
-router.get('/batches/:id', requireAdmin, async (req: Request, res: Response) => {
-  const { id } = req.params;
-
-  const { data: batch, error: bErr } = await supabase
-    .from('settlement_batches')
-    .select('*')
-    .eq('id', id)
-    .maybeSingle();
-
-  if (bErr) return res.status(500).json({ ok: false, error: bErr.message });
-  if (!batch) return res.status(404).json({ ok: false, error: 'Batch not found' });
-
-  const { data: lines } = await supabase
-    .from('payouts')
-    .select('id, order_id, payee_type, payee_id, amount, currency, status, paytabs_payout_ref, paid_at, failure_reason, attempts')
-    .eq('settlement_batch_id', id);
-
-  return res.json({ ok: true, batch, payouts: lines ?? [] });
-});
-
-router.post('/reconcile/:id', requireAdmin, async (req: Request, res: Response) => {
-  try {
-    const result = await reconcileBatch(String(req.params.id));
-    return res.json({ ok: true, ...result });
-  } catch (e) {
-    return res.status(500).json({ ok: false, error: (e as Error).message });
-  }
-});
-
 /* ─────────────────────────── sales / earnings ledger ─────────────────────────── */
 /**
  * GET /ledger → the full payouts ledger for the admin "sales statement" page.
@@ -151,7 +94,7 @@ router.get('/ledger', requireAdmin, async (req: Request, res: Response) => {
 
   let query = supabase
     .from('payouts')
-    .select('id, order_id, payment_id, payee_type, payee_id, amount, currency, status, note, settle_eligible_at, paid_at, paytabs_payout_ref, failure_reason, created_at')
+    .select('id, order_id, payment_id, payee_type, payee_id, amount, currency, status, note, paid_at, failure_reason, created_at')
     .order('created_at', { ascending: false })
     .limit(LEDGER_ROW_CAP);
 
@@ -196,34 +139,32 @@ router.get('/ledger', requireAdmin, async (req: Request, res: Response) => {
     const key = `${r.payee_type}:${r.payee_id ?? 'platform'}`;
     let g = groupMap.get(key);
     if (!g) {
-      g = { payee_type: r.payee_type, payee_id: r.payee_id, payee_name: r.payee_name, total: 0, paid_total: 0, pending_total: 0, count: 0 };
+      g = { payee_type: r.payee_type, payee_id: r.payee_id, payee_name: r.payee_name, total: 0, distributed_total: 0, held_total: 0, count: 0 };
       groupMap.set(key, g);
     }
     const amt = Number(r.amount ?? 0);
     g.total += amt;
     g.count += 1;
-    if (r.status === 'paid') g.paid_total += amt;
-    else if (r.status === 'pending' || r.status === 'queued') g.pending_total += amt;
+    if (r.status === 'distributed') g.distributed_total += amt;
+    else if (r.status === 'platform_held') g.held_total += amt;
   }
   const round = (n: number) => Math.round(n * 100) / 100;
   const groups = [...groupMap.values()]
-    .map(g => ({ ...g, total: round(g.total), paid_total: round(g.paid_total), pending_total: round(g.pending_total) }))
+    .map(g => ({ ...g, total: round(g.total), distributed_total: round(g.distributed_total), held_total: round(g.held_total) }))
     .sort((a, b) => b.total - a.total);
 
   // Overall summary.
   const summary = {
     merchants_total: 0, couriers_total: 0, platform_total: 0,
-    paid: 0, pending: 0, in_process: 0, failed: 0, count: named.length,
+    distributed: 0, held: 0, count: named.length,
   };
   for (const r of named) {
     const amt = Number(r.amount ?? 0);
     if (r.payee_type === 'shop') summary.merchants_total += amt;
     else if (r.payee_type === 'courier') summary.couriers_total += amt;
     else summary.platform_total += amt;
-    if (r.status === 'paid') summary.paid += amt;
-    else if (r.status === 'pending' || r.status === 'queued') summary.pending += amt;
-    else if (r.status === 'submitted') summary.in_process += amt;
-    else if (r.status === 'failed') summary.failed += amt;
+    if (r.status === 'distributed') summary.distributed += amt;
+    else if (r.status === 'platform_held') summary.held += amt;
   }
   for (const k of Object.keys(summary) as (keyof typeof summary)[]) {
     if (k !== 'count') summary[k] = round(summary[k]);

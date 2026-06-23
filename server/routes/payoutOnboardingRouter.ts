@@ -158,10 +158,6 @@ router.post('/register', requireCustomer, async (req: Request, res: Response) =>
 
 /* ─────────────────────────── GET /payouts (merchant earnings) ─────────────────────────── */
 
-// Bucket each payout status into the three summary totals shown on the earnings page.
-const PENDING_STATUSES = new Set(['pending', 'queued']);
-const IN_PROCESS_STATUSES = new Set(['submitted']);
-
 router.get('/payouts', requireCustomer, async (req: Request, res: Response) => {
   const shop = await resolveOwnShop(req.authUserId!);
   if (!shop) return res.status(403).json({ ok: false, error: 'You do not own a shop' });
@@ -169,29 +165,29 @@ router.get('/payouts', requireCustomer, async (req: Request, res: Response) => {
   // Read server-side with the service-role client — the payouts table is not client-readable.
   const { data: rows, error } = await supabase
     .from('payouts')
-    .select('id, order_id, amount, currency, status, settle_eligible_at, paid_at, failure_reason, created_at')
+    .select('id, order_id, amount, currency, status, paid_at, failure_reason, created_at')
     .eq('payee_type', 'shop')
     .eq('payee_id', shop.shop_id)
     .order('created_at', { ascending: false });
 
   if (error) return res.status(500).json({ ok: false, error: error.message });
 
+  // 'distributed' = paid to the shop via PayTabs Split Payout; 'platform_held' = the
+  // platform is holding this share (shop wasn't onboarded for payout at order time).
   const payouts = rows ?? [];
-  let paid_total = 0, pending_total = 0, in_process_total = 0;
+  let distributed_total = 0, held_total = 0;
   for (const p of payouts) {
     const amt = Number(p.amount ?? 0);
-    if (p.status === 'paid') paid_total += amt;
-    else if (PENDING_STATUSES.has(p.status)) pending_total += amt;
-    else if (IN_PROCESS_STATUSES.has(p.status)) in_process_total += amt;
+    if (p.status === 'distributed') distributed_total += amt;
+    else if (p.status === 'platform_held') held_total += amt;
   }
   const round = (n: number) => Math.round(n * 100) / 100;
 
   return res.json({
     ok: true,
     summary: {
-      paid_total: round(paid_total),
-      pending_total: round(pending_total),
-      in_process_total: round(in_process_total),
+      distributed_total: round(distributed_total),
+      held_total: round(held_total),
       currency: payouts[0]?.currency ?? (process.env.PAYTABS_CURRENCY ?? 'ILS'),
     },
     onboarding_status: shop.payout_onboarding_status ?? 'not_started',

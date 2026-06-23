@@ -222,6 +222,19 @@ function ProductCard({ product }: { product: Product }) {
     setIdx(i);
   };
 
+  // Touch swipe between images (mobile — there is no hover/arrow affordance)
+  const touchX = useRef<number | null>(null);
+  const onTouchStart = (e: React.TouchEvent) => { touchX.current = e.touches[0].clientX; };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    if (touchX.current == null || !hasMultiple) return;
+    const dx = e.changedTouches[0].clientX - touchX.current;
+    if (Math.abs(dx) > 35) {
+      // RTL layout: swipe-left advances, swipe-right goes back
+      setIdx(i => (dx < 0 ? (i + 1) % images.length : (i - 1 + images.length) % images.length));
+    }
+    touchX.current = null;
+  };
+
   const onCart = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!isCustomer) { navigate('/login'); return; }
@@ -247,7 +260,7 @@ function ProductCard({ product }: { product: Product }) {
       </button>
 
       {/* Image + carousel */}
-      <div className="hp-prod-card__img-wrap">
+      <div className="hp-prod-card__img-wrap" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
         {badge && <span className={`pbadge pbadge--${badge.kind}`}>{badge.text}</span>}
         {images.length > 0
           ? <img src={images[idx]} alt={product.title} className="hp-prod-card__img" loading="lazy" />
