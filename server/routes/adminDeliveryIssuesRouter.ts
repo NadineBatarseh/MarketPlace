@@ -44,8 +44,8 @@ router.get('/', async (_req: Request, res: Response) => {
   const [{ data: orders }, { data: shipments }] = await Promise.all([
     supabase.from('orders').select('id, user_id').in('id', orderIds),
     shipmentIds.length
-      ? supabase.from('shipments').select('id, status').in('id', shipmentIds)
-      : Promise.resolve({ data: [] as { id: string; status: string }[] }),
+      ? supabase.from('shipments').select('id, shipment_number, status').in('id', shipmentIds)
+      : Promise.resolve({ data: [] as { id: string; shipment_number: string; status: string }[] }),
   ]);
 
   const userIds = [...new Set((orders ?? []).map(o => o.user_id).filter(Boolean))] as string[];
@@ -56,11 +56,13 @@ router.get('/', async (_req: Request, res: Response) => {
   const orderUserMap     = new Map((orders ?? []).map(o => [o.id, o.user_id as string | null]));
   const userNameMap      = new Map((users ?? []).map(u => [u.user_id, u.name]));
   const shipmentStatusMap = new Map((shipments ?? []).map(s => [s.id, s.status]));
+  const shipmentNumberMap = new Map((shipments ?? []).map(s => [s.id, (s as { shipment_number?: string }).shipment_number]));
 
   const issues = rows.map(e => ({
     id:              e.id,
     order_id:        e.order_id,
     shipment_id:     e.shipment_id,
+    shipment_number: e.shipment_id ? (shipmentNumberMap.get(e.shipment_id) ?? null) : null,
     note:            e.note,
     reported_at:     e.created_at,
     customer_name:   userNameMap.get(orderUserMap.get(e.order_id) ?? '') ?? null,

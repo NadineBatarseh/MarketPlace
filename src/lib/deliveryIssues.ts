@@ -9,6 +9,7 @@ export interface DeliveryIssue {
   id: number;
   order_id: number;
   shipment_id: string | null;
+  shipment_number: string | null;
   note: string | null;
   reported_at: string;
   customer_name: string | null;

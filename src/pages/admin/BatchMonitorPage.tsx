@@ -5,6 +5,7 @@ type BatchStatus = 'pending_assignment' | 'assigned' | 'in_transit' | 'completed
 
 interface BatchRow {
   id: string;
+  batch_number: string;
   route: string[];
   ab_shipment_ids: string[];
   bc_shipment_ids: string[];
@@ -36,6 +37,7 @@ interface ShipmentDetail {
 
 interface UnbatchedShipment {
   id: string;
+  shipment_number: string;
   status: string;
   pickup_zone: string;
   dropoff_zone: string;
@@ -110,7 +112,7 @@ export default function BatchMonitorPage() {
   const [unbatchedShipments, setUnbatchedShipments] = useState<UnbatchedShipment[]>([]);
 
   // In-transit shipment additions (Phase 8)
-  interface CompatibleShipment { id: string; pickup_zone: string; dropoff_zone: string; status: string; }
+  interface CompatibleShipment { id: string; shipment_number: string; pickup_zone: string; dropoff_zone: string; status: string; }
   const [compatibleShipments, setCompatibleShipments] = useState<Record<string, CompatibleShipment[]>>({});
   const [loadingCompatible, setLoadingCompatible]     = useState<Set<string>>(new Set());
   const [selectedShipments, setSelectedShipments]     = useState<Record<string, Set<string>>>({});
@@ -120,7 +122,7 @@ export default function BatchMonitorPage() {
   const loadUnbatched = useCallback(async () => {
     const { data } = await supabase
       .from('shipments')
-      .select('id, status, pickup_zone, dropoff_zone, created_at, delayed_reason, urgency_score')
+      .select('id, shipment_number, status, pickup_zone, dropoff_zone, created_at, delayed_reason, urgency_score')
       .is('batch_id', null)
       .in('status', ['available', 'delayed'])
       .order('created_at', { ascending: false })
@@ -164,7 +166,7 @@ export default function BatchMonitorPage() {
     setLoadingCompatible(prev => new Set(prev).add(batch.id));
     const { data } = await supabase
       .from('shipments')
-      .select('id, pickup_zone, dropoff_zone, status')
+      .select('id, shipment_number, pickup_zone, dropoff_zone, status')
       .eq('pickup_zone', zoneB)
       .in('status', ['available', 'delayed'])
       .is('batch_id', null)
@@ -433,7 +435,7 @@ export default function BatchMonitorPage() {
                     <span style={{ color: '#94A3B8', fontSize: 11 }}>←</span>
                     <span style={{ background: '#F1F5F9', color: '#0F2B4E', borderRadius: 5, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>{s.dropoff_zone}</span>
                   </div>
-                  <span style={{ fontSize: 10, color: '#94A3B8', fontFamily: 'monospace' }}>#{s.id.slice(0, 8).toUpperCase()}</span>
+                  <span style={{ fontSize: 10, color: '#94A3B8', fontFamily: 'monospace' }}>{s.shipment_number}</span>
                 </div>
 
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
@@ -458,7 +460,7 @@ export default function BatchMonitorPage() {
           const col = STATUS_STYLE[batch.status];
           const isOpen = expanded.has(batch.id);
           const totalShipments = batch.ab_shipment_ids.length + batch.bc_shipment_ids.length;
-          const shortId = batch.id.slice(0, 8).toUpperCase();
+          const shortId = batch.batch_number;
 
           return (
             <div key={batch.id}
@@ -484,7 +486,7 @@ export default function BatchMonitorPage() {
                       : <span style={{ color: '#94A3B8', fontSize: 11 }}>لا يوجد مسار</span>
                     }
                   </div>
-                  <span style={{ fontSize: 10, color: '#94A3B8', fontFamily: 'monospace' }}>#{shortId}</span>
+                  <span style={{ fontSize: 10, color: '#94A3B8', fontFamily: 'monospace' }}>{shortId}</span>
                 </div>
 
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
@@ -549,7 +551,7 @@ export default function BatchMonitorPage() {
                                   onChange={() => toggleShipmentSelection(batch.id, s.id)}
                                   style={{ accentColor: '#15803D' }}
                                 />
-                                <span style={{ fontFamily: 'monospace', color: '#64748B' }}>#{s.id.slice(0, 8).toUpperCase()}</span>
+                                <span style={{ fontFamily: 'monospace', color: '#64748B' }}>{s.shipment_number}</span>
                                 <span>{s.pickup_zone} ← {s.dropoff_zone}</span>
                                 <span style={{ fontSize: 10, color: s.status === 'delayed' ? '#C2410C' : '#15803D' }}>
                                   {SHIPMENT_STATUS_LABELS[s.status] ?? s.status}
