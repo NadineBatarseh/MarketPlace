@@ -12,6 +12,26 @@ interface DeliveryStop {
   shopName: string;
   lat: number;
   lng: number;
+  volume: number;
+  deadline: string;
+  urgencyScore: number;
+}
+
+// Which sequencer decided the visiting order:
+//   'google'        → backend Google Route Optimization API
+//   'greedy_2opt'   → backend hand-written Greedy + 2-opt (fallback)
+//   'client_google' → in-browser Google Directions (used only if the backend is unreachable)
+type Solver = 'google' | 'greedy_2opt' | 'client_google';
+
+function solverBadge(solver: Solver): { label: string; bg: string; border: string; color: string } {
+  switch (solver) {
+    case 'google':
+      return { label: 'تم تحديد المسار بواسطة Google Route Optimization', bg: '#ecfdf5', border: '#a7f3d0', color: '#047857' };
+    case 'greedy_2opt':
+      return { label: 'تم تحديد المسار بواسطة خوارزمية سوق لينك (Greedy + 2-opt)', bg: '#eef2ff', border: '#c7d2fe', color: '#4338ca' };
+    case 'client_google':
+      return { label: 'تم الترتيب بواسطة Google Directions (في المتصفح — الخادم غير متاح)', bg: '#f8fafc', border: '#e2e8f0', color: '#475569' };
+  }
 }
 
 function getInitials(name: string): string {
@@ -59,6 +79,7 @@ export default function DriverRouteMap() {
   const [driverLoc, setDriverLoc]           = useState<{ lat: number; lng: number } | null>(null);
   const [loading, setLoading]               = useState(true);
   const [routeBuilding, setRouteBuilding]   = useState(false);
+  const [solver, setSolver]                 = useState<Solver | null>(null);
   const [error, setError]                   = useState<string | null>(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
@@ -98,6 +119,7 @@ export default function DriverRouteMap() {
         () => {
           setStops([]);
           setOrderedStops([]);
+          setSolver(null);
           fetchStops();
         }
       )
@@ -105,14 +127,30 @@ export default function DriverRouteMap() {
     return () => { supabase.removeChannel(channel); };
   }, [rawUser?.id]);
 
-  // ── Build route once stops + location are both ready ─────────────────────────
+  // ── Plan + draw the route once stops + location are both ready ───────────────
+  // Ordering authority is the BACKEND sequencer (Google Route Optimization, with
+  // the Greedy+2-opt fallback). Google Directions is then used only to DRAW that
+  // fixed order. If the backend is unreachable, we fall back to letting Directions
+  // optimize the waypoints in the browser.
   useEffect(() => {
-    if (!stops.length || !driverLoc || !apiKey) return;
-    const wait = () => {
-      if (!(window as any).google?.maps) { setTimeout(wait, 400); return; }
-      buildOptimizedRoute();
-    };
-    wait();
+    if (!stops.length || !driverLoc) return;
+    let cancelled = false;
+
+    const start = () => { if (!cancelled) void planRoute(); };
+    // We can hit the backend immediately, but DRAWING needs the Maps JS API. Give it
+    // a moment to load; planRoute still shows the table if Maps never becomes ready.
+    if (apiKey && !(window as any).google?.maps) {
+      const wait = () => {
+        if (cancelled) return;
+        if (!(window as any).google?.maps) { setTimeout(wait, 400); return; }
+        start();
+      };
+      wait();
+    } else {
+      start();
+    }
+
+    return () => { cancelled = true; };
   }, [stops, driverLoc]);
 
   // ── Data fetching ─────────────────────────────────────────────────────────────
@@ -139,24 +177,28 @@ export default function DriverRouteMap() {
     if (!allIds.length) { setLoading(false); return; }
 
     // Fetch delivery coordinates + shop name via order_details → shops join
+    // `volume` is NOT a column on shipments — like the backend (phase3), derive it
+    // from order_details.qty × products.capacity_units. deadline/urgency_score ARE
+    // real columns.
     const { data: shipments, error: shipErr } = await supabase
       .from('shipments')
-      .select('id, dropoff_zone, dropoff_lat, dropoff_lng, order_details(shops(name))')
+      .select('id, dropoff_zone, dropoff_lat, dropoff_lng, deadline, urgency_score, order_details(qty, shops(name), products(capacity_units))')
       .in('id', allIds)
       .not('dropoff_lat', 'is', null)
       .not('dropoff_lng', 'is', null);
 
     if (shipErr) { setError('خطأ في تحميل الشحنات'); setLoading(false); return; }
 
-    console.log('[DriverRouteMap] raw shipments:', JSON.stringify(shipments?.[0], null, 2));
-
     setStops(
       (shipments ?? []).map((s: any) => ({
-        shipmentId: s.id             as string,
-        zone:       s.dropoff_zone   as string,
-        shopName:   (s.order_details?.shops?.name as string) ?? '—',
-        lat:        s.dropoff_lat    as number,
-        lng:        s.dropoff_lng    as number,
+        shipmentId:   s.id             as string,
+        zone:         s.dropoff_zone   as string,
+        shopName:     (s.order_details?.shops?.name as string) ?? '—',
+        lat:          s.dropoff_lat    as number,
+        lng:          s.dropoff_lng    as number,
+        volume:       (s.order_details?.qty ?? 0) * (s.order_details?.products?.capacity_units ?? 0),
+        deadline:     (s.deadline      as string) ?? new Date().toISOString(),
+        urgencyScore: (s.urgency_score as number) ?? 0,
       }))
     );
     setLoading(false);
@@ -177,11 +219,84 @@ export default function DriverRouteMap() {
     };
   }, []);
 
-  // ── Google Maps: optimized route ──────────────────────────────────────────────
+  // ── Backend sequencer ─────────────────────────────────────────────────────────
+  // Ask the logistics service to order the delivery stops. The driver is on the
+  // delivery leg (goods already on board), so we send delivery-only tasks with the
+  // current location as the entry point and the total loaded volume as initial_volume.
+  // Returns the stops re-ordered to match the backend sequence + which solver ran.
+  async function sequenceViaBackend(
+    list: DeliveryStop[],
+    loc: { lat: number; lng: number },
+  ): Promise<{ ordered: DeliveryStop[]; solver: Solver }> {
+    const tasks = list.map((s) => ({
+      id:            s.shipmentId,
+      type:          'delivery' as const,
+      shipment_id:   s.shipmentId,
+      location:      { lat: s.lat, lng: s.lng },
+      ready_time:    null,
+      deadline:      s.deadline,
+      volume:        s.volume,
+      urgency_score: s.urgencyScore,
+    }));
+    const initial_volume = list.reduce((sum, s) => sum + (s.volume || 0), 0);
 
-  function buildOptimizedRoute() {
-    if (!mapRef.current || !driverLoc || !stops.length) return;
+    const res = await fetch('/api/logistics/sequence', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ tasks, entry_point: loc, initial_volume }),
+    });
+    if (!res.ok) throw new Error(`/sequence HTTP ${res.status}`);
+    const data = await res.json();
+    if (!data?.success || !Array.isArray(data.sequence)) throw new Error('/sequence returned no sequence');
+
+    const byId = new Map(list.map((s) => [s.shipmentId, s]));
+    const ordered = data.sequence
+      .map((t: { shipment_id: string }) => byId.get(t.shipment_id))
+      .filter((s: DeliveryStop | undefined): s is DeliveryStop => Boolean(s));
+    if (ordered.length !== list.length) throw new Error('/sequence dropped stops');
+
+    return { ordered, solver: (data.solver as Solver) ?? 'greedy_2opt' };
+  }
+
+  // ── Plan + draw ───────────────────────────────────────────────────────────────
+  async function planRoute() {
+    if (!driverLoc || !stops.length) return;
     setRouteBuilding(true);
+    setError(null);
+
+    // 1) Order the stops via the backend sequencer. On failure, leave `ordered`
+    //    null so the in-browser Directions optimizer takes over.
+    let ordered: DeliveryStop[] | null = null;
+    let chosenSolver: Solver = 'client_google';
+    try {
+      const r = await sequenceViaBackend(stops, driverLoc);
+      ordered = r.ordered;
+      chosenSolver = r.solver;
+    } catch (e) {
+      console.warn('[DriverRouteMap] backend /sequence unavailable, using in-browser Google Directions:', e);
+    }
+    setSolver(chosenSolver);
+
+    // 2) Draw. Without the Maps JS API we can't render a map, but the table still
+    //    shows the best-known order.
+    if (!apiKey || !(window as any).google?.maps || !mapRef.current) {
+      setOrderedStops(ordered ?? stops);
+      setRouteBuilding(false);
+      return;
+    }
+    if (ordered) {
+      setOrderedStops(ordered);
+      drawRoute(ordered, /* optimize */ false);
+    } else {
+      drawRoute(stops, /* optimize */ true);
+    }
+  }
+
+  // Draw a route on the map. When `optimize` is false the given order is kept as-is
+  // (the backend already decided it); when true, Google Directions reorders the
+  // waypoints in the browser and we read the result back from waypoint_order.
+  function drawRoute(list: DeliveryStop[], optimize: boolean) {
+    if (!mapRef.current || !driverLoc || !list.length) { setRouteBuilding(false); return; }
 
     const G   = (window as any).google.maps;
     const map = new G.Map(mapRef.current, {
@@ -203,11 +318,11 @@ export default function DriverRouteMap() {
     const origin = new G.LatLng(driverLoc.lat, driverLoc.lng);
 
     // Single stop — simple origin → destination
-    if (stops.length === 1) {
+    if (list.length === 1) {
       directionsService.route(
-        { origin, destination: new G.LatLng(stops[0].lat, stops[0].lng), travelMode: G.TravelMode.DRIVING },
+        { origin, destination: new G.LatLng(list[0].lat, list[0].lng), travelMode: G.TravelMode.DRIVING },
         (result: any, status: string) => {
-          if (status === 'OK') { directionsRenderer.setDirections(result); setOrderedStops(stops); }
+          if (status === 'OK') { directionsRenderer.setDirections(result); setOrderedStops(list); }
           else setError('تعذّر حساب المسار — تحقق من اتصالك بالإنترنت');
           setRouteBuilding(false);
         }
@@ -215,9 +330,9 @@ export default function DriverRouteMap() {
       return;
     }
 
-    // Multiple stops — last stop is fixed destination; all others are optimizable waypoints
-    const destination = new G.LatLng(stops[stops.length - 1].lat, stops[stops.length - 1].lng);
-    const waypoints   = stops.slice(0, -1).map((s) => ({
+    // Multiple stops — last stop is the fixed destination; the rest are waypoints.
+    const destination = new G.LatLng(list[list.length - 1].lat, list[list.length - 1].lng);
+    const waypoints   = list.slice(0, -1).map((s) => ({
       location: new G.LatLng(s.lat, s.lng),
       stopover: true,
     }));
@@ -227,20 +342,25 @@ export default function DriverRouteMap() {
         origin,
         destination,
         waypoints,
-        optimizeWaypoints: true, // Google TSP solver picks the shortest real-road order
+        optimizeWaypoints: optimize, // false → keep the backend's order; true → let Google reorder
         travelMode: G.TravelMode.DRIVING,
       },
       (result: any, status: string) => {
         if (status === 'OK') {
           directionsRenderer.setDirections(result);
-          // waypoint_order holds the optimized indices for the waypoints array
-          const order: number[] = result.routes[0].waypoint_order;
-          setOrderedStops([
-            ...order.map((i) => stops[i]),
-            stops[stops.length - 1], // destination is always last
-          ]);
+          if (optimize) {
+            // waypoint_order holds the optimized indices for the waypoints array
+            const order: number[] = result.routes[0].waypoint_order;
+            setOrderedStops([
+              ...order.map((i) => list[i]),
+              list[list.length - 1], // destination is always last
+            ]);
+          }
+          // when !optimize, orderedStops was already set to the backend order
+        } else if (!optimize) {
+          setError('تعذّر رسم المسار — يتم عرض الترتيب من الخادم');
         } else {
-          setOrderedStops(stops); // fallback: original order
+          setOrderedStops(list); // fallback: original order
           setError('تعذّر تحسين المسار — يتم عرض الترتيب الافتراضي');
         }
         setRouteBuilding(false);
@@ -432,7 +552,7 @@ export default function DriverRouteMap() {
               )}
               <button
                 type="button"
-                onClick={() => { setStops([]); setOrderedStops([]); fetchStops(); locateDriver(); }}
+                onClick={() => { setStops([]); setOrderedStops([]); setSolver(null); fetchStops(); locateDriver(); }}
                 style={{ background: '#2563eb', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 16px', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}
               >
                 تحديث
@@ -457,9 +577,26 @@ export default function DriverRouteMap() {
           {/* Route building indicator */}
           {routeBuilding && (
             <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 14px', color: '#2563eb', fontSize: 13, marginBottom: 12 }}>
-              ⏳ جارٍ حساب المسار الأمثل عبر Google Maps…
+              ⏳ جارٍ حساب المسار الأمثل…
             </div>
           )}
+
+          {/* Which method ordered the route */}
+          {!routeBuilding && solver && orderedStops.length > 0 && (() => {
+            const b = solverBadge(solver);
+            return (
+              <div style={{
+                background: b.bg, border: `1px solid ${b.border}`, color: b.color,
+                borderRadius: 8, padding: '10px 14px', fontSize: 13, fontWeight: 600,
+                marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" style={{ flexShrink: 0 }}>
+                  <circle cx="12" cy="12" r="10" /><path d="M9 12l2 2 4-4" />
+                </svg>
+                {b.label}
+              </div>
+            );
+          })()}
 
           {/* Map */}
           {!loading && stops.length > 0 && (

@@ -4,6 +4,7 @@ import { startBackgroundJobs } from './phases/phase7_backgroundJobs.js';
 import { handleBreakdown } from './phases/phase9_breakdownHandling.js';
 import { tryAddShipmentsToBatch } from './phases/phase8_inTransitAdditions.js';
 import { sequenceIntraCityTasks } from './phases/phase10_intraCitySequencing.js';
+import { sequenceIntraCityTasksGoogle } from './phases/phase10_googleRouteOptimization.js';
 import { prefetchPairs } from './distanceProvider.js';
 import { atomicAssign } from './driverAssignment.js';
 import { autoAssignUnbatchedShipments } from './phases/phase0a_autoAssignUnbatched.js';
@@ -87,14 +88,28 @@ logisticsRouter.post('/sequence', async (req: Request, res: Response) => {
   }
 
   try {
-    // Warm the road-distance cache for every stop the sequencer will evaluate, so the
-    // (synchronous) greedy + 2-opt run on real road distances. A prefetch failure is
-    // non-fatal: getRoadDistanceKm falls back to Haversine.
-    const locations = [entry_point, ...tasks.map((t: { location: unknown }) => t.location)];
-    await prefetchPairs(locations as any);
+    // Primary: Google Route Optimization solves the pickup-and-delivery problem
+    // with capacity, time windows, and live traffic. On ANY failure (missing
+    // config, network/API error, infeasible or invalid result) we fall back to
+    // the local Greedy + 2-opt sequencer so dispatch is never blocked.
+    let sequence;
+    let solver: 'google' | 'greedy_2opt' = 'google';
+    try {
+      sequence = await sequenceIntraCityTasksGoogle(tasks, entry_point, initial_volume ?? 0);
+    } catch (gErr) {
+      console.warn('[Logistics] Route Optimization failed, falling back to Greedy+2-opt:',
+        (gErr as Error).message);
+      solver = 'greedy_2opt';
 
-    const sequence = sequenceIntraCityTasks(tasks, entry_point, initial_volume ?? 0);
-    res.json({ success: true, sequence });
+      // Warm the road-distance cache for every stop the sequencer will evaluate, so the
+      // (synchronous) greedy + 2-opt run on real road distances. A prefetch failure is
+      // non-fatal: getRoadDistanceKm falls back to Haversine.
+      const locations = [entry_point, ...tasks.map((t: { location: unknown }) => t.location)];
+      await prefetchPairs(locations as any);
+
+      sequence = sequenceIntraCityTasks(tasks, entry_point, initial_volume ?? 0);
+    }
+    res.json({ success: true, solver, sequence });
   } catch (err) {
     console.error('[Logistics] /sequence error:', err);
     res.status(500).json({ success: false, error: 'Sequencing failed' });

@@ -27,6 +27,44 @@ function isReadyTimeFeasible(task: IntraCityTask, now: Date): boolean {
   return now >= new Date(task.ready_time);
 }
 
+// -- Pickup-before-delivery precedence ----------------------------------------
+// The set of shipment_ids that have a pickup task in THIS list. A delivery whose
+// shipment is in this set carries goods that must be picked up first; a delivery
+// NOT in the set is for goods already on the vehicle (initial_volume), so it has
+// no precedence constraint here.
+function pickupShipmentIds(tasks: IntraCityTask[]): Set<string> {
+  const ids = new Set<string>();
+  for (const t of tasks) if (t.type === 'pickup') ids.add(t.shipment_id);
+  return ids;
+}
+
+// A delivery is precedence-feasible only once its own pickup has been visited.
+function isPrecedenceFeasible(
+  task: IntraCityTask,
+  pickedUp: Set<string>,
+  pickupsInList: Set<string>,
+): boolean {
+  if (task.type === 'pickup') return true;
+  if (!pickupsInList.has(task.shipment_id)) return true; // goods already on board
+  return pickedUp.has(task.shipment_id);
+}
+
+// Whole-sequence precedence check, used to validate 2-opt candidates.
+function isPrecedenceValid(
+  sequence: IntraCityTask[],
+  pickupsInList: Set<string>,
+): boolean {
+  const pickedUp = new Set<string>();
+  for (const task of sequence) {
+    if (task.type === 'pickup') {
+      pickedUp.add(task.shipment_id);
+    } else if (pickupsInList.has(task.shipment_id) && !pickedUp.has(task.shipment_id)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 // â”€â”€ D31 â€” Task score â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // task_score = W_dist أ— distance(current, task) - W_urg أ— urgency_score
 // Lower score = visit sooner
@@ -53,6 +91,9 @@ function greedySequence(
   let currentVolume = initialVolume;
   const now = new Date();
 
+  const pickupsInList = pickupShipmentIds(tasks);
+  const pickedUp = new Set<string>();
+
   while (unvisited.length > 0) {
     let bestIdx = -1;
     let bestScore = Infinity;
@@ -63,6 +104,7 @@ function greedySequence(
       // D29 and D30 â€” skip infeasible tasks
       if (!isCapacityFeasible(task, currentVolume)) continue;
       if (!isReadyTimeFeasible(task, now)) continue;
+      if (!isPrecedenceFeasible(task, pickedUp, pickupsInList)) continue;
 
       const s = scoreTask(task, currentLocation);
       if (s < bestScore) {
@@ -74,13 +116,20 @@ function greedySequence(
     if (bestIdx === -1) {
       // All remaining tasks are infeasible right now (e.g. merchants not ready).
       // Take the one with the nearest deadline regardless and wait.
-      const fallback = unvisited.reduce((min, t) =>
+      // Respect precedence even in the fallback: a delivery is never forced ahead
+      // of its own pickup. A pickup is always precedence-feasible, so this set is
+      // non-empty whenever unvisited is.
+      const eligible = unvisited.filter((t) =>
+        isPrecedenceFeasible(t, pickedUp, pickupsInList)
+      );
+      const fallback = eligible.reduce((min, t) =>
         new Date(t.deadline) < new Date(min.deadline) ? t : min
       );
       bestIdx = unvisited.indexOf(fallback);
     }
 
     const chosen = unvisited.splice(bestIdx, 1)[0];
+    if (chosen.type === 'pickup') pickedUp.add(chosen.shipment_id);
     sequence.push(chosen);
     currentLocation = chosen.location;
     currentVolume = applyVolumeChange(currentVolume, chosen);
@@ -123,7 +172,8 @@ function totalDistance(
 function twoOptImprove(
   sequence: IntraCityTask[],
   entryPoint: Coordinates,
-  initialVolume: number
+  initialVolume: number,
+  pickupsInList: Set<string>
 ): IntraCityTask[] {
   let improved = true;
   let best = [...sequence];
@@ -145,7 +195,8 @@ function twoOptImprove(
 
         if (
           candidateDist < bestDist &&
-          isCapacityValidThroughout(candidate, initialVolume)
+          isCapacityValidThroughout(candidate, initialVolume) &&
+          isPrecedenceValid(candidate, pickupsInList)
         ) {
           best = candidate;
           bestDist = candidateDist;
@@ -166,6 +217,7 @@ export function sequenceIntraCityTasks(
 ): IntraCityTask[] {
   if (tasks.length === 0) return [];
 
+  const pickupsInList = pickupShipmentIds(tasks);
   const greedy = greedySequence(tasks, entryPoint, initialVolume);
-  return twoOptImprove(greedy, entryPoint, initialVolume);
+  return twoOptImprove(greedy, entryPoint, initialVolume, pickupsInList);
 }
