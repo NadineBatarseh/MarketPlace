@@ -124,6 +124,7 @@ export default function DriverDashboard() {
 
   const [activeMissions, setActiveMissions]     = useState<ActiveMission[]>([]);
   const [actionLoading, setActionLoading]       = useState<string | null>(null);
+  const [dutyToggleLoading, setDutyToggleLoading] = useState(false);
 
   const initials       = getInitials(name ?? 'س');
   const displayInitial = initials.charAt(0);
@@ -284,6 +285,29 @@ export default function DriverDashboard() {
     }
   }
 
+  async function handleToggleDuty() {
+    if (!rawUser?.id || !driverInfo || driverInfo.status === 'on_route') return;
+    const nextStatus = driverInfo.status === 'offline' ? 'available' : 'offline';
+    setDutyToggleLoading(true);
+    try {
+      // Optimistic lock on the current status — avoids racing a status change made elsewhere
+      // (e.g. an accepted batch flipping this driver to on_route) between read and write.
+      const { data } = await supabase
+        .from('couriers')
+        .update({ status: nextStatus })
+        .eq('id', rawUser.id)
+        .eq('status', driverInfo.status)
+        .select('id');
+      if (data?.length) {
+        setDriverInfo((prev) => (prev ? { ...prev, status: nextStatus } : prev));
+      } else {
+        await fetchAll(true);
+      }
+    } finally {
+      setDutyToggleLoading(false);
+    }
+  }
+
   async function handleLogout() {
     await supabase.auth.signOut();
     navigate('/login');
@@ -298,7 +322,12 @@ export default function DriverDashboard() {
 
   const shiftLabel  = '--:-- – --:--';
   const zoneLabel   = driverInfo?.home_base_zone ?? '—';
-  const dutyLabel   = driverInfo ? (driverInfo.status === 'available' ? 'في الخدمة' : 'خارج الخدمة') : '—';
+  const DUTY_LABEL: Record<DriverInfo['status'], string> = {
+    available: 'متاح لاستقبال دفعات',
+    on_route:  'في الطريق - لديك دفعة نشطة',
+    offline:   'غير متصل',
+  };
+  const dutyLabel   = driverInfo ? DUTY_LABEL[driverInfo.status] : '—';
 
   const filteredBatches = statusFilter === 'all' ? batches : batches.filter((b) => b.status === statusFilter);
 
@@ -467,7 +496,9 @@ export default function DriverDashboard() {
               <div className="dd-sidebar-user-info">
                 <div className="dd-sidebar-user-name">{name ?? 'السائق'}</div>
                 <div className="dd-sidebar-user-role">
-                  <span className={`dd-duty-dot${driverInfo?.status === 'available' ? '' : ' dd-duty-dot-off'}`} />
+                  <span className={
+                    `dd-duty-dot${driverInfo?.status === 'on_route' ? ' dd-duty-dot-busy' : driverInfo?.status === 'available' ? '' : ' dd-duty-dot-off'}`
+                  } />
                   {dutyLabel}
                 </div>
               </div>
@@ -507,7 +538,34 @@ export default function DriverDashboard() {
               </svg>
               المنطقة: {zoneLabel}
             </div>
+            <div className="dd-shift-item">
+              {driverInfo?.status === 'on_route' ? (
+                <span className="dd-duty-toggle-btn dd-duty-toggle-busy" title="يجب إنهاء أو إلغاء الدفعة النشطة أولاً">
+                  في الطريق — لديك دفعة نشطة
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className={`dd-duty-toggle-btn${driverInfo?.status === 'offline' ? ' dd-duty-toggle-start' : ' dd-duty-toggle-stop'}`}
+                  disabled={dutyToggleLoading || !driverInfo}
+                  onClick={handleToggleDuty}
+                >
+                  {dutyToggleLoading ? <span className="dd-mission-spinner dd-mission-spinner-sm" /> : null}
+                  {driverInfo?.status === 'offline' ? 'بدء العمل' : 'إنهاء العمل'}
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* ── On-route notice: new batch offers are paused until the active batch is finished ── */}
+          {driverInfo?.status === 'on_route' && (
+            <div className="dd-on-route-notice">
+              <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><polyline points="12 12 16 14" />
+              </svg>
+              لن تستقبل عروض دفعات جديدة حتى تُنهي الدفعة الحالية
+            </div>
+          )}
 
           {/* ── Stats Cards ── */}
           <div className="dd-stats-grid">
@@ -607,7 +665,8 @@ export default function DriverDashboard() {
                 {mission.batchStatus === 'assigned' && (
                   <button
                     className="dd-mission-start-btn"
-                    disabled={actionLoading === 'start-' + mission.batchId}
+                    disabled={actionLoading === 'start-' + mission.batchId || driverInfo?.status !== 'on_route'}
+                    title={driverInfo?.status !== 'on_route' ? 'حالتك غير متزامنة مع هذه الدفعة — حدّث الصفحة' : undefined}
                     onClick={() => handleStartBatch(mission.batchId)}
                   >
                     {actionLoading === 'start-' + mission.batchId ? (

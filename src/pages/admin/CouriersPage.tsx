@@ -31,7 +31,7 @@ interface CourierWithBatches extends Courier {
 
 const STATUS_CONFIG = {
   available: { label: 'متاح',      bg: '#F0FDF4', text: '#15803D', border: '#86EFAC' },
-  on_route:  { label: 'في الطريق', bg: '#EFF6FF', text: '#1D4ED8', border: '#93C5FD' },
+  on_route:  { label: 'في الطريق / مشغول', bg: '#EFF6FF', text: '#1D4ED8', border: '#93C5FD' },
   offline:   { label: 'غير متصل', bg: '#F8FAFC', text: '#64748B', border: '#CBD5E1' },
 };
 

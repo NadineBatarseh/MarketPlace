@@ -165,19 +165,29 @@ export default function DriverNotificationBell() {
 
   async function handleAcceptBatch(notif: PendingBatchNotification) {
     if (!rawUser?.id) return;
-    const { data } = await supabase
-      .from('batches')
-      .update({ status: 'assigned', assigned_to: rawUser.id, assigned_at: new Date().toISOString() })
-      .eq('id', notif.batchId)
-      .eq('status', 'pending_assignment')
-      .select('id');
-    const won = Array.isArray(data) && data.length > 0;
-    if (won) {
-      await supabase.from('driver_notifications').update({ is_accepted: true }).eq('batch_id', notif.batchId);
-    } else {
-      await supabase.from('driver_notifications').update({ is_accepted: true }).eq('id', notif.notificationId);
+    try {
+      const res = await fetch('/api/logistics/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batch_id: notif.batchId, courier_id: rawUser.id }),
+      });
+      const json = await res.json();
+
+      if (json.success) {
+        // Won the batch — flip every other driver's notification so they see it's taken.
+        await supabase.from('driver_notifications').update({ is_accepted: true }).eq('batch_id', notif.batchId);
+        setPendingNotifications((prev) => prev.filter((n) => n.notificationId !== notif.notificationId));
+      } else if (res.status === 409) {
+        // Someone else already claimed it.
+        await supabase.from('driver_notifications').update({ is_accepted: true }).eq('id', notif.notificationId);
+        setPendingNotifications((prev) => prev.filter((n) => n.notificationId !== notif.notificationId));
+      } else {
+        // Not eligible (e.g. already on_route on another batch) — leave the offer pending.
+        window.alert(json.message ?? 'تعذر قبول الدفعة');
+      }
+    } catch {
+      window.alert('تعذر الاتصال بالخادم');
     }
-    setPendingNotifications((prev) => prev.filter((n) => n.notificationId !== notif.notificationId));
   }
 
   async function handleDeclineBatch(notifId: string) {

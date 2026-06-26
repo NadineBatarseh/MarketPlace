@@ -64,11 +64,19 @@ export async function handleBreakdown(batchId: string): Promise<BreakdownResult>
     );
   }
 
-  // Mark the batch as cancelled
-  await supabase
+  // Mark the batch as cancelled and recover its assigned courier
+  const { data: cancelledBatch } = await supabase
     .from('batches')
     .update({ status: 'cancelled' })
-    .eq('id', batchId);
+    .eq('id', batchId)
+    .select('assigned_to')
+    .maybeSingle();
+
+  // A breakdown means the driver should not auto-receive a new batch until the issue is resolved.
+  const assignedCourier = cancelledBatch?.assigned_to as string | null;
+  if (assignedCourier) {
+    await supabase.from('couriers').update({ status: 'offline' }).eq('id', assignedCourier);
+  }
 
   console.log(
     `[Phase 9] Breakdown handled for batch ${batchId}. ` +

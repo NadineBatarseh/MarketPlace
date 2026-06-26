@@ -180,6 +180,20 @@ logisticsRouter.post('/start-batch', async (req: Request, res: Response) => {
     return;
   }
 
+  // Defense-in-depth: an assigned batch should always mean the courier is on_route
+  // (set atomically in atomicAssign at accept time). Block the start if that invariant
+  // is somehow violated, instead of silently proceeding on a desynced status.
+  const { data: courier } = await supabase
+    .from('couriers')
+    .select('status')
+    .eq('id', courier_id)
+    .maybeSingle();
+
+  if (courier?.status !== 'on_route') {
+    res.status(403).json({ success: false, error: 'Driver is not on_route for this batch' });
+    return;
+  }
+
   const { data, error } = await supabase
     .from('batches')
     .update({ status: 'in_transit', started_at: new Date().toISOString() })
@@ -330,6 +344,17 @@ logisticsRouter.post('/deliver-shipment', async (req: Request, res: Response) =>
 
   if (count === 0) {
     await supabase.from('batches').update({ status: 'completed' }).eq('id', batch.id);
+
+    // Free the courier only if they have no other active batch (one active batch per driver).
+    const { count: otherActive } = await supabase
+      .from('batches')
+      .select('id', { count: 'exact', head: true })
+      .eq('assigned_to', courier_id)
+      .in('status', ['assigned', 'in_transit']);
+
+    if (!otherActive) {
+      await supabase.from('couriers').update({ status: 'available' }).eq('id', courier_id).eq('status', 'on_route');
+    }
   }
 
   res.json({ success: true, batch_completed: count === 0 });
@@ -350,9 +375,11 @@ logisticsRouter.post('/accept', async (req: Request, res: Response) => {
   }
 
   try {
-    const assigned = await atomicAssign(batch_id, courier_id);
-    if (assigned) {
+    const result = await atomicAssign(batch_id, courier_id);
+    if (result.success) {
       res.json({ success: true, message: 'Batch assigned to you' });
+    } else if (result.reason === 'courier_unavailable') {
+      res.status(403).json({ success: false, message: 'Driver is not available or already has an active batch' });
     } else {
       res.status(409).json({ success: false, message: 'Batch already taken' });
     }

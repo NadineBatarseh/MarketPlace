@@ -60,10 +60,18 @@ async function fetchAvailableCouriers(
 // â”€â”€ D34 â€” Atomic assignment check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // UPDATE batches SET status='assigned' WHERE id=:id AND status='pending_assignment'
 // Returns true if this driver successfully claimed the batch.
+export type AtomicAssignResult =
+  | { success: true }
+  | { success: false; reason: 'batch_unavailable' | 'courier_unavailable' };
+
+// Claims the batch, then flips the courier available -> on_route in the same call
+// so a driver becomes ineligible for further offers the instant they accept, not
+// when they later click "Start mission". If the courier isn't actually available
+// (already on_route from another batch), the batch claim is released.
 export async function atomicAssign(
   batchId: string,
   driverId: string
-): Promise<boolean> {
+): Promise<AtomicAssignResult> {
   const { data, error } = await supabase
     .from('batches')
     .update({ status: 'assigned', assigned_to: driverId, assigned_at: new Date().toISOString() })
@@ -72,11 +80,31 @@ export async function atomicAssign(
     .select('id');
 
   if (error) {
-    console.error('[Driver Assignment] atomicAssign error:', error.message);
-    return false;
+    console.error('[Driver Assignment] atomicAssign batch claim error:', error.message);
+    return { success: false, reason: 'batch_unavailable' };
+  }
+  if (!Array.isArray(data) || data.length === 0) {
+    return { success: false, reason: 'batch_unavailable' };
   }
 
-  return Array.isArray(data) && data.length > 0;
+  const { data: courierLock, error: courierError } = await supabase
+    .from('couriers')
+    .update({ status: 'on_route' })
+    .eq('id', driverId)
+    .eq('status', 'available')
+    .select('id');
+
+  if (courierError || !courierLock?.length) {
+    await supabase
+      .from('batches')
+      .update({ status: 'pending_assignment', assigned_to: null, assigned_at: null })
+      .eq('id', batchId)
+      .eq('assigned_to', driverId);
+    console.warn(`[Driver Assignment] courier ${driverId} not available — releasing batch ${batchId}`);
+    return { success: false, reason: 'courier_unavailable' };
+  }
+
+  return { success: true };
 }
 
 // Notify a driver by inserting into driver_notifications â€” picked up via Supabase Realtime on the dashboard.

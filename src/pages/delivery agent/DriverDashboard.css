@@ -343,6 +343,30 @@
   display: inline-block;
 }
 .dd-duty-dot.dd-duty-dot-off { background: #94a3b8; }
+.dd-duty-dot.dd-duty-dot-busy { background: #2563eb; }
+
+.dd-duty-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.9rem;
+  border: none;
+  border-radius: 20px;
+  font-family: var(--font-main);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.dd-duty-toggle-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.dd-duty-toggle-start { background: #16a34a; color: #fff; }
+.dd-duty-toggle-stop { background: #dc2626; color: #fff; }
+.dd-duty-toggle-busy {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #93c5fd;
+  cursor: default;
+}
 
 .dd-sidebar-logout {
   display: flex;
@@ -392,6 +416,20 @@
   padding: 0.75rem 1.25rem;
   box-shadow: 0 1px 4px rgba(26,26,46,0.05);
 }
+
+.dd-on-route-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #eff6ff;
+  border: 1px solid #93c5fd;
+  color: #1d4ed8;
+  border-radius: 10px;
+  padding: 0.55rem 1rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.dd-on-route-notice svg { flex-shrink: 0; }
 
 .dd-shift-item {
   display: flex;
