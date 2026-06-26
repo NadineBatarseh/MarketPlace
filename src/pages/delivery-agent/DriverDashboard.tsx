@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import supabase from '../../lib/supabase';
 import { useSharedAuth } from '../../context/AuthContext';
 import ChangePasswordModal from '../../components/ChangePasswordModal';
@@ -182,9 +182,11 @@ function DetailRow({ label, value, href }: { label: string; value: React.ReactNo
 export default function DriverDashboard() {
   const { name, rawUser } = useSharedAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const avatarRef = useRef<HTMLDivElement>(null);
 
-  const [currentPage, setCurrentPage]           = useState<'home' | 'inbox' | 'trips' | 'pickup_delivery'>('home');
+  const initialPage = (location.state as { page?: 'home' | 'inbox' | 'trips' | 'pickup_delivery' } | null)?.page ?? 'home';
+  const [currentPage, setCurrentPage]           = useState<'home' | 'inbox' | 'trips' | 'pickup_delivery'>(initialPage);
   const [tripFilter, setTripFilter]             = useState('all');
   const [tripSortDir, setTripSortDir]           = useState<'desc' | 'asc'>('desc');
 
