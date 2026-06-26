@@ -2,9 +2,8 @@ import HomePage from './pages/home/HomePage';
 import CategoryListingPage from './pages/categoryListing/CategoryListingPage';
 import StoreListPage from './pages/storeList/StoreListPage';
 import SearchResultsPage from './pages/search/SearchResultsPage';
-import DriverDashboard from './pages/delivery agent/DriverDashboard';
-import DriverRouteMap from './pages/delivery agent/DriverRouteMap';
-import DriverInboxPage from './pages/delivery agent/DriverInboxPage';
+import DriverDashboard from './pages/delivery-agent/DriverDashboard';
+import DriverRouteMap from './pages/delivery-agent/DriverRouteMap';
 import RoleGuard from './components/RoleGuard';
 import OrderHistoryPage from './pages/orderHistory/OrderHistoryPage';
 import OrderTrackingPage from './pages/orderTrackingPage/OrderTrackingPage';
@@ -123,7 +122,6 @@ export default function App() {
               {/* Delivery only */}
               <Route path="/driver-dashboard" element={<RoleGuard allowedRoles={['delivery']}><DriverDashboard /></RoleGuard>} />
               <Route path="/driver-route" element={<RoleGuard allowedRoles={['delivery']}><DriverRouteMap /></RoleGuard>} />
-              <Route path="/driver-inbox" element={<RoleGuard allowedRoles={['delivery']}><DriverInboxPage /></RoleGuard>} />
             </Routes>
           </BrowserRouter>
         </ShopProviderWithAuth>

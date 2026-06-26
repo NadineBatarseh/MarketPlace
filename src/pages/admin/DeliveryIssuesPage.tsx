@@ -130,7 +130,7 @@ export default function DeliveryIssuesPage() {
                 <tr key={issue.id}>
                   <td style={tdStyle} data-label="رقم الطلب">#{issue.order_id}</td>
                   <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 11 }} data-label="رقم الشحنة">
-                    {issue.shipment_id ? issue.shipment_id.slice(0, 8).toUpperCase() : <span style={{ color: '#CBD5E1' }}>—</span>}
+                    {issue.shipment_number ?? <span style={{ color: '#CBD5E1' }}>—</span>}
                   </td>
                   <td style={tdStyle} data-label="العميل">{issue.customer_name ?? <span style={{ color: '#CBD5E1' }}>—</span>}</td>
                   <td style={{ ...tdStyle, maxWidth: 280, whiteSpace: 'pre-wrap' }} data-label="ملاحظة العميل">{issue.note ?? '—'}</td>

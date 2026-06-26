@@ -68,6 +68,17 @@ function clampIso(value: string | null | undefined, minIso: string, maxIso: stri
   return t;
 }
 
+// A delivery deadline is a SOFT target. A past deadline can't be honored, and
+// pinning its soft end to the window start makes Google deem the visit impossible
+// to perform within the vehicle's time window (it gets SKIPPED). So drop the
+// window for past/now deadlines ("overdue — just deliver it") and keep it only
+// for future deadlines, capped under the global window end.
+function softDeadline(deadline: string, nowIso: string, endIso: string): string | undefined {
+  const t = rfc3339(deadline);
+  if (!t || t <= nowIso) return undefined;
+  return t > endIso ? endIso : t;
+}
+
 function visitRequest(loc: Coordinates, window?: { startTime?: string; softEndTime?: string }) {
   const req: Record<string, unknown> = {
     arrivalLocation: { latitude: loc.lat, longitude: loc.lng },
@@ -95,10 +106,17 @@ function buildRequest(
   nowIso: string,
   endIso: string,
 ) {
+  // Only model capacity when there are pickups that actually ADD load on this leg.
+  // A pure delivery leg carries goods already loaded (and already within capacity
+  // when the batch was formed), so imposing a maxLoad/startLoad here would make
+  // Google SKIP stops it thinks don't fit — we must visit all of them instead.
+  const hasPickups = paired.some((p) => p.pickup);
+
   const shipments = paired.map((p) => {
-    const shipment: Record<string, unknown> = {
-      loadDemands: { [LOAD_TYPE]: { amount: String(Math.round(p.volume)) } },
-    };
+    const shipment: Record<string, unknown> = {};
+    if (hasPickups) {
+      shipment.loadDemands = { [LOAD_TYPE]: { amount: String(Math.round(p.volume)) } };
+    }
     if (p.pickup) {
       shipment.pickups = [
         visitRequest(p.pickup.location, {
@@ -109,20 +127,25 @@ function buildRequest(
     if (p.delivery) {
       shipment.deliveries = [
         visitRequest(p.delivery.location, {
-          softEndTime: clampIso(p.delivery.deadline, nowIso, endIso) ?? undefined,
+          softEndTime: softDeadline(p.delivery.deadline, nowIso, endIso),
         }),
       ];
     }
     return shipment;
   });
 
-  const loadLimit: Record<string, unknown> = {
-    maxLoad: String(Math.round(C.MAX_VOLUME)),
+  const vehicle: Record<string, unknown> = {
+    startWaypoint: { location: { latLng: { latitude: entryPoint.lat, longitude: entryPoint.lng } } },
+    costPerKilometer: C.COST_PER_KM,
   };
-  if (initialVolume > 0) {
-    // Goods already on board when the vehicle enters the city.
-    const amt = String(Math.round(initialVolume));
-    loadLimit.startLoadInterval = { min: amt, max: amt };
+  if (hasPickups) {
+    const loadLimit: Record<string, unknown> = { maxLoad: String(Math.round(C.MAX_VOLUME)) };
+    if (initialVolume > 0) {
+      // Goods already on board when the vehicle enters the city.
+      const amt = String(Math.round(initialVolume));
+      loadLimit.startLoadInterval = { min: amt, max: amt };
+    }
+    vehicle.loadLimits = { [LOAD_TYPE]: loadLimit };
   }
 
   return {
@@ -130,13 +153,7 @@ function buildRequest(
       globalStartTime: nowIso,
       globalEndTime: endIso,
       shipments,
-      vehicles: [
-        {
-          startWaypoint: { location: { latLng: { latitude: entryPoint.lat, longitude: entryPoint.lng } } },
-          loadLimits: { [LOAD_TYPE]: loadLimit },
-          costPerKilometer: C.COST_PER_KM,
-        },
-      ],
+      vehicles: [vehicle],
     },
     considerRoadTraffic: true,
   };
@@ -169,15 +186,27 @@ export async function sequenceIntraCityTasksGoogle(
   // Build the request. now/end times are passed in so this module stays free of
   // side effects on the global clock during testing.
   const now = new Date();
-  // Global window end = at least 24h out, but extended (with a 1h buffer) to cover
-  // any deadline further in the future, so valid future windows aren't clipped.
-  let endMs = now.getTime() + 24 * 60 * 60 * 1000;
+  // Global window end = at least 7 days out, extended (with a 1h buffer) to cover
+  // any deadline further in the future. A wide window ensures a stop is never
+  // skipped just for being far ("cannot be performed within vehicle time window").
+  let endMs = now.getTime() + 7 * 24 * 60 * 60 * 1000;
   for (const t of tasks) {
     const d = new Date(t.deadline).getTime();
     if (!isNaN(d) && d + 60 * 60 * 1000 > endMs) endMs = d + 60 * 60 * 1000;
   }
   const nowIso = rfc3339(now)!;
   const endIso = rfc3339(new Date(endMs))!;
+
+  // Diagnostic: dump every task's coords + deadline so an out-of-range stop is
+  // obvious. The skipped indices in the response map to this `paired` order.
+  console.log(
+    `[Route Optimization] window ${nowIso} → ${endIso}; ${paired.length} shipment(s):\n` +
+      paired.map((p, i) => {
+        const t = p.delivery ?? p.pickup!;
+        return `  [${i}] ${t.location.lat.toFixed(5)},${t.location.lng.toFixed(5)} dl=${t.deadline}`;
+      }).join('\n'),
+  );
+
   const body = buildRequest(paired, entryPoint, initialVolume, nowIso, endIso);
 
   const token = await getAccessToken();
@@ -199,6 +228,16 @@ export async function sequenceIntraCityTasksGoogle(
   const route = json?.routes?.[0];
   const visits: any[] = route?.visits ?? [];
   if (visits.length === 0) throw new Error('Route Optimization returned no visits');
+
+  // If Google couldn't serve every shipment it lists them here — surface it so a
+  // length mismatch below isn't a silent mystery.
+  const skipped: any[] = json?.skippedShipments ?? [];
+  if (skipped.length > 0) {
+    console.warn(
+      `[Route Optimization] skipped ${skipped.length} shipment(s):`,
+      JSON.stringify(skipped.slice(0, 5)),
+    );
+  }
 
   // Map each visit back to its IntraCityTask, preserving Google's order. Proto3
   // JSON OMITS default values, so a visit to shipment 0 has no `shipmentIndex`
@@ -233,6 +272,9 @@ function validateSequence(
     );
   }
 
+  // Upper bound allows a delivery leg that started legitimately over the nominal
+  // capacity (goods already aboard) — we only reject impossible states.
+  const cap = Math.max(C.MAX_VOLUME, initialVolume);
   const pickedUp = new Set<string>();
   let vol = initialVolume;
   for (const task of sequence) {
@@ -249,7 +291,7 @@ function validateSequence(
       }
       vol -= task.volume;
     }
-    if (vol < 0 || vol > C.MAX_VOLUME) {
+    if (vol < 0 || vol > cap) {
       throw new Error(`Capacity out of bounds (${vol}) during sequence`);
     }
   }

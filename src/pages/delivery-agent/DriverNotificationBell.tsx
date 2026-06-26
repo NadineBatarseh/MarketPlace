@@ -25,7 +25,7 @@ export default function DriverNotificationBell() {
   const [pendingNotifications, setPendingNotifications] = useState<PendingBatchNotification[]>([]);
   const [showNotifPanel, setShowNotifPanel]             = useState(false);
   const [unreadCount, setUnreadCount]                   = useState(0);
-  const [additionAlerts, setAdditionAlerts]             = useState<{ batchId: string; oldVolume: number; newVolume: number; addedCount?: number }[]>([]);
+  const [additionAlerts, setAdditionAlerts]             = useState<{ batchId: string; batchNumber: string; oldVolume: number; newVolume: number; addedCount?: number }[]>([]);
   const [adminMessages, setAdminMessages]               = useState<AdminMessage[]>([]);
   const [unreadMsgCount, setUnreadMsgCount]             = useState(0);
 
@@ -50,11 +50,12 @@ export default function DriverNotificationBell() {
 
           if (notifType === 'addition') {
             const { data: batch } = await supabase
-              .from('batches').select('total_volume, bc_shipment_ids').eq('id', batchId).single();
+              .from('batches').select('batch_number, total_volume, bc_shipment_ids').eq('id', batchId).single();
             if (!batch) return;
             const newCount = (batch.bc_shipment_ids as string[])?.length ?? 0;
             setAdditionAlerts((prev) => [...prev, {
               batchId,
+              batchNumber: (batch.batch_number as string) ?? '',
               oldVolume:  0,
               newVolume:  batch.total_volume ?? 0,
               addedCount: newCount,
@@ -245,7 +246,7 @@ export default function DriverNotificationBell() {
                   {alert.addedCount != null ? `تمت إضافة ${alert.addedCount} شحنة جديدة` : 'تمت إضافة شحنة جديدة'}
                 </p>
                 <p className="dd-notif-panel-meta" style={{ fontSize: 11, color: '#64748B' }}>
-                  التجميعة: #{alert.batchId.slice(0, 8).toUpperCase()}
+                  التجميعة: {alert.batchNumber}
                 </p>
                 <button
                   className="dd-notif-btn accept"

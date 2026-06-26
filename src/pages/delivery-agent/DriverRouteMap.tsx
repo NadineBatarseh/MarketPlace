@@ -8,6 +8,7 @@ import './DriverDashboard.css';
 
 interface DeliveryStop {
   shipmentId: string;
+  shipmentNumber: string;
   zone: string;
   shopName: string;
   lat: number;
@@ -15,7 +16,24 @@ interface DeliveryStop {
   volume: number;
   deadline: string;
   urgencyScore: number;
+  // Enriched from /api/logistics/pickup-delivery (store/buyer details + status)
+  status: string;
+  buyerName: string;
+  addressNote: string | null;
+  batchId: string | null;
 }
+
+// Per-shipment status labels (mirrors the pickup & delivery view)
+const SHIPMENT_STATUS_LABEL: Record<string, { label: string; color: string }> = {
+  pending:   { label: 'قيد التحضير',      color: '#9ca3af' },
+  available: { label: 'متاحة',            color: '#f59e0b' },
+  delayed:   { label: 'متأخرة',           color: '#f59e0b' },
+  batched:   { label: 'بانتظار الاستلام', color: '#2563eb' },
+  reserved:  { label: 'محجوزة',           color: '#2563eb' },
+  picked_up: { label: 'قيد التوصيل',      color: '#7c3aed' },
+  delivered: { label: 'تم التسليم',       color: '#16a34a' },
+  stranded:  { label: 'مشكلة في النقل',   color: '#dc2626' },
+};
 
 // Which sequencer decided the visiting order:
 //   'google'        → backend Google Route Optimization API
@@ -83,6 +101,8 @@ export default function DriverRouteMap() {
   const [error, setError]                   = useState<string | null>(null);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
+  const [actionLoading, setActionLoading]   = useState<string | null>(null);
+  const [batchList, setBatchList]           = useState<{ id: string; number: string }[]>([]);
 
   const apiKey         = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
   const initials       = getInitials(name ?? 'م');
@@ -182,25 +202,67 @@ export default function DriverRouteMap() {
     // real columns.
     const { data: shipments, error: shipErr } = await supabase
       .from('shipments')
-      .select('id, dropoff_zone, dropoff_lat, dropoff_lng, deadline, urgency_score, order_details(qty, shops(name), products(capacity_units))')
+      .select('id, shipment_number, dropoff_zone, dropoff_lat, dropoff_lng, deadline, urgency_score, order_details(qty, shops(name), products(capacity_units))')
       .in('id', allIds)
       .not('dropoff_lat', 'is', null)
       .not('dropoff_lng', 'is', null);
 
     if (shipErr) { setError('خطأ في تحميل الشحنات'); setLoading(false); return; }
 
-    setStops(
-      (shipments ?? []).map((s: any) => ({
-        shipmentId:   s.id             as string,
-        zone:         s.dropoff_zone   as string,
-        shopName:     (s.order_details?.shops?.name as string) ?? '—',
-        lat:          s.dropoff_lat    as number,
-        lng:          s.dropoff_lng    as number,
-        volume:       (s.order_details?.qty ?? 0) * (s.order_details?.products?.capacity_units ?? 0),
-        deadline:     (s.deadline      as string) ?? new Date().toISOString(),
-        urgencyScore: (s.urgency_score as number) ?? 0,
-      }))
-    );
+    const base: DeliveryStop[] = (shipments ?? []).map((s: any) => ({
+      shipmentId:   s.id             as string,
+      shipmentNumber: (s.shipment_number as string) ?? '',
+      zone:         s.dropoff_zone   as string,
+      shopName:     (s.order_details?.shops?.name as string) ?? '—',
+      lat:          s.dropoff_lat    as number,
+      lng:          s.dropoff_lng    as number,
+      volume:       (s.order_details?.qty ?? 0) * (s.order_details?.products?.capacity_units ?? 0),
+      deadline:     (s.deadline      as string) ?? new Date().toISOString(),
+      urgencyScore: (s.urgency_score as number) ?? 0,
+      status:       '',
+      buyerName:    '—',
+      addressNote:  null,
+      batchId:      null,
+    }));
+
+    // Enrich with store/buyer details + live status via the backend endpoint
+    // (it uses the service-role client, so it bypasses the RLS that blocks the
+    // driver's browser from reading orders / customer_profiles).
+    try {
+      const res = await fetch(`/api/logistics/pickup-delivery?courier_id=${encodeURIComponent(rawUser!.id)}`);
+      const json = await res.json();
+      if (res.ok && json.success) {
+        const info = new Map<string, { status: string; buyerName: string; addressNote: string | null; storeName: string; batchId: string }>();
+        const blist: { id: string; number: string }[] = [];
+        for (const b of json.batches as any[]) {
+          blist.push({ id: b.id, number: b.batchNumber });
+          for (const sh of b.shipments) {
+            info.set(sh.id, {
+              status:      sh.status,
+              buyerName:   sh.buyer?.name ?? '—',
+              addressNote: sh.buyer?.note ?? null,
+              storeName:   sh.store?.name ?? '—',
+              batchId:     b.id,
+            });
+          }
+        }
+        setBatchList(blist);
+        for (const stop of base) {
+          const e = info.get(stop.shipmentId);
+          if (e) {
+            stop.status      = e.status;
+            stop.buyerName   = e.buyerName;
+            stop.addressNote = e.addressNote;
+            stop.batchId     = e.batchId;
+            if (e.storeName && e.storeName !== '—') stop.shopName = e.storeName;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[DriverRouteMap] enrich (pickup-delivery) failed:', e);
+    }
+
+    setStops(base);
     setLoading(false);
   }
 
@@ -358,7 +420,7 @@ export default function DriverRouteMap() {
           }
           // when !optimize, orderedStops was already set to the backend order
         } else if (!optimize) {
-          setError('تعذّر رسم المسار — يتم عرض الترتيب من الخادم');
+          // مؤقتاً: عدم إظهار خطأ — الترتيب من الخادم معروض بالفعل
         } else {
           setOrderedStops(list); // fallback: original order
           setError('تعذّر تحسين المسار — يتم عرض الترتيب الافتراضي');
@@ -366,6 +428,60 @@ export default function DriverRouteMap() {
         setRouteBuilding(false);
       }
     );
+  }
+
+  // ── Status reporting (same actions as the pickup & delivery view) ────────────
+  function setStopStatus(shipmentId: string, status: string) {
+    setStops((prev) => prev.map((s) => (s.shipmentId === shipmentId ? { ...s, status } : s)));
+    setOrderedStops((prev) => prev.map((s) => (s.shipmentId === shipmentId ? { ...s, status } : s)));
+  }
+
+  async function handlePickup(shipmentId: string) {
+    setActionLoading('pickup-' + shipmentId);
+    try {
+      const res = await fetch('/api/logistics/pickup-shipment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shipment_id: shipmentId, courier_id: rawUser!.id }),
+      });
+      if (res.ok) setStopStatus(shipmentId, 'picked_up');
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleDeliver(shipmentId: string) {
+    setActionLoading('deliver-' + shipmentId);
+    try {
+      const res = await fetch('/api/logistics/deliver-shipment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shipment_id: shipmentId, courier_id: rawUser!.id }),
+      });
+      if (res.ok) setStopStatus(shipmentId, 'delivered');
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  // Report a general breakdown — cancels all active batches on the route.
+  async function handleBreakdown() {
+    if (batchList.length === 0) return;
+    if (!window.confirm('هل أنت متأكد من الإبلاغ عن عطل؟ سيتم إلغاء الدفعات الجارية، وإعادة الشحنات غير المُستلمة إلى المخزون، ووضع الشحنات المُستلمة قيد المعالجة اليدوية.')) return;
+    setActionLoading('breakdown');
+    try {
+      for (const b of batchList) {
+        await fetch('/api/logistics/breakdown', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ batch_id: b.id }),
+        });
+      }
+      setStops([]); setOrderedStops([]); setSolver(null); setBatchList([]);
+      await fetchStops();
+    } finally {
+      setActionLoading(null);
+    }
   }
 
   async function handleLogout() {
@@ -434,7 +550,7 @@ export default function DriverRouteMap() {
           </div>
 
           <nav className="dd-sidebar-nav">
-            <div className="dd-sidebar-item" onClick={() => navigate('/driver-dashboard')}>
+            <div className="dd-sidebar-item" onClick={() => navigate('/driver-dashboard', { state: { page: 'home' } })}>
               <span className="dd-sidebar-item-icon">
                 <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                   <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
@@ -444,37 +560,35 @@ export default function DriverRouteMap() {
               <span className="dd-sidebar-item-label">الرئيسية</span>
             </div>
 
-            <div className="dd-sidebar-item" onClick={() => navigate('/deliverer')}>
+            <div className="dd-sidebar-item" onClick={() => navigate('/driver-dashboard', { state: { page: 'inbox' } })}>
               <span className="dd-sidebar-item-icon">
                 <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <rect x="1" y="3" width="15" height="13" rx="2" />
-                  <path d="M16 8l4 2v5h-4V8z" />
-                  <circle cx="5.5" cy="18.5" r="2.5" />
-                  <circle cx="18.5" cy="18.5" r="2.5" />
+                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
                 </svg>
               </span>
-              <span className="dd-sidebar-item-label">طلباتي</span>
+              <span className="dd-sidebar-item-label">صندوق الرسائل</span>
             </div>
 
-            <div className="dd-sidebar-item" onClick={() => {}}>
+            <div className="dd-sidebar-item" onClick={() => navigate('/driver-dashboard', { state: { page: 'trips' } })}>
               <span className="dd-sidebar-item-icon">
                 <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                   <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="8" x2="12" y2="12" />
-                  <polyline points="12 12 16 14" />
+                  <polyline points="12 6 12 12 16 14" />
+                  <path d="M3 12a9 9 0 0 1 9-9" />
                 </svg>
               </span>
-              <span className="dd-sidebar-item-label">وردياتي</span>
+              <span className="dd-sidebar-item-label">سجل الرحلات</span>
             </div>
 
-            <div className="dd-sidebar-item" onClick={() => {}}>
+            <div className="dd-sidebar-item" onClick={() => navigate('/driver-dashboard', { state: { page: 'pickup_delivery' } })}>
               <span className="dd-sidebar-item-icon">
                 <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <line x1="12" y1="1" x2="12" y2="23" />
-                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                  <path d="M16 16h2a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h2" />
+                  <polyline points="9 11 12 14 15 11" />
+                  <line x1="12" y1="14" x2="12" y2="4" />
                 </svg>
               </span>
-              <span className="dd-sidebar-item-label">الأرباح</span>
+              <span className="dd-sidebar-item-label">التسليم والاستلام</span>
             </div>
 
             <div className="dd-sidebar-divider" />
@@ -486,15 +600,6 @@ export default function DriverRouteMap() {
                 </svg>
               </span>
               <span className="dd-sidebar-item-label">خريطة المسار</span>
-            </div>
-
-            <div className="dd-sidebar-item" onClick={() => {}}>
-              <span className="dd-sidebar-item-icon">
-                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                </svg>
-              </span>
-              <span className="dd-sidebar-item-label">التقييمات</span>
             </div>
           </nav>
 
@@ -582,7 +687,8 @@ export default function DriverRouteMap() {
           )}
 
           {/* Which method ordered the route */}
-          {!routeBuilding && solver && orderedStops.length > 0 && (() => {
+          {/* مؤقتاً: إخفاء إشعار الرجوع لخوارزمية المنصة — يظهر فقط عند نجاح Google */}
+          {!routeBuilding && solver === 'google' && orderedStops.length > 0 && (() => {
             const b = solverBadge(solver);
             return (
               <div style={{
@@ -616,50 +722,117 @@ export default function DriverRouteMap() {
               <div className="dd-orders-header">
                 <h2 className="dd-orders-title">ترتيب التوصيل المحسّن</h2>
               </div>
+
+              {/* Breakdown report (general — cancels all active batches) */}
+              {batchList.length > 0 && (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+                  <button
+                    type="button"
+                    className="dd-pd-breakdown-btn"
+                    disabled={actionLoading === 'breakdown'}
+                    onClick={handleBreakdown}
+                  >
+                    {actionLoading === 'breakdown' ? (
+                      <span className="dd-mission-spinner dd-mission-spinner-sm" />
+                    ) : (
+                      <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                        <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+                      </svg>
+                    )}
+                    الإبلاغ عن عطل
+                  </button>
+                </div>
+              )}
+
               <div className="dd-table-wrap">
                 <table className="dd-table">
                   <thead>
                     <tr>
                       <th>الترتيب</th>
                       <th>رقم الشحنة</th>
-                      <th>المتجر</th>
-                      <th>المنطقة</th>
-                      <th>الإحداثيات</th>
+                      <th>المتجر والمشتري</th>
+                      <th>الحالة</th>
+                      <th>الإجراء</th>
                       <th>الملاحة</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {orderedStops.map((stop, i) => (
-                      <tr key={stop.shipmentId}>
-                        <td>
-                          <span style={{
-                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                            width: 28, height: 28, borderRadius: '50%',
-                            background: i === 0 ? '#2563eb' : '#f1f5f9',
-                            color: i === 0 ? '#fff' : '#475569',
-                            fontWeight: 700, fontSize: 13,
-                          }}>
-                            {i + 1}
-                          </span>
-                        </td>
-                        <td className="dd-td-id">#{stop.shipmentId.slice(-8).toUpperCase()}</td>
-                        <td style={{ fontWeight: 600, color: '#1e293b' }}>{stop.shopName}</td>
-                        <td>{stop.zone}</td>
-                        <td style={{ fontSize: 12, color: '#94a3b8', direction: 'ltr' }}>
-                          {stop.lat.toFixed(4)}, {stop.lng.toFixed(4)}
-                        </td>
-                        <td>
-                          <a
-                            href={`https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}&travelmode=driving`}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{ color: '#2563eb', fontSize: 13, textDecoration: 'none', fontWeight: 600 }}
-                          >
-                            ابدأ الملاحة ↗
-                          </a>
-                        </td>
-                      </tr>
-                    ))}
+                    {orderedStops.map((stop, i) => {
+                      const st = SHIPMENT_STATUS_LABEL[stop.status] ?? { label: stop.status || '—', color: '#6b7280' };
+                      const anyLoading = actionLoading !== null;
+                      return (
+                        <tr key={stop.shipmentId}>
+                          <td>
+                            <span style={{
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                              width: 28, height: 28, borderRadius: '50%',
+                              background: i === 0 ? '#2563eb' : '#f1f5f9',
+                              color: i === 0 ? '#fff' : '#475569',
+                              fontWeight: 700, fontSize: 13,
+                            }}>
+                              {i + 1}
+                            </span>
+                          </td>
+                          <td className="dd-td-id">{stop.shipmentNumber}</td>
+                          <td>
+                            <div style={{ fontWeight: 700, color: '#1e293b' }}>{stop.shopName}</div>
+                            <div style={{ fontSize: 12.5, color: '#475569', marginTop: 2 }}>المشتري: {stop.buyerName}</div>
+                            <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 2 }}>
+                              المنطقة: {stop.zone}{stop.addressNote ? ` · ${stop.addressNote}` : ''}
+                            </div>
+                          </td>
+                          <td>
+                            <span
+                              className="dd-badge"
+                              style={{ background: `${st.color}18`, color: st.color, borderColor: `${st.color}30` }}
+                            >
+                              {st.label}
+                            </span>
+                          </td>
+                          <td>
+                            {stop.status === 'delivered' ? (
+                              <span className="dd-mission-done">
+                                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                                تم التسليم
+                              </span>
+                            ) : stop.status === 'stranded' ? (
+                              <span className="dd-pd-stranded">مشكلة في النقل</span>
+                            ) : stop.status === 'picked_up' ? (
+                              <button
+                                className="dd-mission-action-btn dd-mission-deliver-btn"
+                                disabled={anyLoading}
+                                onClick={() => handleDeliver(stop.shipmentId)}
+                              >
+                                {actionLoading === 'deliver-' + stop.shipmentId ? <span className="dd-mission-spinner dd-mission-spinner-sm" /> : null}
+                                تم التسليم للعميل
+                              </button>
+                            ) : (
+                              <button
+                                className="dd-mission-action-btn dd-mission-pickup-btn"
+                                disabled={anyLoading}
+                                onClick={() => handlePickup(stop.shipmentId)}
+                              >
+                                {actionLoading === 'pickup-' + stop.shipmentId ? <span className="dd-mission-spinner dd-mission-spinner-sm" /> : null}
+                                تم الاستلام من المتجر
+                              </button>
+                            )}
+                          </td>
+                          <td>
+                            <a
+                              href={`https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}&travelmode=driving`}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{ color: '#2563eb', fontSize: 13, textDecoration: 'none', fontWeight: 600 }}
+                            >
+                              ابدأ الملاحة ↗
+                            </a>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
