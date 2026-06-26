@@ -310,7 +310,7 @@ export default function DriverDashboard() {
 
   async function handleLogout() {
     await supabase.auth.signOut();
-    navigate('/login');
+    navigate('/home');
   }
 
   // ── Derived stats ─────────────────────────────────────────────────────────

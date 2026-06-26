@@ -45,9 +45,7 @@ interface LedgerRow {
   currency: string | null;
   status: string;
   note: string | null;
-  settle_eligible_at: string | null;
   paid_at: string | null;
-  paytabs_payout_ref: string | null;
   failure_reason: string | null;
   created_at: string;
 }
@@ -56,8 +54,8 @@ interface Group {
   payee_id: string | null;
   payee_name: string;
   total: number;
-  paid_total: number;
-  pending_total: number;
+  distributed_total: number;
+  held_total: number;
   count: number;
 }
 interface Summary {
@@ -65,19 +63,21 @@ interface Summary {
   merchants_total: number;
   couriers_total: number;
   platform_total: number;
-  paid: number;
-  pending: number;
-  in_process: number;
-  failed: number;
+  distributed: number;
+  held: number;
   count: number;
 }
 
 const TYPE_LABEL: Record<PayeeType, string> = { shop: 'تاجر', courier: 'مندوب', platform: 'المنصّة' };
+// Split Payout statuses + legacy ones (so old rows still render).
 const STATUS_LABEL: Record<string, string> = {
+  distributed: 'موزّعة عبر PayTabs', platform_held: 'محتجزة لدى المنصّة',
   pending: 'قيد الانتظار', queued: 'في الطابور', submitted: 'قيد التحويل',
   paid: 'مدفوع', failed: 'فشل', skipped: 'متجاوز', reversed: 'معكوس',
 };
 const STATUS_COLOR: Record<string, { bg: string; fg: string }> = {
+  distributed: { bg: '#F0FDF4', fg: '#15803D' },
+  platform_held: { bg: '#FFF7ED', fg: '#C2410C' },
   paid: { bg: '#F0FDF4', fg: '#15803D' },
   pending: { bg: '#FFF7ED', fg: '#C2410C' },
   queued: { bg: '#FFF7ED', fg: '#C2410C' },
@@ -171,17 +171,17 @@ const SalesLedgerPage: React.FC<{ embedded?: boolean }> = () => {
     if (tab === 'transactions') {
       downloadCSV(
         'sales-ledger.csv',
-        ['التاريخ', 'رقم الطلب', 'المستفيد', 'النوع', 'المبلغ', 'العملة', 'الحالة', 'تاريخ الصرف', 'المرجع'],
+        ['التاريخ', 'رقم الطلب', 'المستفيد', 'النوع', 'المبلغ', 'العملة', 'الحالة'],
         rows.map(r => [
           fmtDate(r.created_at), r.order_id ?? '', r.payee_name, TYPE_LABEL[r.payee_type],
-          r.amount, r.currency ?? '', STATUS_LABEL[r.status] ?? r.status, fmtDate(r.paid_at), r.paytabs_payout_ref ?? '',
+          r.amount, r.currency ?? '', STATUS_LABEL[r.status] ?? r.status,
         ]),
       );
     } else {
       downloadCSV(
         'sales-by-payee.csv',
-        ['المستفيد', 'النوع', 'الإجمالي', 'المدفوع', 'المعلّق', 'عدد المعاملات'],
-        groups.map(g => [g.payee_name, TYPE_LABEL[g.payee_type], g.total, g.paid_total, g.pending_total, g.count]),
+        ['المستفيد', 'النوع', 'الإجمالي', 'موزّعة', 'محتجزة', 'عدد المعاملات'],
+        groups.map(g => [g.payee_name, TYPE_LABEL[g.payee_type], g.total, g.distributed_total, g.held_total, g.count]),
       );
     }
   };
@@ -217,8 +217,8 @@ const SalesLedgerPage: React.FC<{ embedded?: boolean }> = () => {
           {card('حصص التجار', `${fmtMoney(summary.merchants_total)} ${currency}`, '#0F766E')}
           {card('أجور المناديب', `${fmtMoney(summary.couriers_total)} ${currency}`, '#7C3AED')}
           {card('عمولة المنصّة', `${fmtMoney(summary.platform_total)} ${currency}`, '#EA580C')}
-          {card('مدفوع فعليًا', `${fmtMoney(summary.paid)} ${currency}`, '#15803D')}
-          {card('معلّق', `${fmtMoney(summary.pending)} ${currency}`, '#C2410C')}
+          {card('موزّعة عبر PayTabs', `${fmtMoney(summary.distributed)} ${currency}`, '#15803D')}
+          {card('محتجزة لدى المنصّة', `${fmtMoney(summary.held)} ${currency}`, '#C2410C')}
         </div>
       )}
 
@@ -290,7 +290,7 @@ const SalesLedgerPage: React.FC<{ embedded?: boolean }> = () => {
               <thead>
                 <tr>
                   <th style={th}>المستفيد</th><th style={th}>النوع</th><th style={th}>الإجمالي</th>
-                  <th style={th}>المدفوع</th><th style={th}>المعلّق</th><th style={th}>عدد المعاملات</th>
+                  <th style={th}>موزّعة</th><th style={th}>محتجزة</th><th style={th}>عدد المعاملات</th>
                 </tr>
               </thead>
               <tbody>
@@ -299,8 +299,8 @@ const SalesLedgerPage: React.FC<{ embedded?: boolean }> = () => {
                     <td style={{ ...td, fontWeight: 600 }} data-label="المستفيد">{g.payee_name}</td>
                     <td style={td} data-label="النوع">{TYPE_LABEL[g.payee_type]}</td>
                     <td style={{ ...td, fontWeight: 700 }} data-label="الإجمالي">{fmtMoney(g.total)} {currency}</td>
-                    <td style={{ ...td, color: '#15803D' }} data-label="المدفوع">{fmtMoney(g.paid_total)} {currency}</td>
-                    <td style={{ ...td, color: '#C2410C' }} data-label="المعلّق">{fmtMoney(g.pending_total)} {currency}</td>
+                    <td style={{ ...td, color: '#15803D' }} data-label="موزّعة">{fmtMoney(g.distributed_total)} {currency}</td>
+                    <td style={{ ...td, color: '#C2410C' }} data-label="محتجزة">{fmtMoney(g.held_total)} {currency}</td>
                     <td style={td} data-label="عدد المعاملات">{g.count}</td>
                   </tr>
                 ))}

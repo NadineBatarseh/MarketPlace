@@ -27,8 +27,7 @@ const FONTS_CSS = `
 
 // Categories shown in the sidenav (same shape as the logistics page).
 const CATEGORIES: CategoryDef[] = [
-  { key: 'fees',       label: 'العمولات والرسوم', icon: '₪' },
-  { key: 'settlement', label: 'التسوية والتحويل', icon: '⟳' },
+  { key: 'fees', label: 'العمولات والرسوم', icon: '₪' },
 ];
 
 // Field definitions. `key` is the payment_config DB column name (snake_case) and is
@@ -55,48 +54,6 @@ const SETTINGS_DEFINITIONS: SettingDef[] = [
     step: 1,
     explanation: 'تُضاف على إجمالي طلب العميل وتُدفع للسائق المعيَّن.',
     category: 'fees',
-  },
-  {
-    key: 'settlement_return_window_hours',
-    label: 'نافذة الإرجاع قبل التحويل',
-    unit: 'ساعة',
-    type: 'count',
-    defaultValue: 72,
-    min: 0,
-    step: 1,
-    explanation: 'المدة بعد تسليم الطلب قبل أن تصبح حصّة التاجر قابلة للصرف. تُخزَّن بالساعات.',
-    category: 'settlement',
-    timeUnits: [
-      { label: 'ساعة', factor: 1 },
-      { label: 'يوم', factor: 24, step: 1 },
-    ],
-  },
-  {
-    key: 'settlement_max_attempts',
-    label: 'أقصى عدد محاولات التحويل',
-    unit: 'محاولة',
-    type: 'count',
-    defaultValue: 3,
-    min: 1,
-    step: 1,
-    explanation: 'كم مرة يُعاد محاولة صرف دفعة فاشلة قبل تجاوزها.',
-    category: 'settlement',
-  },
-  {
-    key: 'settlement_sweep_interval_minutes',
-    label: 'فترة مسح التسوية',
-    unit: 'دقيقة',
-    type: 'minutes',
-    defaultValue: 15,
-    min: 1,
-    step: 1,
-    explanation: 'كل كم دقيقة يفحص النظام الدفعات المستحقّة. يُطبَّق بعد إعادة تشغيل الخادم. تُخزَّن بالدقائق.',
-    category: 'settlement',
-    timeUnits: [
-      { label: 'دقيقة', factor: 1 },
-      { label: 'ساعة', factor: 60, step: 0.5 },
-      { label: 'يوم', factor: 1440, step: 1 },
-    ],
   },
 ];
 

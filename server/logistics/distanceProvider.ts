@@ -20,9 +20,10 @@ import { C } from './constants.js';
 import { haversineDistance } from './formulas.js';
 import { Coordinates } from './types.js';
 
-const DISTANCE_MATRIX_URL = 'https://maps.googleapis.com/maps/api/distancematrix/json';
+// Routes API (the modern replacement for the legacy Distance Matrix API).
+const COMPUTE_ROUTE_MATRIX_URL = 'https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix';
 const COORD_DECIMALS = 5;            // ≈ 1 m — round so repeated points reuse a cache row
-const MAX_DESTS_PER_REQUEST = 25;    // Google Distance Matrix per-request destination cap
+const MAX_DESTS_PER_REQUEST = 25;    // destinations per request (Routes API allows ≤625 elements)
 
 interface RoadMetrics {
   distanceKm: number;
@@ -139,23 +140,40 @@ export async function prefetchPairs(locations: Coordinates[]): Promise<void> {
     for (let i = 0; i < dests.length; i += MAX_DESTS_PER_REQUEST) {
       const chunk = dests.slice(i, i + MAX_DESTS_PER_REQUEST);
       try {
-        const params = new URLSearchParams({
-          origins: `${o.lat},${o.lng}`,
-          destinations: chunk.map((d) => `${d.lat},${d.lng}`).join('|'),
-          key: apiKey,
+        const resp = await fetch(COMPUTE_ROUTE_MATRIX_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-Api-Key': apiKey,
+            'X-Goog-FieldMask': 'originIndex,destinationIndex,duration,distanceMeters,condition',
+          },
+          body: JSON.stringify({
+            origins: [
+              { waypoint: { location: { latLng: { latitude: o.lat, longitude: o.lng } } } },
+            ],
+            destinations: chunk.map((d) => ({
+              waypoint: { location: { latLng: { latitude: d.lat, longitude: d.lng } } },
+            })),
+            travelMode: 'DRIVE',
+          }),
         });
-        const resp = await fetch(`${DISTANCE_MATRIX_URL}?${params.toString()}`);
-        const json = await resp.json();
-        if (json.status !== 'OK') {
-          console.warn('[distanceProvider] Distance Matrix status:', json.status, json.error_message ?? '');
+
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => '');
+          console.warn('[distanceProvider] Routes API HTTP', resp.status, text.slice(0, 200));
           continue;
         }
-        const elements = json.rows?.[0]?.elements ?? [];
-        elements.forEach((el: any, idx: number) => {
-          const d = chunk[idx];
-          if (el?.status !== 'OK' || !el.distance || !el.duration) return;
-          const meters = el.distance.value as number;
-          const seconds = el.duration.value as number;
+
+        // computeRouteMatrix returns a flat array of elements (one per origin×dest),
+        // possibly out of order — index back via destinationIndex. proto3 JSON omits
+        // defaults, so distanceMeters can be absent (0); duration is a string "123s".
+        const elements: any[] = await resp.json();
+        for (const el of elements ?? []) {
+          if (el?.condition !== 'ROUTE_EXISTS') continue;
+          const d = chunk[el.destinationIndex];
+          if (!d) continue;
+          const meters = (el.distanceMeters as number) ?? 0;
+          const seconds = parseInt(String(el.duration ?? '0'), 10) || 0;
           memory.set(pairKey(o.lat, o.lng, d.lat, d.lng), {
             distanceKm: meters / 1000,
             durationMin: seconds / 60,
@@ -165,9 +183,9 @@ export async function prefetchPairs(locations: Coordinates[]): Promise<void> {
             dest_lat: d.lat, dest_lng: d.lng,
             distance_meters: meters, duration_seconds: seconds,
           });
-        });
+        }
       } catch (err) {
-        console.warn('[distanceProvider] Distance Matrix fetch error:', (err as Error).message);
+        console.warn('[distanceProvider] Routes API fetch error:', (err as Error).message);
       }
     }
   }

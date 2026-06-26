@@ -4,3 +4,10 @@ node_modules/
 dist/
 dist-server/
 build/
+
+# Python virtual environment (created by mistake in repo root)
+Lib/
+Scripts/
+pyvenv.cfg
+*.pyc
+__pycache__/

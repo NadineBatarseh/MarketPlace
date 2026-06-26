@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Redirect to login if the session dropped for a previously authenticated user
         // (covers both explicit logout and invalid/expired refresh token)
         if (event === 'SIGNED_OUT' && wasLoggedIn.current) {
-          window.location.href = '/login';
+          window.location.href = '/home';
         }
         setRawUser(null);
       } else if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
