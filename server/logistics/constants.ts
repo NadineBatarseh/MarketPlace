@@ -45,6 +45,8 @@ INTRA_CITY_MIN_TIME_BUFFER_MINUTES: 15,
   // â”€â”€ Intra-city sequencing (D31) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   W_DIST: 0.60,
   W_URG: 0.40,
+
+  RESERVATION_EXTENSION_MINUTES: 120,
 };
 
 // Loads all admin-configurable fields from batch_config (id = 1)

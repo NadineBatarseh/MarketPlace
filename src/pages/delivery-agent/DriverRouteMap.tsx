@@ -11,16 +11,35 @@ interface DeliveryStop {
   shipmentNumber: string;
   zone: string;
   shopName: string;
+  // `lat`/`lng` is the location the driver must visit RIGHT NOW for this stop —
+  // the store (pickup_lat/lng) if not yet picked up, otherwise the buyer
+  // (dropoff_lat/lng). Kept alongside the raw pair so it can be recomputed
+  // whenever `status` changes (see stopLatLng below).
   lat: number;
   lng: number;
+  pickupLat: number;
+  pickupLng: number;
+  dropoffLat: number;
+  dropoffLng: number;
   volume: number;
   deadline: string;
   urgencyScore: number;
+  readyTime: string | null;
   // Enriched from /api/logistics/pickup-delivery (store/buyer details + status)
   status: string;
   buyerName: string;
   addressNote: string | null;
   batchId: string | null;
+}
+
+// A stop still needs a store pickup until it's been collected (or, in the rare
+// case it was already delivered without going through this screen, skipped).
+function needsPickup(status: string): boolean {
+  return status !== 'picked_up' && status !== 'delivered';
+}
+
+function stopLatLng(status: string, s: { pickupLat: number; pickupLng: number; dropoffLat: number; dropoffLng: number }) {
+  return needsPickup(status) ? { lat: s.pickupLat, lng: s.pickupLng } : { lat: s.dropoffLat, lng: s.dropoffLng };
 }
 
 // Per-shipment status labels (mirrors the pickup & delivery view)
@@ -200,9 +219,13 @@ export default function DriverRouteMap() {
     // `volume` is NOT a column on shipments — like the backend (phase3), derive it
     // from order_details.qty × products.capacity_units. deadline/urgency_score ARE
     // real columns.
+    // pickup_lat/pickup_lng: needed because a shipment isn't necessarily already
+    // loaded on the truck — see needsPickup() / stopLatLng() above. ready_time
+    // comes from order_details.ready_time (stamped when the merchant marks the
+    // order ready), the earliest the courier can actually collect it.
     const { data: shipments, error: shipErr } = await supabase
       .from('shipments')
-      .select('id, shipment_number, dropoff_zone, dropoff_lat, dropoff_lng, deadline, urgency_score, order_details(qty, shops(name), products(capacity_units))')
+      .select('id, shipment_number, dropoff_zone, dropoff_lat, dropoff_lng, pickup_lat, pickup_lng, deadline, urgency_score, order_details(qty, ready_time, shops(name), products(capacity_units))')
       .in('id', allIds)
       .not('dropoff_lat', 'is', null)
       .not('dropoff_lng', 'is', null);
@@ -214,11 +237,18 @@ export default function DriverRouteMap() {
       shipmentNumber: (s.shipment_number as string) ?? '',
       zone:         s.dropoff_zone   as string,
       shopName:     (s.order_details?.shops?.name as string) ?? '—',
+      // Status isn't known yet at this point (filled in by the enrichment fetch
+      // below) — default to the dropoff point, then stopLatLng() corrects it.
       lat:          s.dropoff_lat    as number,
       lng:          s.dropoff_lng    as number,
+      pickupLat:    s.pickup_lat     as number,
+      pickupLng:    s.pickup_lng     as number,
+      dropoffLat:   s.dropoff_lat    as number,
+      dropoffLng:   s.dropoff_lng    as number,
       volume:       (s.order_details?.qty ?? 0) * (s.order_details?.products?.capacity_units ?? 0),
       deadline:     (s.deadline      as string) ?? new Date().toISOString(),
       urgencyScore: (s.urgency_score as number) ?? 0,
+      readyTime:    (s.order_details?.ready_time as string) ?? null,
       status:       '',
       buyerName:    '—',
       addressNote:  null,
@@ -255,6 +285,9 @@ export default function DriverRouteMap() {
             stop.addressNote = e.addressNote;
             stop.batchId     = e.batchId;
             if (e.storeName && e.storeName !== '—') stop.shopName = e.storeName;
+            // Now that we know the real status, point this stop at the store
+            // (not yet picked up) or the buyer (already on board).
+            Object.assign(stop, stopLatLng(stop.status, stop));
           }
         }
       }
@@ -282,9 +315,12 @@ export default function DriverRouteMap() {
   }, []);
 
   // ── Backend sequencer ─────────────────────────────────────────────────────────
-  // Ask the logistics service to order the delivery stops. The driver is on the
-  // delivery leg (goods already on board), so we send delivery-only tasks with the
-  // current location as the entry point and the total loaded volume as initial_volume.
+  // Ask the logistics service to order the stops. Not every stop is a delivery —
+  // a shipment not yet collected from its store (needsPickup) must be visited as
+  // a pickup at pickup_lat/lng first; only an already-collected shipment is a
+  // delivery at dropoff_lat/lng. initial_volume only counts what's ALREADY on the
+  // truck — volume still to be picked up is modeled via the pickup tasks' own
+  // load demand, so it must NOT be double-counted here.
   // Returns the stops re-ordered to match the backend sequence + which solver ran.
   async function sequenceViaBackend(
     list: DeliveryStop[],
@@ -292,15 +328,17 @@ export default function DriverRouteMap() {
   ): Promise<{ ordered: DeliveryStop[]; solver: Solver }> {
     const tasks = list.map((s) => ({
       id:            s.shipmentId,
-      type:          'delivery' as const,
+      type:          needsPickup(s.status) ? ('pickup' as const) : ('delivery' as const),
       shipment_id:   s.shipmentId,
       location:      { lat: s.lat, lng: s.lng },
-      ready_time:    null,
+      ready_time:    needsPickup(s.status) ? s.readyTime : null,
       deadline:      s.deadline,
       volume:        s.volume,
       urgency_score: s.urgencyScore,
     }));
-    const initial_volume = list.reduce((sum, s) => sum + (s.volume || 0), 0);
+    const initial_volume = list
+      .filter((s) => !needsPickup(s.status))
+      .reduce((sum, s) => sum + (s.volume || 0), 0);
 
     const res = await fetch('/api/logistics/sequence', {
       method:  'POST',
@@ -432,8 +470,10 @@ export default function DriverRouteMap() {
 
   // ── Status reporting (same actions as the pickup & delivery view) ────────────
   function setStopStatus(shipmentId: string, status: string) {
-    setStops((prev) => prev.map((s) => (s.shipmentId === shipmentId ? { ...s, status } : s)));
-    setOrderedStops((prev) => prev.map((s) => (s.shipmentId === shipmentId ? { ...s, status } : s)));
+    const apply = (s: DeliveryStop) =>
+      s.shipmentId === shipmentId ? { ...s, status, ...stopLatLng(status, s) } : s;
+    setStops((prev) => prev.map(apply));
+    setOrderedStops((prev) => prev.map(apply));
   }
 
   async function handlePickup(shipmentId: string) {

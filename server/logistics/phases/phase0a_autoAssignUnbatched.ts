@@ -145,7 +145,7 @@ export async function autoAssignUnbatchedShipments(): Promise<void> {
       const leg = legFor(batch, shipment);
       const existingIds = batch[leg] ?? [];
       const reservedUntil =
-        batch.reserved_until ?? new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+        batch.reserved_until ?? new Date(Date.now() + C.RESERVATION_EXTENSION_MINUTES * 60 * 1000).toISOString();
 
       const [{ error: sErr }, { error: bErr }] = await Promise.all([
         supabase

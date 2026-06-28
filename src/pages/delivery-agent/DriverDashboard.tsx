@@ -733,6 +733,7 @@ export default function DriverDashboard() {
             <div className="dd-orders-section">
               <div className="dd-orders-header">
                 <h2 className="dd-orders-title">التسليم والاستلام</h2>
+                {breakdownButton}
               </div>
               <p className="dd-pd-subtitle">الدفعات قيد التوصيل — اضغط على الدفعة لعرض شحناتها وتفاصيل المتجر والمشتري.</p>
 
@@ -918,11 +919,6 @@ export default function DriverDashboard() {
                   })}
                 </div>
               )}
-
-              {/* General vehicle-breakdown report (below the batch list) */}
-              <div className="dd-breakdown-bar">
-                {breakdownButton}
-              </div>
             </div>
           )}
 
