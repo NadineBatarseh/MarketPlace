@@ -213,7 +213,7 @@ export default function DeliveryApplication() {
   return (
     <div className="auth-page" dir="rtl">
       <div className="auth-card auth-wide-card">
-        <div className="auth-logo">🚚</div>
+        <img src="/logo.png" alt="سوق لينك" className="auth-logo auth-logo-img" />
         <h1 className="auth-title">طلب الانضمام كمندوب توصيل</h1>
         <p className="auth-sub">أكمل النموذج وسيتم مراجعة طلبك من قِبل الإدارة</p>
 

@@ -70,7 +70,7 @@ export default function Activate() {
   return (
     <div className="auth-page" dir="rtl">
       <div className="auth-card">
-        <div className="auth-logo">🔐</div>
+        <img src="/logo.png" alt="سوق لينك" className="auth-logo auth-logo-img" />
         <h1 className="auth-title">تفعيل الحساب</h1>
         <p className="auth-sub">أدخل بريدك الإلكتروني الرسمي وأنشئ كلمة مرور لحسابك</p>
 

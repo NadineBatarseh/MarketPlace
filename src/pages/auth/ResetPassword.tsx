@@ -71,7 +71,7 @@ export default function ResetPassword() {
     return (
       <div className="auth-page" dir="rtl">
         <div className="auth-card auth-card--centered">
-          <div className="auth-logo">⏳</div>
+          <img src="/logo.png" alt="سوق لينك" className="auth-logo auth-logo-img" />
           <h1 className="auth-title">جاري التحقق من الرابط...</h1>
         </div>
       </div>
@@ -129,7 +129,7 @@ export default function ResetPassword() {
   return (
     <div className="auth-page" dir="rtl">
       <div className="auth-card">
-        <div className="auth-logo">🔒</div>
+        <img src="/logo.png" alt="سوق لينك" className="auth-logo auth-logo-img" />
         <h1 className="auth-title">تعيين كلمة مرور جديدة</h1>
         <p className="auth-sub">اختر كلمة مرور قوية لحسابك</p>
 
