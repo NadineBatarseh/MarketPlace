@@ -442,6 +442,66 @@
 .dd-shift-item svg { color: #e8572a; flex-shrink: 0; }
 
 /* ══════════════════════════════════════════════════════
+   حالة الدوام  (duty status card)
+   ══════════════════════════════════════════════════════ */
+.dd-duty-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  border: 1.5px solid;
+  border-radius: 16px;
+  padding: 1.1rem 1.3rem;
+}
+
+.dd-duty-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.dd-duty-card-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 20px;
+  background: #fff;
+  border: 1.5px solid;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.dd-duty-card-helper {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #475569;
+  font-weight: 600;
+}
+
+.dd-duty-card-timer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #1a1a2e;
+}
+.dd-duty-card-timer-label { color: #64748b; font-weight: 600; }
+.dd-duty-card-timer-value { font-family: monospace; font-size: 0.95rem; }
+
+.dd-duty-card-warning {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  color: #b91c1c;
+  border-radius: 10px;
+  padding: 0.55rem 0.9rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+/* ══════════════════════════════════════════════════════
    STATS CARDS  (mirrors .mh-stats / .mh-stat-card)
    ══════════════════════════════════════════════════════ */
 .dd-stats-grid {
@@ -609,6 +669,42 @@
 .dd-trip-filter-active .dd-trip-filter-count {
   background: rgba(255,255,255,0.22);
   color: #fff;
+}
+
+/* ── سجل ساعات العمل: month navigation ── */
+.dd-month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.dd-month-nav-btn {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1.5px solid #e5e7eb;
+  background: #fff;
+  color: #374151;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.dd-month-nav-btn:hover { border-color: #1a1a2e; background: #fafafa; }
+
+.dd-month-nav-label {
+  min-width: 9rem;
+  text-align: center;
+  font-size: 0.98rem;
+  font-weight: 800;
+  color: #1a1a2e;
+}
+
+.dd-history-row-today td {
+  background: #fff7ed;
+  font-weight: 800;
 }
 
 /* ══════════════════════════════════════════════════════
@@ -952,6 +1048,7 @@
 .dd-notif-btn:hover { opacity: 0.88; }
 .dd-notif-btn.accept  { background: #16a34a; color: #fff; }
 .dd-notif-btn.decline { background: #f1f5f9; color: #64748b; }
+.dd-notif-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .dd-notif-panel-empty {
   padding: 1.5rem 1rem;

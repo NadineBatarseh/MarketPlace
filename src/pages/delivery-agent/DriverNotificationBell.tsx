@@ -19,8 +19,14 @@ interface AdminMessage {
   read_at: string | null;
 }
 
-export default function DriverNotificationBell() {
+interface DriverNotificationBellProps {
+  driverStatus?: 'available' | 'on_route' | 'offline';
+  onBatchAccepted?: () => void;
+}
+
+export default function DriverNotificationBell({ driverStatus, onBatchAccepted }: DriverNotificationBellProps) {
   const { rawUser } = useSharedAuth();
+  const canAccept = driverStatus === 'available';
 
   const [pendingNotifications, setPendingNotifications] = useState<PendingBatchNotification[]>([]);
   const [showNotifPanel, setShowNotifPanel]             = useState(false);
@@ -166,6 +172,14 @@ export default function DriverNotificationBell() {
 
   async function handleAcceptBatch(notif: PendingBatchNotification) {
     if (!rawUser?.id) return;
+    if (!canAccept) {
+      window.alert(
+        driverStatus === 'on_route'
+          ? 'أنهِ المهمة الحالية قبل قبول مهمة جديدة.'
+          : 'ابدأ الدوام لتتمكن من قبول المهام.'
+      );
+      return;
+    }
     try {
       const res = await fetch('/api/logistics/accept', {
         method: 'POST',
@@ -178,6 +192,7 @@ export default function DriverNotificationBell() {
         // Won the batch — flip every other driver's notification so they see it's taken.
         await supabase.from('driver_notifications').update({ is_accepted: true }).eq('batch_id', notif.batchId);
         setPendingNotifications((prev) => prev.filter((n) => n.notificationId !== notif.notificationId));
+        onBatchAccepted?.();
       } else if (res.status === 409) {
         // Someone else already claimed it.
         await supabase.from('driver_notifications').update({ is_accepted: true }).eq('id', notif.notificationId);
@@ -296,12 +311,17 @@ export default function DriverNotificationBell() {
                 <p className="dd-notif-panel-title">طلب توصيل جديد</p>
                 <p className="dd-notif-panel-route">{notif.route.join(' ← ')}</p>
                 <p className="dd-notif-panel-meta">{notif.shipmentCount} شحنة · {notif.totalVolume.toFixed(0)} وحدة</p>
+                {!canAccept && !notif.isAccepted && (
+                  <p className="dd-notif-panel-meta" style={{ color: '#dc2626' }}>
+                    {driverStatus === 'on_route' ? 'أنهِ المهمة الحالية أولاً' : 'ابدأ الدوام أولاً'}
+                  </p>
+                )}
                 <div className="dd-notif-panel-actions">
                   {notif.isAccepted ? (
                     <span className="dd-notif-taken">تم القبول من سائق آخر</span>
                   ) : (
                     <>
-                      <button className="dd-notif-btn accept" onClick={() => handleAcceptBatch(notif)}>قبول</button>
+                      <button className="dd-notif-btn accept" disabled={!canAccept} onClick={() => handleAcceptBatch(notif)}>قبول</button>
                       <button className="dd-notif-btn decline" onClick={() => handleDeclineBatch(notif.notificationId)}>رفض</button>
                     </>
                   )}

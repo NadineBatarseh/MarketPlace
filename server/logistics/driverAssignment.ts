@@ -6,6 +6,7 @@ import {
   roadDistance,
 } from './formulas.js';
 import { Courier } from './types.js';
+import { getActiveWorkSession } from './workSessions.js';
 
 // â”€â”€ D33 â€” Score a driver against a specific batch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Driver_Score = W_proxآ·P + W_capآ·C - W_loadآ·L
@@ -62,16 +63,38 @@ async function fetchAvailableCouriers(
 // Returns true if this driver successfully claimed the batch.
 export type AtomicAssignResult =
   | { success: true }
-  | { success: false; reason: 'batch_unavailable' | 'courier_unavailable' };
+  | {
+      success: false;
+      reason: 'batch_unavailable' | 'courier_unavailable' | 'no_active_work_session' | 'driver_has_active_batch';
+    };
 
 // Claims the batch, then flips the courier available -> on_route in the same call
 // so a driver becomes ineligible for further offers the instant they accept, not
 // when they later click "Start mission". If the courier isn't actually available
 // (already on_route from another batch), the batch claim is released.
+//
+// Accept is only legal while the driver is on duty (an active work session) and
+// has no other active batch — both checked up front so a stale/forced courier
+// status can't slip a batch through.
 export async function atomicAssign(
   batchId: string,
   driverId: string
 ): Promise<AtomicAssignResult> {
+  const activeSession = await getActiveWorkSession(driverId);
+  if (!activeSession) {
+    return { success: false, reason: 'no_active_work_session' };
+  }
+
+  const { count: activeBatchCount } = await supabase
+    .from('batches')
+    .select('id', { count: 'exact', head: true })
+    .eq('assigned_to', driverId)
+    .in('status', ['assigned', 'in_transit']);
+
+  if (activeBatchCount && activeBatchCount > 0) {
+    return { success: false, reason: 'driver_has_active_batch' };
+  }
+
   const { data, error } = await supabase
     .from('batches')
     .update({ status: 'assigned', assigned_to: driverId, assigned_at: new Date().toISOString() })

@@ -1,5 +1,6 @@
 import supabase from '../../supabase.js';
 import { Shipment } from '../types.js';
+import { cancelDeliverySessionAndCloseWork } from '../workSessions.js';
 
 interface BreakdownResult {
   re_pooled: string[];
@@ -73,9 +74,12 @@ export async function handleBreakdown(batchId: string): Promise<BreakdownResult>
     .maybeSingle();
 
   // A breakdown means the driver should not auto-receive a new batch until the issue is resolved.
+  // Closing their shift automatically (rather than leaving it open) keeps duty-time data clean —
+  // the driver must explicitly "Start Work" again once the issue is resolved.
   const assignedCourier = cancelledBatch?.assigned_to as string | null;
   if (assignedCourier) {
     await supabase.from('couriers').update({ status: 'offline' }).eq('id', assignedCourier);
+    await cancelDeliverySessionAndCloseWork(assignedCourier, batchId);
   }
 
   console.log(
