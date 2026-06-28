@@ -8,6 +8,7 @@ import { sequenceIntraCityTasksGoogle } from './phases/phase10_googleRouteOptimi
 import { prefetchPairs } from './distanceProvider.js';
 import { atomicAssign } from './driverAssignment.js';
 import { autoAssignUnbatchedShipments } from './phases/phase0a_autoAssignUnbatched.js';
+import { startDeliverySession, completeDeliverySession } from './workSessions.js';
 import { supabase } from '../supabase.js';
 import { C } from './constants.js';
 import { loadPaymentConfig } from '../lib/paymentConfig.js';
@@ -176,6 +177,20 @@ logisticsRouter.post('/start-batch', async (req: Request, res: Response) => {
     return;
   }
 
+  // Defense-in-depth: an assigned batch should always mean the courier is on_route
+  // (set atomically in atomicAssign at accept time). Block the start if that invariant
+  // is somehow violated, instead of silently proceeding on a desynced status.
+  const { data: courier } = await supabase
+    .from('couriers')
+    .select('status')
+    .eq('id', courier_id)
+    .maybeSingle();
+
+  if (courier?.status !== 'on_route') {
+    res.status(403).json({ success: false, error: 'حالتك الحالية لا تسمح ببدء هذه المهمة — يرجى تحديث الصفحة' });
+    return;
+  }
+
   const { data, error } = await supabase
     .from('batches')
     .update({ status: 'in_transit', started_at: new Date().toISOString() })
@@ -185,9 +200,11 @@ logisticsRouter.post('/start-batch', async (req: Request, res: Response) => {
     .select('id');
 
   if (error || !data?.length) {
-    res.status(409).json({ success: false, error: 'Batch not found, not assigned, or already started' });
+    res.status(409).json({ success: false, error: 'الدفعة غير موجودة أو لم تُخصص لك أو بدأت مسبقاً' });
     return;
   }
+
+  await startDeliverySession(courier_id, batch_id);
 
   res.json({ success: true });
 });
@@ -322,6 +339,18 @@ logisticsRouter.post('/deliver-shipment', async (req: Request, res: Response) =>
 
   if (count === 0) {
     await supabase.from('batches').update({ status: 'completed' }).eq('id', batch.id);
+    await completeDeliverySession(courier_id, batch.id);
+
+    // Free the courier only if they have no other active batch (one active batch per driver).
+    const { count: otherActive } = await supabase
+      .from('batches')
+      .select('id', { count: 'exact', head: true })
+      .eq('assigned_to', courier_id)
+      .in('status', ['assigned', 'in_transit']);
+
+    if (!otherActive) {
+      await supabase.from('couriers').update({ status: 'available' }).eq('id', courier_id).eq('status', 'on_route');
+    }
   }
 
   void insertDriverTrackingEvent(shipment_id, shipment.order_detail_id as number | null, 'driver_delivered');
@@ -344,15 +373,19 @@ logisticsRouter.post('/accept', async (req: Request, res: Response) => {
   }
 
   try {
-    const assigned = await atomicAssign(batch_id, courier_id);
-    if (assigned) {
-      res.json({ success: true, message: 'Batch assigned to you' });
+    const result = await atomicAssign(batch_id, courier_id);
+    if (result.success) {
+      res.json({ success: true, message: 'تم تخصيص الدفعة لك' });
+    } else if (result.reason === 'no_active_work_session') {
+      res.status(403).json({ success: false, message: 'يجب بدء الدوام أولاً لتتمكن من قبول مهمة' });
+    } else if (result.reason === 'driver_has_active_batch' || result.reason === 'courier_unavailable') {
+      res.status(403).json({ success: false, message: 'أنت غير متاح حالياً أو لديك مهمة نشطة بالفعل' });
     } else {
-      res.status(409).json({ success: false, message: 'Batch already taken' });
+      res.status(409).json({ success: false, message: 'تم قبول هذه الدفعة من سائق آخر' });
     }
   } catch (err) {
     console.error('[Logistics] /accept error:', err);
-    res.status(500).json({ success: false, error: 'Assignment failed' });
+    res.status(500).json({ success: false, error: 'فشل تخصيص الدفعة' });
   }
 });
 

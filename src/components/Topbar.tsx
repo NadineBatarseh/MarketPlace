@@ -4,7 +4,6 @@ import './Topbar.css';
 import { useShop } from '../context/ShopContext';
 import { useMerchantAuth } from '../merchant-dashboard/context/MerchantAuthContext';
 import { useCustomerAuth } from '../context/CustomerAuthContext';
-import MerchantLoginModal from '../merchant-dashboard/components/MerchantLoginModal';
 import ChangePasswordModal from './ChangePasswordModal';
 import SearchInput from './SearchInput';
 import { fetchUnreadOrderNotifications } from '../lib/orderNotifications';
@@ -48,7 +47,6 @@ export default function Topbar({
   }, [customer, pathname]);
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [merchantModalOpen, setMerchantModalOpen] = useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -132,12 +130,6 @@ export default function Topbar({
     if (onSearchSubmit) { onSearchSubmit(q); return; }
     navigate(`/search?q=${encodeURIComponent(q)}`);
   }
-
-  const handleMerchantLoginSuccess = () => {
-    setMerchantModalOpen(false);
-    setDropdownOpen(false);
-    navigate('/merchant-dashboard');
-  };
 
   const handleLogout = async () => {
     if (merchant) merchantLogout();
@@ -304,10 +296,6 @@ export default function Topbar({
                   👤 إنشاء حساب
                 </button>
                 <button type="button" className="topbar-dropdown-item"
-                  onClick={() => { setMerchantModalOpen(true); setDropdownOpen(false); }}>
-                  🏪 تسجيل دخول كتاجر
-                </button>
-                <button type="button" className="topbar-dropdown-item"
                   onClick={() => { navigate('/merchant-application'); setDropdownOpen(false); }}>
                   🏪 تقديم طلب كتاجر
                 </button>
@@ -368,13 +356,6 @@ export default function Topbar({
           </div>
         </nav>
       </header>
-
-      {merchantModalOpen && (
-        <MerchantLoginModal
-          onClose={() => setMerchantModalOpen(false)}
-          onSuccess={handleMerchantLoginSuccess}
-        />
-      )}
 
       {changePasswordOpen && (
         <ChangePasswordModal onClose={() => setChangePasswordOpen(false)} />

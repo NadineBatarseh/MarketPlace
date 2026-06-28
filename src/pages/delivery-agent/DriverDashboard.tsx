@@ -16,6 +16,28 @@ interface DriverInfo {
   status: 'available' | 'on_route' | 'offline';
 }
 
+interface WorkSummary {
+  status: 'available' | 'on_route' | 'offline';
+  activeWorkSession: { id: string; startedAt: string } | null;
+  activeDeliverySession: { id: string; batchId: string; startedAt: string } | null;
+  totalDutyMinutesToday: number;
+  activeDeliveryMinutesToday: number;
+  availableWaitingMinutesToday: number;
+  completedBatchesToday: number;
+  activeBatch: { id: string; batchNumber: string; status: string; route: string[] } | null;
+}
+
+interface DayHistoryEntry {
+  date: string;
+  day: number;
+  weekday: string;
+  totalDutyMinutes: number;
+  activeDeliveryMinutes: number;
+  availableWaitingMinutes: number;
+  completedBatches: number;
+  worked: boolean;
+}
+
 interface BatchRow {
   id: string;
   batchNumber: string;
@@ -94,6 +116,26 @@ function isToday(iso: string): boolean {
   const d = new Date(iso);
   const n = new Date();
   return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+}
+
+// "2 ساعة و 15 دقيقة" / "45 دقيقة" — used for the "ملخص اليوم" stat cards.
+function formatMinutesLabel(totalMinutes: number): string {
+  const m = Math.max(0, Math.round(totalMinutes));
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  if (h === 0) return `${rem} دقيقة`;
+  if (rem === 0) return `${h} ساعة`;
+  return `${h} ساعة و ${rem} دقيقة`;
+}
+
+// "01:23:45" — used for the live ticking duty / delivery timers.
+function formatElapsed(startedAtIso: string, nowMs: number): string {
+  const totalSeconds = Math.max(0, Math.floor((nowMs - new Date(startedAtIso).getTime()) / 1000));
+  const h = Math.floor(totalSeconds / 3600);
+  const mm = Math.floor((totalSeconds % 3600) / 60);
+  const ss = totalSeconds % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(h)}:${pad(mm)}:${pad(ss)}`;
 }
 
 
@@ -185,8 +227,8 @@ export default function DriverDashboard() {
   const location = useLocation();
   const avatarRef = useRef<HTMLDivElement>(null);
 
-  const initialPage = (location.state as { page?: 'home' | 'inbox' | 'trips' | 'pickup_delivery' } | null)?.page ?? 'home';
-  const [currentPage, setCurrentPage]           = useState<'home' | 'inbox' | 'trips' | 'pickup_delivery'>(initialPage);
+  const initialPage = (location.state as { page?: 'home' | 'inbox' | 'trips' | 'pickup_delivery' | 'work_hours' } | null)?.page ?? 'home';
+  const [currentPage, setCurrentPage]           = useState<'home' | 'inbox' | 'trips' | 'pickup_delivery' | 'work_hours'>(initialPage);
   const [tripFilter, setTripFilter]             = useState('all');
   const [tripSortDir, setTripSortDir]           = useState<'desc' | 'asc'>('desc');
 
@@ -199,6 +241,18 @@ export default function DriverDashboard() {
   const [unreadMsgCount, setUnreadMsgCount]     = useState(0);
   const [driverInfo, setDriverInfo]             = useState<DriverInfo | null>(null);
   const [batches, setBatches]                   = useState<BatchRow[]>([]);
+
+  // Duty-time / mission-time tracking (حالة الدوام)
+  const [workSummary, setWorkSummary]           = useState<WorkSummary | null>(null);
+  const [dutyActionLoading, setDutyActionLoading] = useState(false);
+  const [nowMs, setNowMs]                       = useState(() => Date.now());
+
+  // سجل ساعات العمل (work-hours log — monthly history table)
+  const now0 = new Date();
+  const [workHistoryYear, setWorkHistoryYear]   = useState(now0.getFullYear());
+  const [workHistoryMonth, setWorkHistoryMonth] = useState(now0.getMonth() + 1);
+  const [workHistoryDays, setWorkHistoryDays]   = useState<DayHistoryEntry[]>([]);
+  const [workHistoryLoading, setWorkHistoryLoading] = useState(false);
 
   const [loading, setLoading]                   = useState(true);
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -259,7 +313,22 @@ export default function DriverDashboard() {
   useEffect(() => {
     if (!rawUser) return;
     fetchAll();
+    fetchWorkSummary();
   }, [rawUser?.id]);
+
+  // ── Poll the duty/mission-time summary so "ملخص اليوم" stays fresh ────────
+  useEffect(() => {
+    if (!rawUser?.id) return;
+    const id = setInterval(() => fetchWorkSummary(), 30_000);
+    return () => clearInterval(id);
+  }, [rawUser?.id]);
+
+  // ── Tick the clock for the live duty / delivery timers ───────────────────
+  useEffect(() => {
+    if (!workSummary || workSummary.status === 'offline') return;
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [workSummary?.status]);
 
   // ── Continuous real-time location tracking ────────────────────────────────
   useEffect(() => {
@@ -286,6 +355,26 @@ export default function DriverDashboard() {
     if (currentPage === 'pickup_delivery' && rawUser?.id) fetchPickupDelivery();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, rawUser?.id]);
+
+  // ── سجل ساعات العمل: load the selected month's daily history ───────────────
+  useEffect(() => {
+    if (currentPage === 'work_hours' && rawUser?.id) fetchWorkHistory(workHistoryYear, workHistoryMonth);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, rawUser?.id, workHistoryYear, workHistoryMonth]);
+
+  function goToPreviousMonth() {
+    setWorkHistoryMonth((m) => {
+      if (m === 1) { setWorkHistoryYear((y) => y - 1); return 12; }
+      return m - 1;
+    });
+  }
+
+  function goToNextMonth() {
+    setWorkHistoryMonth((m) => {
+      if (m === 12) { setWorkHistoryYear((y) => y + 1); return 1; }
+      return m + 1;
+    });
+  }
 
   async function fetchPickupDelivery(silent = false) {
     if (!silent) setPdLoading(true);
@@ -342,6 +431,79 @@ export default function DriverDashboard() {
     if (!silent) setLoading(false);
   }
 
+  async function fetchWorkSummary() {
+    if (!rawUser?.id) return;
+    try {
+      const res = await fetch(`/api/couriers/work-summary/today?courier_id=${encodeURIComponent(rawUser.id)}`);
+      const json = await res.json();
+      if (res.ok && json.success) {
+        const { success, ...summary } = json;
+        setWorkSummary(summary as WorkSummary);
+      }
+    } catch (err) {
+      console.error('[DriverDashboard] work-summary fetch failed:', err);
+    }
+  }
+
+  async function fetchWorkHistory(year: number, month: number) {
+    if (!rawUser?.id) return;
+    setWorkHistoryLoading(true);
+    try {
+      const res = await fetch(
+        `/api/couriers/work-summary/history?courier_id=${encodeURIComponent(rawUser.id)}&year=${year}&month=${month}`
+      );
+      const json = await res.json();
+      setWorkHistoryDays(res.ok && json.success ? (json.days as DayHistoryEntry[]) : []);
+    } catch (err) {
+      console.error('[DriverDashboard] work-history fetch failed:', err);
+      setWorkHistoryDays([]);
+    } finally {
+      setWorkHistoryLoading(false);
+    }
+  }
+
+  async function handleStartWork() {
+    if (!rawUser?.id) return;
+    setDutyActionLoading(true);
+    try {
+      const res = await fetch('/api/couriers/start-work', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ courier_id: rawUser.id }),
+      });
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success) {
+        await fetchAll(true);
+        await fetchWorkSummary();
+      } else {
+        showToast(json?.error ?? 'تعذر بدء الدوام');
+      }
+    } finally {
+      setDutyActionLoading(false);
+    }
+  }
+
+  async function handleEndWork() {
+    if (!rawUser?.id) return;
+    setDutyActionLoading(true);
+    try {
+      const res = await fetch('/api/couriers/end-work', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ courier_id: rawUser.id }),
+      });
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success) {
+        await fetchAll(true);
+        await fetchWorkSummary();
+      } else {
+        showToast(json?.error ?? 'تعذر إنهاء الدوام');
+      }
+    } finally {
+      setDutyActionLoading(false);
+    }
+  }
+
   async function handleStartBatch(batchId: string) {
     setActionLoading('start-' + batchId);
     try {
@@ -350,7 +512,13 @@ export default function DriverDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ batch_id: batchId, courier_id: rawUser!.id }),
       });
-      if (res.ok) await fetchAll(true);
+      const json = await res.json().catch(() => null);
+      if (res.ok && json?.success) {
+        await fetchAll(true);
+        await fetchWorkSummary();
+      } else {
+        showToast(json?.error ?? 'تعذر بدء المهمة');
+      }
     } finally {
       setActionLoading(null);
     }
@@ -378,7 +546,7 @@ export default function DriverDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ shipment_id: shipmentId, courier_id: rawUser!.id }),
       });
-      if (res.ok) { await fetchAll(true); await fetchPickupDelivery(true); }
+      if (res.ok) { await fetchAll(true); await fetchPickupDelivery(true); await fetchWorkSummary(); }
     } finally {
       setActionLoading(null);
     }
@@ -417,6 +585,7 @@ export default function DriverDashboard() {
       );
       await fetchAll(true);
       await fetchPickupDelivery(true);
+      await fetchWorkSummary();
     } finally {
       setBreakdownSubmitting(false);
     }
@@ -436,7 +605,19 @@ export default function DriverDashboard() {
 
   const shiftLabel  = '--:-- – --:--';
   const zoneLabel   = driverInfo?.home_base_zone ?? '—';
-  const dutyLabel   = driverInfo ? (driverInfo.status === 'available' ? 'في الخدمة' : 'خارج الخدمة') : '—';
+
+  // ── Duty status (حالة الدوام) ──────────────────────────────────────────────
+  const dutyStatus = driverInfo?.status ?? 'offline';
+  const DUTY_CONFIG: Record<DriverInfo['status'], { badge: string; color: string; bg: string; border: string; helper: string }> = {
+    offline:    { badge: 'خارج الدوام',        color: '#64748b', bg: '#f8fafc', border: '#cbd5e1', helper: 'ابدأ الدوام لتتمكن من استلام المهام.' },
+    available:  { badge: 'متاح لاستلام مهمة', color: '#15803d', bg: '#f0fdf4', border: '#86efac', helper: '' },
+    on_route:   { badge: 'في مهمة توصيل',     color: '#1d4ed8', bg: '#eff6ff', border: '#93c5fd', helper: 'أنهِ المهمة الحالية قبل قبول مهمة جديدة أو إنهاء الدوام.' },
+  };
+  const dutyConfig = DUTY_CONFIG[dutyStatus];
+  const dutyLabel  = dutyConfig.badge;
+
+  const staleWorkSession =
+    workSummary?.activeWorkSession != null && !isToday(workSummary.activeWorkSession.startedAt);
 
   // Current (in_transit) + not-yet-started (assigned) missions — shown as simple rows on the home page
   const activeBatches = batches
@@ -489,7 +670,7 @@ export default function DriverDashboard() {
 
         <div className="dd-topbar-actions">
           {/* Notification bell */}
-          <DriverNotificationBell />
+          <DriverNotificationBell driverStatus={driverInfo?.status ?? 'offline'} onBatchAccepted={() => { fetchAll(true); fetchWorkSummary(); }} />
 
           {/* Avatar dropdown */}
           <div className="dd-avatar-wrapper" ref={avatarRef}>
@@ -596,6 +777,21 @@ export default function DriverDashboard() {
               onClick={() => setCurrentPage('pickup_delivery')}
             />
 
+            <SidebarItem
+              icon={
+                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="4" width="18" height="18" rx="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                  <path d="M9 16l2-2 2 2 3-3" />
+                </svg>
+              }
+              label="سجل ساعات العمل"
+              active={currentPage === 'work_hours'}
+              onClick={() => setCurrentPage('work_hours')}
+            />
+
             <div className="dd-sidebar-divider" />
 
             <SidebarItem
@@ -617,7 +813,7 @@ export default function DriverDashboard() {
               <div className="dd-sidebar-user-info">
                 <div className="dd-sidebar-user-name">{name ?? 'السائق'}</div>
                 <div className="dd-sidebar-user-role">
-                  <span className={`dd-duty-dot${driverInfo?.status === 'available' ? '' : ' dd-duty-dot-off'}`} />
+                  <span className={`dd-duty-dot${dutyStatus === 'on_route' ? ' dd-duty-dot-busy' : dutyStatus === 'offline' ? ' dd-duty-dot-off' : ''}`} />
                   {dutyLabel}
                 </div>
               </div>
@@ -922,6 +1118,66 @@ export default function DriverDashboard() {
             </div>
           )}
 
+          {/* ── سجل ساعات العمل (work-hours log) ── */}
+          {currentPage === 'work_hours' && (
+            <div className="dd-orders-section">
+              <div className="dd-orders-header">
+                <h2 className="dd-orders-title">سجل ساعات العمل</h2>
+              </div>
+
+              <div className="dd-month-nav">
+                <button type="button" className="dd-month-nav-btn" onClick={goToPreviousMonth} aria-label="الشهر السابق">
+                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </button>
+                <span className="dd-month-nav-label">
+                  {new Date(workHistoryYear, workHistoryMonth - 1, 1).toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' })}
+                </span>
+                <button type="button" className="dd-month-nav-btn" onClick={goToNextMonth} aria-label="الشهر التالي">
+                  <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                    <polyline points="15 18 9 12 15 6" />
+                  </svg>
+                </button>
+              </div>
+
+              {workHistoryLoading ? (
+                <div className="dd-orders-empty">جاري تحميل سجل ساعات العمل...</div>
+              ) : (
+                <div className="dd-table-wrap">
+                  <table className="dd-table">
+                    <thead>
+                      <tr>
+                        <th>التاريخ</th>
+                        <th>إجمالي وقت الدوام</th>
+                        <th>وقت التوصيل الفعلي</th>
+                        <th>وقت الانتظار</th>
+                        <th>عدد المهام المكتملة</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {workHistoryDays.map((d) => {
+                        const isToday =
+                          workHistoryYear === now0.getFullYear() &&
+                          workHistoryMonth === now0.getMonth() + 1 &&
+                          d.day === now0.getDate();
+                        return (
+                          <tr key={d.date} className={isToday ? 'dd-history-row-today' : undefined}>
+                            <td className="dd-td-id">{d.day} {d.weekday}</td>
+                            <td>{d.worked ? formatMinutesLabel(d.totalDutyMinutes) : '—'}</td>
+                            <td>{d.worked ? formatMinutesLabel(d.activeDeliveryMinutes) : '—'}</td>
+                            <td>{d.worked ? formatMinutesLabel(d.availableWaitingMinutes) : '—'}</td>
+                            <td>{d.worked ? d.completedBatches.toLocaleString('ar-EG') : '—'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
           {currentPage === 'home' && <>
 
           {/* ── Shift info banner ── */}
@@ -938,6 +1194,66 @@ export default function DriverDashboard() {
               </svg>
               المنطقة: {zoneLabel}
             </div>
+          </div>
+
+          {/* ── حالة الدوام ── */}
+          <div className="dd-duty-card" style={{ background: dutyConfig.bg, borderColor: dutyConfig.border }}>
+            <div className="dd-duty-card-top">
+              <span className="dd-duty-card-badge" style={{ color: dutyConfig.color, borderColor: dutyConfig.border }}>
+                <span className={`dd-duty-dot${dutyStatus === 'on_route' ? ' dd-duty-dot-busy' : dutyStatus === 'offline' ? ' dd-duty-dot-off' : ''}`} />
+                {dutyConfig.badge}
+              </span>
+
+              {dutyStatus === 'offline' && (
+                <button
+                  type="button"
+                  className="dd-duty-toggle-btn dd-duty-toggle-start"
+                  disabled={dutyActionLoading}
+                  onClick={handleStartWork}
+                >
+                  {dutyActionLoading ? <span className="dd-mission-spinner dd-mission-spinner-sm" /> : null}
+                  بدء الدوام
+                </button>
+              )}
+              {dutyStatus === 'available' && (
+                <button
+                  type="button"
+                  className="dd-duty-toggle-btn dd-duty-toggle-stop"
+                  disabled={dutyActionLoading}
+                  onClick={handleEndWork}
+                >
+                  {dutyActionLoading ? <span className="dd-mission-spinner dd-mission-spinner-sm" /> : null}
+                  إنهاء الدوام
+                </button>
+              )}
+              {dutyStatus === 'on_route' && (
+                <button type="button" className="dd-duty-toggle-btn dd-duty-toggle-busy" disabled>
+                  إنهاء الدوام
+                </button>
+              )}
+            </div>
+
+            {dutyConfig.helper && <p className="dd-duty-card-helper">{dutyConfig.helper}</p>}
+
+            {dutyStatus !== 'offline' && workSummary?.activeWorkSession && (
+              <div className="dd-duty-card-timer">
+                <span className="dd-duty-card-timer-label">مدة الدوام الحالية</span>
+                <span className="dd-duty-card-timer-value">{formatElapsed(workSummary.activeWorkSession.startedAt, nowMs)}</span>
+              </div>
+            )}
+
+            {dutyStatus === 'on_route' && workSummary?.activeDeliverySession && (
+              <div className="dd-duty-card-timer">
+                <span className="dd-duty-card-timer-label">مدة التوصيل الحالية</span>
+                <span className="dd-duty-card-timer-value">{formatElapsed(workSummary.activeDeliverySession.startedAt, nowMs)}</span>
+              </div>
+            )}
+
+            {staleWorkSession && (
+              <div className="dd-duty-card-warning">
+                يوجد دوام مفتوح منذ يوم سابق، يرجى إنهاؤه أو التواصل مع الإدارة.
+              </div>
+            )}
           </div>
 
           {/* ── Stats Cards ── */}

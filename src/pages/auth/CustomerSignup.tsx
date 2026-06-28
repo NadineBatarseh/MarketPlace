@@ -70,7 +70,7 @@ export default function CustomerSignup() {
   return (
     <div className="auth-page" dir="rtl">
       <div className="auth-card">
-        <div className="auth-logo">🛍️</div>
+        <img src="/logo.png" alt="سوق لينك" className="auth-logo auth-logo-img" />
         <h1 className="auth-title">إنشاء حساب عميل</h1>
         <p className="auth-sub">انضم إلى سوق لينك وابدأ التسوق</p>
 

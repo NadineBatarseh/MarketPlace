@@ -258,6 +258,20 @@ export default function BatchMonitorPage() {
     setAssigning(prev => new Set(prev).add(batchId));
     setAssignMsg(prev => ({ ...prev, [batchId]: '' }));
 
+    // Atomically claim the courier first — guards against double-booking a busy/offline driver.
+    const { data: courierLock } = await supabase
+      .from('couriers')
+      .update({ status: 'on_route' })
+      .eq('id', courierId)
+      .eq('status', 'available')
+      .select('id');
+
+    if (!courierLock?.length) {
+      setAssignMsg(prev => ({ ...prev, [batchId]: '✗ السائق غير متاح أو لديه دفعة نشطة' }));
+      setAssigning(prev => { const next = new Set(prev); next.delete(batchId); return next; });
+      return;
+    }
+
     const { data, error: updateErr } = await supabase
       .from('batches')
       .update({
@@ -271,6 +285,7 @@ export default function BatchMonitorPage() {
       .select('id');
 
     if (updateErr || !data?.length) {
+      await supabase.from('couriers').update({ status: 'available' }).eq('id', courierId).eq('status', 'on_route');
       setAssignMsg(prev => ({ ...prev, [batchId]: '✗ فشل التعيين، ربما تم تعيينه مسبقاً' }));
     } else {
       await supabase.from('driver_notifications').insert({

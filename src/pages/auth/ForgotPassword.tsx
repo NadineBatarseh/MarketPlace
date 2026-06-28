@@ -81,7 +81,7 @@ export default function ForgotPassword() {
   return (
     <div className="auth-page" dir="rtl">
       <div className="auth-card">
-        <div className="auth-logo">🔑</div>
+        <img src="/logo.png" alt="سوق لينك" className="auth-logo auth-logo-img" />
         <h1 className="auth-title">نسيت كلمة المرور؟</h1>
         <p className="auth-sub">أدخل بريدك الإلكتروني وسنرسل لك رابط الاستعادة</p>
 

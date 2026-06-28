@@ -72,7 +72,7 @@ export default function Login() {
   return (
     <div className="auth-page" dir="rtl">
       <div className="auth-card">
-        <div className="auth-logo">🛒</div>
+        <img src="/logo.png" alt="سوق لينك" className="auth-logo auth-logo-img" />
         <h1 className="auth-title">تسجيل الدخول</h1>
         <p className="auth-sub">مرحباً بك في سوق لينك</p>
 
