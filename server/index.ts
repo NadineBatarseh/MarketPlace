@@ -26,6 +26,7 @@ import ordersRouter from "./routes/ordersRouter.js";
 import profileRouter from "./routes/profileRouter.js";
 import customerTrackingEventsRouter from "./routes/customerTrackingEventsRouter.js";
 import adminDeliveryIssuesRouter from "./routes/adminDeliveryIssuesRouter.js";
+import adminBatchesRouter from "./routes/adminBatchesRouter.js";
 import { requireAdmin } from "./middleware/requireAdmin.js";
 import { logisticsRouter, bootstrapLogistics } from "./logistics/index.js";
 
@@ -550,6 +551,9 @@ app.use('/api/tracking-events', customerTrackingEventsRouter);
 
 /* ---------- ADMIN: DELIVERY ISSUES (delay-report review queue) ---------- */
 app.use('/api/admin/delivery-issues', adminDeliveryIssuesRouter);
+
+/* ---------- ADMIN: BATCH MANAGEMENT (move/remove shipments, breakdowns, delays, audit log) ---------- */
+app.use('/api/admin/batches', adminBatchesRouter);
 
 /* ---------- PAYTABS PAYMENTS (Hosted Payment Page — Test Mode) ---------- */
 app.use('/api/payments/paytabs', paytabsRouter);

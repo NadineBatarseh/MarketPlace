@@ -76,10 +76,12 @@ logisticsRouter.post('/cycle', async (_req: Request, res: Response) => {
 });
 
 // â”€â”€ POST /api/logistics/breakdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Courier reports a vehicle breakdown
-// Body: { batch_id: string }
+// Courier reports a vehicle breakdown. `reason` is an optional free-text note from
+// the driver; the courier's live GPS (couriers.location) is captured server-side
+// as the reported location, so the driver app doesn't need to send coordinates.
+// Body: { batch_id: string, reason?: string }
 logisticsRouter.post('/breakdown', async (req: Request, res: Response) => {
-  const { batch_id } = req.body as { batch_id: string };
+  const { batch_id, reason } = req.body as { batch_id: string; reason?: string };
 
   if (!batch_id) {
     res.status(400).json({ success: false, error: 'batch_id is required' });
@@ -87,7 +89,15 @@ logisticsRouter.post('/breakdown', async (req: Request, res: Response) => {
   }
 
   try {
-    const result = await handleBreakdown(batch_id);
+    const { data: batch } = await supabase
+      .from('batches')
+      .select('couriers!assigned_to(location)')
+      .eq('id', batch_id)
+      .maybeSingle();
+    const loc = (batch as any)?.couriers?.location;
+    const location = loc?.lat != null && loc?.lng != null ? { lat: loc.lat, lng: loc.lng } : null;
+
+    const result = await handleBreakdown(batch_id, { reason: reason?.trim() || null, location });
     res.json({ success: true, ...result });
   } catch (err) {
     console.error('[Logistics] /breakdown error:', err);
@@ -321,7 +331,7 @@ logisticsRouter.post('/deliver-shipment', async (req: Request, res: Response) =>
     .neq('status', 'delivered');
 
   if (count === 0) {
-    await supabase.from('batches').update({ status: 'completed' }).eq('id', batch.id);
+    await supabase.from('batches').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', batch.id);
   }
 
   void insertDriverTrackingEvent(shipment_id, shipment.order_detail_id as number | null, 'driver_delivered');
