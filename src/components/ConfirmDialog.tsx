@@ -10,6 +10,8 @@ interface Props {
   confirmColor?: string;
   /** When true, shows "يمكن التراجع عن هذا الإجراء لاحقاً" instead of the irreversible note. */
   reversible?: boolean;
+  /** When true, hides the reversibility note entirely (neither variant is shown). */
+  hideReversibilityNote?: boolean;
   loading?: boolean;
   error?: string;
   onConfirm: () => void;
@@ -25,6 +27,7 @@ export default function ConfirmDialog({
   icon = '🗑️',
   confirmColor = '#DC2626',
   reversible = false,
+  hideReversibilityNote = false,
   loading = false,
   error,
   onConfirm,
@@ -87,11 +90,13 @@ export default function ConfirmDialog({
         )}
 
         {/* Reversibility note */}
-        <p style={{ margin: '0 0 20px', fontSize: 11, color: '#94A3B8' }}>
-          {reversible
-            ? 'يمكن التراجع عن هذا الإجراء لاحقاً.'
-            : 'هذا الإجراء لا يمكن التراجع عنه.'}
-        </p>
+        {!hideReversibilityNote && (
+          <p style={{ margin: '0 0 20px', fontSize: 11, color: '#94A3B8' }}>
+            {reversible
+              ? 'يمكن التراجع عن هذا الإجراء لاحقاً.'
+              : 'هذا الإجراء لا يمكن التراجع عنه.'}
+          </p>
+        )}
 
         {/* API error */}
         {error && (

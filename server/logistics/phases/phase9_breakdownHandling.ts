@@ -7,11 +7,20 @@ interface BreakdownResult {
   stranded: string[];
 }
 
+interface BreakdownReport {
+  reason?: string | null;
+  location?: { lat: number; lng: number } | null;
+}
+
 // Phase 9 â€” Breakdown Handling
 // When a courier reports a breakdown, shipments are split by physical custody:
 //   batched / reserved â†’ re-pool as 'available' (still at origin, not yet collected)
 //   picked_up          â†’ mark as 'stranded' (physically in the vehicle)
-export async function handleBreakdown(batchId: string): Promise<BreakdownResult> {
+//
+// Also records WHEN/WHY/WHERE on the batch row (breakdown_reported_at/reason/location)
+// so the admin "Breakdowns and Required Interventions" view (server/routes/adminBatchesRouter.ts)
+// can surface it — this is the only breakdown workflow; the admin view reads these same fields.
+export async function handleBreakdown(batchId: string, report: BreakdownReport = {}): Promise<BreakdownResult> {
   const { data: shipments, error } = await supabase
     .from('shipments')
     .select('id, status')
@@ -65,10 +74,16 @@ export async function handleBreakdown(batchId: string): Promise<BreakdownResult>
     );
   }
 
-  // Mark the batch as cancelled and recover its assigned courier
+  // Mark the batch as cancelled and record the breakdown report details
   const { data: cancelledBatch } = await supabase
     .from('batches')
-    .update({ status: 'cancelled' })
+    .update({
+      status: 'cancelled',
+      breakdown_reported_at: new Date().toISOString(),
+      breakdown_reason: report.reason ?? null,
+      breakdown_location: report.location ?? null,
+      requires_manual_intervention: alreadyCollected.length > 0,
+    })
     .eq('id', batchId)
     .select('assigned_to')
     .maybeSingle();

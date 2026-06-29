@@ -262,6 +262,7 @@ export default function DriverDashboard() {
 
   // Vehicle-breakdown report (confirm dialog + result toast)
   const [showBreakdownConfirm, setShowBreakdownConfirm] = useState(false);
+  const [breakdownReason, setBreakdownReason]           = useState('');
   const [breakdownSubmitting, setBreakdownSubmitting]   = useState(false);
   const [toast, setToast]                               = useState<string | null>(null);
   const toastTimer                                      = useRef<ReturnType<typeof setTimeout>>();
@@ -573,11 +574,12 @@ export default function DriverDashboard() {
           fetch('/api/logistics/breakdown', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ batch_id: id }),
+            body: JSON.stringify({ batch_id: id, reason: breakdownReason.trim() || undefined }),
           }),
         ),
       );
       setShowBreakdownConfirm(false);
+      setBreakdownReason('');
       showToast(
         results.every((r) => r.ok)
           ? 'تم الإبلاغ عن العطل. سيتولّى فريق الدعم متابعة الشحنات قيد المعالجة.'
@@ -1399,13 +1401,28 @@ export default function DriverDashboard() {
         <ConfirmDialog
           icon="⚠️"
           title="الإبلاغ عن عطل"
-          message="هل أنت متأكد من الإبلاغ عن عطل في مركبتك؟ سيتم إلغاء جميع دفعاتك قيد التوصيل."
+          message={
+            <>
+              هل أنت متأكد من الإبلاغ عن عطل في مركبتك؟ سيتم إلغاء جميع دفعاتك قيد التوصيل.
+              <textarea
+                value={breakdownReason}
+                onChange={(e) => setBreakdownReason(e.target.value)}
+                placeholder="وصف العطل (اختياري)"
+                rows={3}
+                style={{
+                  width: '100%', marginTop: 10, padding: '8px 10px', borderRadius: 8,
+                  border: '1.5px solid #E2E8F0', fontFamily: 'inherit', fontSize: 12,
+                  resize: 'vertical', direction: 'rtl', boxSizing: 'border-box',
+                }}
+              />
+            </>
+          }
           warning="ستُعاد الشحنات غير المُستلمة إلى المخزون، وتوضع الشحنات المُستلمة قيد المعالجة اليدوية من قبل فريق الدعم."
           confirmLabel="نعم، الإبلاغ عن عطل"
           cancelLabel="تراجع"
           loading={breakdownSubmitting}
           onConfirm={confirmBreakdown}
-          onCancel={() => setShowBreakdownConfirm(false)}
+          onCancel={() => { setShowBreakdownConfirm(false); setBreakdownReason(''); }}
         />
       )}
 
