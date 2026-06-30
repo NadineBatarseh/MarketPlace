@@ -280,7 +280,8 @@ export async function handleInstagramTool(
         };
       }
 
-      const products = await extractProductsFromPosts(newPosts, storeCategory);
+      const productType = (args.product_type as string | undefined)?.trim() || undefined;
+      const products = await extractProductsFromPosts(newPosts, storeCategory, productType);
 
       if (products.length === 0) {
         return { success: true, count: 0, message: 'لم يتم العثور على منتجات في آخر المنشورات.' };

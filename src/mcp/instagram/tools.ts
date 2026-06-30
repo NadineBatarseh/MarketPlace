@@ -228,6 +228,10 @@ export const INSTAGRAM_TOOLS: Tool[] = [
           type: "string",
           description: "Instagram Business Account ID. Auto-detected if not provided.",
         },
+        product_type: {
+          type: "string",
+          description: "Optional: specific product type or material to filter for (e.g. 'تيشيرتات', 'فساتين', 'أحذية', 'قطن', 't-shirts', 'dresses', 'shoes'). When provided, only posts that match this specific type or material will be imported — everything else is skipped. Works for any language, material, or category.",
+        },
       },
       required: ["shop_id"],
     },

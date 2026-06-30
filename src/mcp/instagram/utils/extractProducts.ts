@@ -104,13 +104,22 @@ async function fetchImageAsBase64(url: string): Promise<{ data: string; mediaTyp
 async function runVisionOnPost(
   post: MediaItem,
   storeCategory: string,
-  client: Anthropic
+  client: Anthropic,
+  productType?: string
 ): Promise<InstagramProductRecord | null> {
   const imageUrl = getPostFirstImage(post);
   if (!imageUrl) return null;
 
   const imageData = await fetchImageAsBase64(imageUrl);
   if (!imageData) return null;
+
+  const filterLine = productType
+    ? `The merchant wants ONLY products of this specific type or material: "${productType}". Ignore everything else.`
+    : `The store category is: "${storeCategory}".`;
+
+  const matchRule = productType
+    ? `- "matches_store_type": true only if the product visually IS a "${productType}" — be strict, do not include loosely related items`
+    : `- "matches_store_type": true only if the product visually fits the category "${storeCategory}"`;
 
   let message;
   try {
@@ -132,9 +141,9 @@ async function runVisionOnPost(
             {
               type: 'text',
               text: `You are a product catalog extraction assistant for an e-commerce marketplace.
-The store category is: "${storeCategory}".
+${filterLine}
 
-Analyze this Instagram post image. Determine if it shows a product for sale that matches the store category.
+Analyze this Instagram post image. Determine if it shows a product for sale that matches the filter.
 Also look for any text, price tags, or labels visible inside the image itself.
 
 Respond with a JSON object only (no markdown, no code blocks):
@@ -149,7 +158,7 @@ Respond with a JSON object only (no markdown, no code blocks):
 
 Rules:
 - "is_product": true only if the image clearly shows a specific product being sold
-- "matches_store_type": true only if the product visually fits the category "${storeCategory}"
+${matchRule}
 - If either flag is false, set title/description/price/stock_quantity all to null
 - "price": a plain number if visible anywhere in the image, otherwise null
 - "stock_quantity": null unless explicitly shown in the image`,
@@ -184,7 +193,8 @@ Rules:
 
 export async function extractProductsFromPosts(
   posts: MediaItem[],
-  storeCategory?: string
+  storeCategory?: string,
+  productType?: string
 ): Promise<InstagramProductRecord[]> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY is not set');
@@ -199,16 +209,23 @@ export async function extractProductsFromPosts(
 
   // ── Stage 1: Text analysis ──────────────────────────────────────────────────
   if (captionPosts.length > 0) {
-    const storeLine = storeCategory
-      ? `The store category is: "${storeCategory}". Only products that match this category should be imported.`
-      : '';
+    // product_type takes priority over storeCategory for the filter instruction
+    const filterLine = productType
+      ? `The merchant wants ONLY products of this specific type or material: "${productType}". Ignore any post that does not match this — even if it's a valid product in the store category.`
+      : storeCategory
+        ? `The store category is: "${storeCategory}". Only products that match this category should be imported.`
+        : '';
+
+    const matchRule = productType
+      ? `- "matches_store_type": true ONLY if the product IS a "${productType}" (use semantic understanding — e.g. "قميص" and "تيشيرت" both match "t-shirts"). Be strict: do not include loosely related items`
+      : `- "matches_store_type": true if the product fits the store category${storeCategory ? ` "${storeCategory}"` : ' — set true when no category is defined'}`;
 
     const prompt = `You are a product catalog extraction assistant for an e-commerce marketplace.
-${storeLine}
+${filterLine}
 
 Given a list of Instagram post captions (may include hashtags), determine for each post:
 1. Whether the text clearly identifies a specific product being sold ("text_sufficient")
-2. Whether that product matches the store category
+2. Whether that product matches the filter
 3. Extract product details from the text
 
 Respond with a JSON array only (no markdown, no code blocks) — one object per post, in the same order:
@@ -235,7 +252,7 @@ Rules for "text_sufficient":
 
 Rules for other fields:
 - "is_product": true only if the post is clearly selling a specific product
-- "matches_store_type": true if the product fits the store category${storeCategory ? ` "${storeCategory}"` : ' — set true when no category is defined'}
+${matchRule}
 - When "text_sufficient" is false, set is_product/matches_store_type/title/description/price/stock_quantity all to their null/false defaults
 - "title": product name only — short, no hashtags, no emojis
 - "description": features, material, size, colour from the caption
@@ -283,9 +300,11 @@ ${JSON.stringify(captionPosts.map((p, i) => ({ index: i, caption: p.caption })),
 
   // ── Stage 2: Vision fallback ────────────────────────────────────────────────
   // Runs for: (a) posts with no caption, (b) posts whose caption was too vague
-  if (visionQueue.length > 0 && storeCategory) {
+  // Requires either a productType or storeCategory to have a meaningful filter
+  const visionFilter = productType ?? storeCategory;
+  if (visionQueue.length > 0 && visionFilter) {
     const visionResults = await Promise.all(
-      visionQueue.map((post) => runVisionOnPost(post, storeCategory, client))
+      visionQueue.map((post) => runVisionOnPost(post, visionFilter, client, productType))
     );
     for (const record of visionResults) {
       if (record) products.push(record);
