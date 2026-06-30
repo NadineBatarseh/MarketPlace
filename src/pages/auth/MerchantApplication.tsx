@@ -4,6 +4,7 @@ import supabase from '../../lib/supabase';
 import { validateIsraeliId } from '../../utils/validateIsraeliId';
 import { useFieldHint } from './useFieldHint';
 import { useRecaptcha } from '../../hooks/useRecaptcha';
+import { sendMerchantApplicationEmail } from '../../lib/confirmationEmails';
 import './Auth.css';
 
 const MAX_IMAGES = 8;
@@ -272,8 +273,15 @@ export default function MerchantApplication() {
       return;
     }
 
-    if (data?.id) setSubmissionId(String(data.id).slice(0, 8).toUpperCase());
+    const sid = data?.id ? String(data.id).slice(0, 8).toUpperCase() : '';
+    if (sid) setSubmissionId(sid);
     previewUrls.forEach(url => URL.revokeObjectURL(url));
+    sendMerchantApplicationEmail({
+      toEmail:       form.email,
+      applicantName: form.name_of_owner,
+      storeName:     form.name_of_store,
+      submissionId:  sid,
+    }).catch(console.error);
     setSubmitted(true);
   };
 

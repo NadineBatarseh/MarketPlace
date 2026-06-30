@@ -4,6 +4,7 @@ import supabase from '../../lib/supabase';
 import { validateIsraeliId } from '../../utils/validateIsraeliId';
 import { useFieldHint } from './useFieldHint';
 import { useRecaptcha } from '../../hooks/useRecaptcha';
+import { sendDeliveryApplicationEmail } from '../../lib/confirmationEmails';
 import './Auth.css';
 
 const MAX_DOC_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -192,7 +193,15 @@ export default function DeliveryApplication() {
       return;
     }
 
-    if (data?.id) setSubmissionId(String(data.id).slice(0, 8).toUpperCase());
+    const sid = data?.id ? String(data.id).slice(0, 8).toUpperCase() : '';
+    if (sid) setSubmissionId(sid);
+    const vehicleLabel = VEHICLE_OPTIONS.find(v => v.value === form.vehicleType)?.label ?? form.vehicleType;
+    sendDeliveryApplicationEmail({
+      toEmail:       form.email,
+      applicantName: form.fullName,
+      vehicleType:   vehicleLabel,
+      submissionId:  sid,
+    }).catch(console.error);
     setSubmitted(true);
   };
 

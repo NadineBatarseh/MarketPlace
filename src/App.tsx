@@ -34,8 +34,6 @@ import { CustomerAuthProvider } from "./context/CustomerAuthContext";
 import { MerchantAuthProvider } from "./merchant-dashboard/context/MerchantAuthContext";
 import { AuthProvider } from "./context/AuthContext";
 import MerchantDashboard from "./merchant-dashboard/MerchantDashboard";
-// @ts-ignore
-import ChatBot from "./components/chatbot/ChatBot";
 import AdminDashboard from "./merchant-dashboard/pages/AdminDashboard";
 import Footer from "./components/Footer";
 import { useMerchantAuth } from './merchant-dashboard/context/MerchantAuthContext';
@@ -76,7 +74,6 @@ export default function App() {
         <ShopProviderWithAuth>
           <BrowserRouter>
             <TopLoadingBar />
-            <ChatBot />
             <Routes>
               {/* Landing → redirect to role home */}
               <Route path="/" element={<RootRedirect />} />

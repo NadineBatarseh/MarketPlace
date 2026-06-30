@@ -244,6 +244,10 @@ export default function CheckoutPage() {
         'paytabs_pending_item_ids',
         JSON.stringify(activeItems.map(item => item.id)),
       );
+      localStorage.setItem('paytabs_pending_email', contact.email);
+      localStorage.setItem('paytabs_pending_name', `${contact.firstName} ${contact.lastName}`);
+      localStorage.setItem('paytabs_pending_total', String(total));
+      localStorage.setItem('paytabs_pending_address', formData.formattedAddress || formData.deliveryDescription);
       await profileSave; // let the parallel profile save settle before leaving
       window.location.href = json.redirect_url; // → PayTabs Hosted Payment Page
     } catch (e: unknown) {

@@ -4,6 +4,7 @@ import supabase from '../../lib/supabase';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import { useShop } from '../../context/ShopContext';
 import Topbar from '../../components/Topbar';
+import { sendOrderConfirmationEmail } from '../../lib/confirmationEmails';
 import './PaytabsReturnPage.css';
 
 /**
@@ -71,6 +72,17 @@ export default function PaytabsReturnPage() {
             if (Array.isArray(ids) && ids.length > 0) removeItemsFromCart(ids);
           } catch { /* ignore malformed stash */ }
           localStorage.removeItem('paytabs_pending_item_ids');
+
+          const toEmail        = localStorage.getItem('paytabs_pending_email')   ?? customer.email ?? '';
+          const customerName   = localStorage.getItem('paytabs_pending_name')    ?? '';
+          const totalPrice     = localStorage.getItem('paytabs_pending_total')   ?? '';
+          const deliveryAddress = localStorage.getItem('paytabs_pending_address') ?? '';
+          localStorage.removeItem('paytabs_pending_email');
+          localStorage.removeItem('paytabs_pending_name');
+          localStorage.removeItem('paytabs_pending_total');
+          localStorage.removeItem('paytabs_pending_address');
+          sendOrderConfirmationEmail({ toEmail, customerName, orderId: oid, totalPrice, deliveryAddress }).catch(console.error);
+
           setView('paid');
         } else if (json.payment_status === 'failed') {
           setView('failed');
