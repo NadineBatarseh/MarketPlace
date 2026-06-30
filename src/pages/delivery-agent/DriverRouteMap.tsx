@@ -508,13 +508,14 @@ export default function DriverRouteMap() {
   async function handleBreakdown() {
     if (batchList.length === 0) return;
     if (!window.confirm('هل أنت متأكد من الإبلاغ عن عطل؟ سيتم إلغاء الدفعات الجارية، وإعادة الشحنات غير المُستلمة إلى المخزون، ووضع الشحنات المُستلمة قيد المعالجة اليدوية.')) return;
+    const reason = window.prompt('وصف العطل (اختياري):', '') ?? undefined;
     setActionLoading('breakdown');
     try {
       for (const b of batchList) {
         await fetch('/api/logistics/breakdown', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ batch_id: b.id }),
+          body: JSON.stringify({ batch_id: b.id, reason: reason?.trim() || undefined }),
         });
       }
       setStops([]); setOrderedStops([]); setSolver(null); setBatchList([]);

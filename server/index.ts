@@ -28,6 +28,7 @@ import customerTrackingEventsRouter from "./routes/customerTrackingEventsRouter.
 import adminDeliveryIssuesRouter from "./routes/adminDeliveryIssuesRouter.js";
 import courierWorkSessionsRouter from "./routes/courierWorkSessionsRouter.js";
 import adminCourierStatsRouter from "./routes/adminCourierStatsRouter.js";
+import adminBatchesRouter from "./routes/adminBatchesRouter.js";
 import { requireAdmin } from "./middleware/requireAdmin.js";
 import { logisticsRouter, bootstrapLogistics } from "./logistics/index.js";
 
@@ -559,6 +560,9 @@ app.use('/api/couriers', courierWorkSessionsRouter);
 /* ---------- ADMIN: COURIER PERFORMANCE INDICATOR (operational monitoring only) ---------- */
 app.use('/api/admin/couriers', adminCourierStatsRouter);
 
+/* ---------- ADMIN: BATCH MANAGEMENT (move/remove shipments, breakdowns, delays, audit log) ---------- */
+app.use('/api/admin/batches', adminBatchesRouter);
+
 /* ---------- PAYTABS PAYMENTS (Hosted Payment Page — Test Mode) ---------- */
 app.use('/api/payments/paytabs', paytabsRouter);
 
@@ -773,19 +777,19 @@ app.get("/api/stores/:id/products", async (req: Request, res: Response) => {
 
   // Map sort option to Supabase order args
   const sortMap: Record<string, { column: string; ascending: boolean }> = {
-    default:      { column: "updated_at", ascending: false },
-    newest:       { column: "created_at", ascending: false },
-    price_asc:    { column: "price",      ascending: true  },
-    price_desc:   { column: "price",      ascending: false },
-    rating:       { column: "avg_rating", ascending: false },
+    default: { column: "updated_at", ascending: false },
+    newest: { column: "created_at", ascending: false },
+    price_asc: { column: "price", ascending: true },
+    price_desc: { column: "price", ascending: false },
+    rating: { column: "avg_rating", ascending: false },
     best_selling: { column: "total_sold", ascending: false },
   };
   const { column: orderCol, ascending } = sortMap[sort] ?? sortMap["default"];
 
   const table =
-    sort === "rating"       ? "products_with_avg_rating" :
-    sort === "best_selling" ? "products_with_sales"      :
-    "products";
+    sort === "rating" ? "products_with_avg_rating" :
+      sort === "best_selling" ? "products_with_sales" :
+        "products";
 
   // Fetch products + total count in parallel
   const [{ data: products, error: prodErr }, { count, error: countErr }] =
@@ -1119,12 +1123,12 @@ app.get("/api/admin/shop-owners", requireAdmin, async (req: Request, res: Respon
 
   for (const m of merchantRows ?? []) {
     owners[m.id] = {
-      user_id:      m.user_id      ?? null,
-      owner_name:   m.owner_name   ?? null,
+      user_id: m.user_id ?? null,
+      owner_name: m.owner_name ?? null,
       phone_number: m.phone_number ? String(m.phone_number) : null,
-      owner_email:  m.owner_email  ?? null,
+      owner_email: m.owner_email ?? null,
       id_front_url: m.id_front_url ?? null,
-      id_back_url:  m.id_back_url  ?? null,
+      id_back_url: m.id_back_url ?? null,
     };
   }
 
@@ -1137,7 +1141,7 @@ app.get("/api/admin/shop-owners", requireAdmin, async (req: Request, res: Respon
 
     for (const m of merchantRows ?? []) {
       if (!owners[m.id].owner_name && m.user_id && userMap[m.user_id]) {
-        owners[m.id].owner_name  = userMap[m.user_id].name;
+        owners[m.id].owner_name = userMap[m.user_id].name;
         owners[m.id].owner_email = owners[m.id].owner_email ?? userMap[m.user_id].email;
       }
     }
