@@ -5,7 +5,6 @@ import supabase from '../../lib/supabase';
 interface Stats {
   unpaidTotal: number;
   accountBalance: number;
-  visitors: number;
   newOrders: number;
 }
 
@@ -26,7 +25,7 @@ const fmt = (id: number) => `ORD-${String(id).padStart(3, '0')}`;
 
 export default function MerchantHome({ onNavigate }: { onNavigate?: (page: string, highlight?: boolean) => void }) {
   const { merchant } = useMerchantAuth();
-  const [stats, setStats] = useState<Stats>({ unpaidTotal: 0, accountBalance: 0, visitors: 0, newOrders: 0 });
+  const [stats, setStats] = useState<Stats>({ unpaidTotal: 0, accountBalance: 0, newOrders: 0 });
   const [orders, setOrders] = useState<RecentOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -43,11 +42,6 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
     setLoading(true);
     setError('');
     try {
-      const { count: visitorCount } = await supabase
-        .from('Store_visitors')
-        .select('*', { count: 'exact', head: true })
-        .eq('store_id', shopId);
-
       const { data: detailRows } = await supabase
         .from('order_details')
         .select('order_id')
@@ -87,7 +81,7 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
         })));
       }
 
-      setStats({ unpaidTotal, accountBalance, visitors: visitorCount ?? 0, newOrders });
+      setStats({ unpaidTotal, accountBalance, newOrders });
     } catch (err) {
       setError('تعذّر تحميل البيانات — تحقق من الاتصال');
       console.error(err);
@@ -134,21 +128,6 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
 
       {/* ── Stat Cards ── */}
       <div className="mh-stats">
-        <div className="mh-stat-card mh-card-green">
-          <div className="mh-card-top">
-            <span className="mh-card-label">زوار المنصة</span>
-            <div className="mh-card-icon">
-              <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
-            </div>
-          </div>
-          <div className="mh-card-value">{stats.visitors.toLocaleString('ar-EG')}</div>
-          <div className="mh-card-sub">اليوم</div>
-        </div>
-
         <div className="mh-stat-card mh-card-blue">
           <div className="mh-card-top">
             <span className="mh-card-label">طلبات جديدة</span>

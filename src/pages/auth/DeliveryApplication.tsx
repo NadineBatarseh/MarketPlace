@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import supabase from '../../lib/supabase';
 import { validateIsraeliId } from '../../utils/validateIsraeliId';
 import { useFieldHint } from './useFieldHint';
+import { useRecaptcha } from '../../hooks/useRecaptcha';
 import './Auth.css';
 
 const MAX_DOC_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -15,6 +16,7 @@ const VEHICLE_OPTIONS = [
 ];
 
 export default function DeliveryApplication() {
+  const { getToken } = useRecaptcha();
   const [form, setForm] = useState({
     fullName: '',
     email: '',
@@ -130,6 +132,14 @@ export default function DeliveryApplication() {
       return;
     }
 
+    let recaptchaToken: string;
+    try {
+      recaptchaToken = await getToken('delivery_application');
+    } catch {
+      setError('فشل التحقق من أنك لست روبوتًا، يرجى المحاولة مرة أخرى');
+      return;
+    }
+
     setLoading(true);
 
     const folder = `${Date.now()}_${form.nationalId}`;
@@ -143,6 +153,8 @@ export default function DeliveryApplication() {
       formData.append('idBack', idBackFile!);
       formData.append('licenseFront', licenseFrontFile!);
       formData.append('licenseBack', licenseBackFile!);
+      formData.append('recaptchaToken', recaptchaToken);
+      formData.append('recaptchaAction', 'delivery_application');
       const res = await fetch('/api/applications/upload-docs', { method: 'POST', body: formData });
       if (!res.ok) throw new Error((await res.json()).error ?? res.statusText);
       const result = await res.json();
@@ -420,6 +432,13 @@ export default function DeliveryApplication() {
         <p className="auth-switch">
           لديك حساب بالفعل؟{' '}
           <Link to="/login">تسجيل الدخول</Link>
+        </p>
+        <p className="auth-recaptcha-note">
+          هذا الموقع محمي بواسطة reCAPTCHA وتسري عليه{' '}
+          <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">سياسة الخصوصية</a>
+          {' '}و{' '}
+          <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">شروط الخدمة</a>
+          {' '}الخاصة بـ Google.
         </p>
       </div>
     </div>

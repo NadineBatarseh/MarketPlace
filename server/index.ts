@@ -17,6 +17,7 @@ import productCRUDRouter from "./routes/productCRUDRouter.js";
 import supabaseProductWebhookRouter from "./routes/supabaseProductWebhookRouter.js";
 import instagramAuthRouter from "./routes/instagramAuthRouter.js";
 import applicationUploadRouter from "./routes/applicationUploadRouter.js";
+import authRecaptchaRouter from "./routes/authRecaptchaRouter.js";
 import adminArchiveRouter from "./routes/adminArchiveRouter.js";
 import synonymsAdminRouter from "./routes/synonymsAdminRouter.js";
 import paytabsRouter from "./routes/paytabsRouter.js";
@@ -518,6 +519,9 @@ app.post("/api/chat", async (req: Request, res: Response) => {
 
 /* ---------- SEARCH ---------- */
 app.use("/api/search", searchRouter);
+
+/* ---------- RECAPTCHA VERIFY (for auth forms that talk directly to Supabase) ---------- */
+app.use("/api/auth", authRecaptchaRouter);
 
 /* ---------- APPLICATION DOC UPLOAD (merchant ID / driver docs) ---------- */
 app.use("/api/applications", applicationUploadRouter);

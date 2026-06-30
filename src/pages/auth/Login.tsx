@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import supabase from '../../lib/supabase';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
+import { useRecaptcha } from '../../hooks/useRecaptcha';
 import './Auth.css';
 
 export default function Login() {
   const navigate = useNavigate();
   const { signInWithGoogle } = useCustomerAuth();
+  const { getToken } = useRecaptcha();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,6 +20,25 @@ export default function Login() {
     e.preventDefault();
     setError('');
     setLoading(true);
+
+    try {
+      const token = await getToken('login');
+      const captchaRes = await fetch('/api/auth/verify-recaptcha', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recaptchaToken: token, recaptchaAction: 'login' }),
+      });
+      const captchaData = await captchaRes.json();
+      if (!captchaData.ok) {
+        setError(captchaData.error ?? 'فشل التحقق من أنك لست روبوتًا، يرجى المحاولة مرة أخرى');
+        setLoading(false);
+        return;
+      }
+    } catch {
+      setError('فشل التحقق من أنك لست روبوتًا، يرجى المحاولة مرة أخرى');
+      setLoading(false);
+      return;
+    }
 
     const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
 
@@ -148,6 +169,13 @@ export default function Login() {
         <p className="auth-switch auth-switch--spaced">
           مندوب توصيل؟{' '}
           <Link to="/delivery-application">تقديم طلب كمندوب توصيل</Link>
+        </p>
+        <p className="auth-recaptcha-note">
+          هذا الموقع محمي بواسطة reCAPTCHA وتسري عليه{' '}
+          <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">سياسة الخصوصية</a>
+          {' '}و{' '}
+          <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">شروط الخدمة</a>
+          {' '}الخاصة بـ Google.
         </p>
       </div>
     </div>

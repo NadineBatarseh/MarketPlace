@@ -109,3 +109,18 @@ textarea,
 select {
   font-family: var(--font-main);
 }
+
+/* Hide floating reCAPTCHA badge — legal notice shown inline on auth forms instead */
+.grecaptcha-badge { visibility: hidden; }
+
+.auth-recaptcha-note {
+  font-size: 0.72rem;
+  color: var(--color-muted);
+  text-align: center;
+  margin-top: 12px;
+  line-height: 1.5;
+}
+.auth-recaptcha-note a {
+  color: var(--color-muted);
+  text-decoration: underline;
+}

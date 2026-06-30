@@ -2,11 +2,13 @@ import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import zxcvbn from 'zxcvbn';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
+import { useRecaptcha } from '../../hooks/useRecaptcha';
 import PasswordStrengthBar from './PasswordStrengthBar';
 import './Auth.css';
 
 export default function CustomerSignup() {
   const { signup, signInWithGoogle } = useCustomerAuth();
+  const { getToken } = useRecaptcha();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -38,6 +40,26 @@ export default function CustomerSignup() {
     }
 
     setLoading(true);
+
+    try {
+      const token = await getToken('signup');
+      const captchaRes = await fetch('/api/auth/verify-recaptcha', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recaptchaToken: token, recaptchaAction: 'signup' }),
+      });
+      const captchaData = await captchaRes.json();
+      if (!captchaData.ok) {
+        setError(captchaData.error ?? 'فشل التحقق من أنك لست روبوتًا، يرجى المحاولة مرة أخرى');
+        setLoading(false);
+        return;
+      }
+    } catch {
+      setError('فشل التحقق من أنك لست روبوتًا، يرجى المحاولة مرة أخرى');
+      setLoading(false);
+      return;
+    }
+
     const result = await signup(email, password, name);
     setLoading(false);
 
@@ -181,6 +203,13 @@ export default function CustomerSignup() {
         <p className="auth-switch">
           لديك حساب بالفعل؟{' '}
           <Link to="/login">تسجيل الدخول</Link>
+        </p>
+        <p className="auth-recaptcha-note">
+          هذا الموقع محمي بواسطة reCAPTCHA وتسري عليه{' '}
+          <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">سياسة الخصوصية</a>
+          {' '}و{' '}
+          <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">شروط الخدمة</a>
+          {' '}الخاصة بـ Google.
         </p>
       </div>
     </div>

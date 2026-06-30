@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import supabase from '../../lib/supabase';
+import { useRecaptcha } from '../../hooks/useRecaptcha';
 import './Auth.css';
 
 type State = 'idle' | 'loading' | 'sent' | 'error';
 
 export default function ForgotPassword() {
+  const { getToken } = useRecaptcha();
   const [email, setEmail] = useState('');
   const [state, setState] = useState<State>('idle');
   const [errorMsg, setErrorMsg] = useState('');
@@ -14,6 +16,25 @@ export default function ForgotPassword() {
     e.preventDefault();
     setErrorMsg('');
     setState('loading');
+
+    try {
+      const token = await getToken('forgot_password');
+      const captchaRes = await fetch('/api/auth/verify-recaptcha', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recaptchaToken: token, recaptchaAction: 'forgot_password' }),
+      });
+      const captchaData = await captchaRes.json();
+      if (!captchaData.ok) {
+        setErrorMsg(captchaData.error ?? 'فشل التحقق من أنك لست روبوتًا، يرجى المحاولة مرة أخرى');
+        setState('error');
+        return;
+      }
+    } catch {
+      setErrorMsg('فشل التحقق من أنك لست روبوتًا، يرجى المحاولة مرة أخرى');
+      setState('error');
+      return;
+    }
 
     const trimmed = email.trim().toLowerCase();
 
@@ -119,6 +140,13 @@ export default function ForgotPassword() {
             <Link to="/signup">إنشاء حساب جديد</Link>
           </p>
         )}
+        <p className="auth-recaptcha-note">
+          هذا الموقع محمي بواسطة reCAPTCHA وتسري عليه{' '}
+          <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">سياسة الخصوصية</a>
+          {' '}و{' '}
+          <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">شروط الخدمة</a>
+          {' '}الخاصة بـ Google.
+        </p>
       </div>
     </div>
   );

@@ -303,10 +303,6 @@ export default function Topbar({
                   onClick={() => { navigate('/delivery-application'); setDropdownOpen(false); }}>
                   🚚 تقديم طلب كمندوب
                 </button>
-                <button type="button" className="topbar-dropdown-item"
-                  onClick={() => { navigate('/admin-dashboard'); setDropdownOpen(false); }}>
-                  🛡️ دخول كمشرف
-                </button>
               </div>
             )}
 

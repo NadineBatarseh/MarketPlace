@@ -1,6 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import { supabase } from "../supabase.js";
+import { verifyRecaptchaFromBody } from "../middleware/verifyRecaptcha.js";
 
 const router = Router();
 
@@ -20,6 +21,7 @@ router.post(
     { name: "licenseFront", maxCount: 1 },
     { name: "licenseBack", maxCount: 1 },
   ]),
+  verifyRecaptchaFromBody(['merchant_application', 'delivery_application']),
   async (req, res) => {
     const files = req.files as Record<string, Express.Multer.File[]>;
     const { bucket, folder } = req.body as { bucket: string; folder: string };

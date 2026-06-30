@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useMerchantAuth } from '../context/MerchantAuthContext';
+import { useRecaptcha } from '../../hooks/useRecaptcha';
 import './MerchantLoginModal.css';
 
 interface Props {
@@ -9,6 +10,7 @@ interface Props {
 
 export default function MerchantLoginModal({ onClose, onSuccess }: Props) {
   const { login, isLoading } = useMerchantAuth();
+  const { getToken } = useRecaptcha();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -27,6 +29,24 @@ export default function MerchantLoginModal({ onClose, onSuccess }: Props) {
       setError('يرجى إدخال البريد الإلكتروني وكلمة المرور');
       return;
     }
+
+    try {
+      const token = await getToken('merchant_login');
+      const captchaRes = await fetch('/api/auth/verify-recaptcha', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recaptchaToken: token, recaptchaAction: 'merchant_login' }),
+      });
+      const captchaData = await captchaRes.json();
+      if (!captchaData.ok) {
+        setError(captchaData.error ?? 'فشل التحقق من أنك لست روبوتًا، يرجى المحاولة مرة أخرى');
+        return;
+      }
+    } catch {
+      setError('فشل التحقق من أنك لست روبوتًا، يرجى المحاولة مرة أخرى');
+      return;
+    }
+
     const result = await login(email.trim(), password.trim());
     if (result.success) {
       onSuccess();
@@ -85,6 +105,13 @@ export default function MerchantLoginModal({ onClose, onSuccess }: Props) {
             {isLoading ? 'جاري تسجيل الدخول...' : 'تسجيل الدخول'}
           </button>
         </form>
+        <p className="auth-recaptcha-note">
+          هذا الموقع محمي بواسطة reCAPTCHA وتسري عليه{' '}
+          <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">سياسة الخصوصية</a>
+          {' '}و{' '}
+          <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">شروط الخدمة</a>
+          {' '}الخاصة بـ Google.
+        </p>
       </div>
     </div>
   );

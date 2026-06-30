@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useCustomerAuth } from '../context/CustomerAuthContext';
+import { useRecaptcha } from '../hooks/useRecaptcha';
 import './CustomerLoginModal.css';
 
 interface Props {
@@ -11,6 +12,7 @@ type Tab = 'login' | 'signup';
 
 export default function CustomerLoginModal({ onClose, onSuccess }: Props) {
   const { login, signup, isLoading } = useCustomerAuth();
+  const { getToken } = useRecaptcha();
   const [tab, setTab] = useState<Tab>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -34,6 +36,24 @@ export default function CustomerLoginModal({ onClose, onSuccess }: Props) {
     }
     if (tab === 'signup' && !name.trim()) {
       setError('يرجى إدخال اسمك');
+      return;
+    }
+
+    const action = tab === 'login' ? 'login' : 'signup';
+    try {
+      const token = await getToken(action);
+      const captchaRes = await fetch('/api/auth/verify-recaptcha', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recaptchaToken: token, recaptchaAction: action }),
+      });
+      const captchaData = await captchaRes.json();
+      if (!captchaData.ok) {
+        setError(captchaData.error ?? 'فشل التحقق من أنك لست روبوتًا، يرجى المحاولة مرة أخرى');
+        return;
+      }
+    } catch {
+      setError('فشل التحقق من أنك لست روبوتًا، يرجى المحاولة مرة أخرى');
       return;
     }
 
@@ -134,6 +154,13 @@ export default function CustomerLoginModal({ onClose, onSuccess }: Props) {
               : tab === 'login' ? 'تسجيل الدخول' : 'إنشاء الحساب'}
           </button>
         </form>
+        <p className="auth-recaptcha-note">
+          هذا الموقع محمي بواسطة reCAPTCHA وتسري عليه{' '}
+          <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">سياسة الخصوصية</a>
+          {' '}و{' '}
+          <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">شروط الخدمة</a>
+          {' '}الخاصة بـ Google.
+        </p>
       </div>
     </div>
   );
