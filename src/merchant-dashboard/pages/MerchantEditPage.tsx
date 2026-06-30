@@ -18,6 +18,8 @@ interface DBProduct {
   capacity_units: number | null;
   category_id?: string | null;
   is_deleted?: boolean;
+  discount_pct?: number | null;
+  product_source?: string | null;
 }
 
 interface CategoryFilterDef {
@@ -48,6 +50,16 @@ interface ProductForm {
   description: string;
   price: string;
   quantity: string;
+  discount: string;
+}
+
+// Clamp a user-entered discount string to a valid 0–100 percentage, or null if empty.
+function parseDiscountPct(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const n = parseFloat(trimmed);
+  if (Number.isNaN(n)) return null;
+  return Math.min(100, Math.max(0, n));
 }
 
 interface VariantMatrix {
@@ -662,6 +674,7 @@ function EditProductModal({ product, onSave, onClose }: {
     description: product.description ?? '',
     price: String(product.price),
     quantity: String(product.stock_Quantity),
+    discount: product.discount_pct != null ? String(product.discount_pct) : '',
   });
   const [existingUrls, setExistingUrls] = useState<string[]>(product.image_urls ?? []);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
@@ -821,6 +834,7 @@ function EditProductModal({ product, onSave, onClose }: {
         image_urls: finalUrls.length > 0 ? finalUrls : null,
         capacity_units: capacityUnits,
         category_id: categoryId || null,
+        discount_pct: parseDiscountPct(form.discount),
       })
       .eq('id', product.id);
 
@@ -887,6 +901,7 @@ function EditProductModal({ product, onSave, onClose }: {
       image_urls: finalUrls.length > 0 ? finalUrls : null,
       capacity_units: capacityUnits,
       category_id: categoryId || null,
+      discount_pct: parseDiscountPct(form.discount),
     });
     onClose();
   };
@@ -948,6 +963,13 @@ function EditProductModal({ product, onSave, onClose }: {
           </div>
 
           <div className="apm-field">
+            <label>نسبة الخصم (%)</label>
+            <input type="number" min="0" max="100" step="1" placeholder="بدون خصم" value={form.discount}
+              onChange={e => setForm(f => ({ ...f, discount: e.target.value }))} />
+            <span className="cap-hint">اتركه فارغاً لإزالة الخصم — يظهر للزبائن كشارة "خصم %"</span>
+          </div>
+
+          <div className="apm-field">
             <label>حجم المنتج للتوصيل</label>
             <select
               className="cap-select"
@@ -999,7 +1021,7 @@ function AddProductModal({ shopId, onAdd, onClose }: {
   onAdd: (p: DBProduct) => void;
   onClose: () => void;
 }) {
-  const [form, setForm] = useState<ProductForm>({ name: '', description: '', price: '', quantity: '' });
+  const [form, setForm] = useState<ProductForm>({ name: '', description: '', price: '', quantity: '', discount: '' });
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [matrix, setMatrix] = useState<VariantMatrix>(EMPTY_MATRIX);
@@ -1266,7 +1288,7 @@ export default function MerchantEditPage() {
     if (!shop?.shop_id) { setLoadingProducts(false); return; }
     supabase
       .from('products')
-      .select('id, shop_id, title, description, price, image_urls, stock_Quantity, capacity_units')
+      .select('id, shop_id, title, description, price, image_urls, stock_Quantity, capacity_units, product_source')
       .eq('shop_id', shop.shop_id)
       .eq('isPublish', true)
       .not('is_deleted', 'eq', true)
@@ -1381,6 +1403,9 @@ export default function MerchantEditPage() {
                   {p.image_urls?.[0] ? <img src={p.image_urls[0]} alt={p.title} /> : '📦'}
                 </div>
                 <div className="mep-product-name">{p.title}</div>
+                {p.product_source === 'meta_import' && (
+                  <span className="meta-import-badge">مستورد من Meta</span>
+                )}
                 <div className="mep-product-footer">
                   <span className="mep-product-price">{Number(p.price).toLocaleString('ar-SA')} ₪</span>
                   <span className="mep-product-qty">الكمية: {p.stock_Quantity}</span>

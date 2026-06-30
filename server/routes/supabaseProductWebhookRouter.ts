@@ -5,6 +5,7 @@ import { supabase } from '../supabase.js';
 import { validateProducts } from '../metaCatalog/metaCatalogAPIValidator.js';
 import { syncProductsToMeta } from '../metaCatalog/metaCatalogAPISync.js';
 import type { ProductSyncInput } from '../metaCatalog/metaCatalogAPITypes.js';
+import { resolveMerchantMetaConnectionByShopId } from '../metaCatalog/resolveMerchantMetaConnection.js';
 
 const router = Router();
 
@@ -66,6 +67,15 @@ router.post('/', async (req: Request, res: Response) => {
     const row = old_record;
     if (!row?.id) return;
 
+    // Push the deletion through the owning merchant's own connection — never
+    // a global fallback, or this would delete the item from an unrelated
+    // merchant's catalog.
+    const conn = await resolveMerchantMetaConnectionByShopId(row.shop_id);
+    if (!conn) {
+      console.log(`[ProductWebhook] DELETE ${row.id} skipped — merchant has no connected Meta catalog`);
+      return;
+    }
+
     const deleteInput: ProductSyncInput = {
       id: row.id,
       meta_product_id: row.meta_product_id ?? null,
@@ -73,7 +83,11 @@ router.post('/', async (req: Request, res: Response) => {
       deleted: true,
     };
 
-    const [result] = await syncProductsToMeta({ products: [deleteInput] });
+    const [result] = await syncProductsToMeta({
+      products: [deleteInput],
+      catalogId: conn.catalog_id,
+      accessToken: conn.access_token,
+    });
     if (!result.ok) {
       console.error(`[ProductWebhook] Meta DELETE failed — ${result.error}`);
     } else {
@@ -88,8 +102,40 @@ router.post('/', async (req: Request, res: Response) => {
 
   // Skip sync entirely for soft-deleted products.
   // Meta removal is handled explicitly by DELETE /api/catalog/product/:id
-  // when the merchant chooses "delete from website and Meta".
+  // when the merchant chooses "delete from website and Meta", and by the
+  // DELETE branch above for hard deletes.
   if (row.is_deleted === true) return;
+
+  // Never auto-export drafts — a product may only be pushed to Meta once it
+  // is active/published in SouqLink. Saving a draft must not reach Meta.
+  if (row.isPublish !== true) {
+    console.log(`[ProductWebhook] ${row.id} is a draft — skipping Meta export`);
+    return;
+  }
+
+  const conn = await resolveMerchantMetaConnectionByShopId(row.shop_id);
+  if (!conn) {
+    console.log(`[ProductWebhook] ${row.id} skipped — merchant has no connected Meta catalog`);
+    return;
+  }
+
+  // A product "becomes active" either on INSERT (created already published)
+  // or on the UPDATE where isPublish flips false → true — both are gated by
+  // auto_export_new_products and always push every field (first push, so
+  // there is nothing to partially update). Any other UPDATE to an
+  // already-published product is gated by auto_sync_souqlink_updates_to_meta
+  // and only sends the merchant-selected outbound_sync_fields.
+  const becameActive = type === 'INSERT' || old_record?.isPublish !== true;
+
+  if (becameActive) {
+    if (!conn.auto_export_new_products) {
+      console.log(`[ProductWebhook] ${row.id} became active but auto_export_new_products is off — skipping`);
+      return;
+    }
+  } else if (!conn.auto_sync_souqlink_updates_to_meta) {
+    console.log(`[ProductWebhook] ${row.id} updated but auto_sync_souqlink_updates_to_meta is off — skipping`);
+    return;
+  }
 
   const syncInput: ProductSyncInput = {
     id: row.id,
@@ -112,7 +158,13 @@ router.post('/', async (req: Request, res: Response) => {
   }
 
   console.log('[ProductWebhook] Validation passed — calling Meta API...');
-  const [result] = await syncProductsToMeta({ products: valid });
+  const [result] = await syncProductsToMeta({
+    products: valid,
+    catalogId: conn.catalog_id,
+    accessToken: conn.access_token,
+    // Field selection only applies to updates of an already-pushed item.
+    outboundFields: becameActive ? undefined : conn.outbound_sync_fields,
+  });
   console.log('[ProductWebhook] Meta result:', JSON.stringify(result));
 
   if (!result.ok) {

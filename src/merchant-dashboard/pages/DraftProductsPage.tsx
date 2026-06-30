@@ -11,6 +11,16 @@ interface DraftProduct {
   image_urls: string[] | null;
   video_url: string | null;
   stock_Quantity: number | null;
+  instagram_post_id: string | null;
+  product_source: string | null;
+}
+
+type SourceFilter = 'all' | 'instagram' | 'meta';
+
+function getSource(p: DraftProduct): 'instagram' | 'meta' {
+  if (p.product_source === 'meta_import') return 'meta';
+  if (p.product_source === 'instagram') return 'instagram';
+  return p.instagram_post_id ? 'instagram' : 'meta';
 }
 
 interface CardState {
@@ -48,6 +58,9 @@ export default function DraftProductsPage() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
   const [toast, setToast] = useState('');
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -61,7 +74,7 @@ export default function DraftProductsPage() {
 
     const { data, error } = await supabase
       .from('products')
-      .select('id, title, description, price, image_urls, video_url, stock_Quantity')
+      .select('id, title, description, price, image_urls, video_url, stock_Quantity, instagram_post_id, product_source')
       .eq('shop_id', shopId)
       .eq('isPublish', false)
       .order('created_at', { ascending: false });
@@ -147,6 +160,7 @@ export default function DraftProductsPage() {
     }
 
     setDrafts((prev) => prev.filter((p) => p.id !== id));
+    setSelectedIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
     showToast('تم نشر المنتج بنجاح ✓');
   };
 
@@ -163,7 +177,63 @@ export default function DraftProductsPage() {
     }
 
     setDrafts((prev) => prev.filter((p) => p.id !== id));
+    setSelectedIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
     showToast('تم حذف المسودة.');
+  };
+
+  const filteredDrafts = drafts.filter((p) => sourceFilter === 'all' || getSource(p) === sourceFilter);
+
+  const handleFilterChange = (filter: SourceFilter) => {
+    setSourceFilter(filter);
+    setSelectedIds(new Set());
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const allFilteredSelected = filteredDrafts.length > 0 && filteredDrafts.every((p) => selectedIds.has(p.id));
+
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      if (allFilteredSelected) {
+        const next = new Set(prev);
+        filteredDrafts.forEach((p) => next.delete(p.id));
+        return next;
+      }
+      const next = new Set(prev);
+      filteredDrafts.forEach((p) => next.add(p.id));
+      return next;
+    });
+  };
+
+  const handleDeleteSelected = async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    if (!window.confirm(`هل تريد حذف ${ids.length} مسودة؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+
+    setBulkDeleting(true);
+    ids.forEach((id) => updateCard(id, { deleting: true }));
+
+    const { error } = await supabase.from('products').delete().in('id', ids);
+
+    if (error) {
+      console.error(error);
+      ids.forEach((id) => updateCard(id, { deleting: false }));
+      setBulkDeleting(false);
+      showToast('حدث خطأ أثناء حذف المسودات. حاول مرة أخرى.');
+      return;
+    }
+
+    const idSet = new Set(ids);
+    setDrafts((prev) => prev.filter((p) => !idSet.has(p.id)));
+    setSelectedIds(new Set());
+    setBulkDeleting(false);
+    showToast(`تم حذف ${ids.length} مسودة.`);
   };
 
   if (loading) {
@@ -187,6 +257,48 @@ export default function DraftProductsPage() {
 
       {fetchError && <div className="dp-error">{fetchError}</div>}
 
+      {drafts.length > 0 && (
+        <div className="dp-toolbar">
+          <div className="dp-filter-tabs">
+            <button
+              className={`dp-filter-tab ${sourceFilter === 'all' ? 'active' : ''}`}
+              onClick={() => handleFilterChange('all')}
+            >
+              الكل
+            </button>
+            <button
+              className={`dp-filter-tab ${sourceFilter === 'instagram' ? 'active' : ''}`}
+              onClick={() => handleFilterChange('instagram')}
+            >
+              انستغرام
+            </button>
+            <button
+              className={`dp-filter-tab ${sourceFilter === 'meta' ? 'active' : ''}`}
+              onClick={() => handleFilterChange('meta')}
+            >
+              ميتا
+            </button>
+          </div>
+
+          <div className="dp-bulk-actions">
+            <label className="dp-select-all">
+              <input
+                type="checkbox"
+                checked={allFilteredSelected}
+                onChange={toggleSelectAll}
+                disabled={filteredDrafts.length === 0}
+              />
+              تحديد الكل
+            </label>
+            {selectedIds.size > 0 && (
+              <button className="dp-btn-delete-bulk" onClick={handleDeleteSelected} disabled={bulkDeleting}>
+                {bulkDeleting ? 'جاري الحذف…' : `حذف المحدد (${selectedIds.size})`}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {drafts.length === 0 && !fetchError && (
         <div className="dp-empty">
           <div className="dp-empty-icon">📭</div>
@@ -194,17 +306,36 @@ export default function DraftProductsPage() {
         </div>
       )}
 
+      {drafts.length > 0 && filteredDrafts.length === 0 && (
+        <div className="dp-empty">
+          <div className="dp-empty-icon">🔍</div>
+          لا توجد مسودات تطابق هذا الفلتر.
+        </div>
+      )}
+
       <div className="dp-grid">
-        {drafts.map((product) => {
+        {filteredDrafts.map((product) => {
           const card = cards[product.id];
           if (!card) return null;
           const imageUrl = product.image_urls?.[0] ?? null;
           const isBusy = card.saving || card.deleting;
+          const source = getSource(product);
 
           return (
             <div key={product.id} className="dp-card">
               {/* Media: video for reels, image otherwise */}
               <div className="dp-card-img-wrap">
+                <label className="dp-card-checkbox" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(product.id)}
+                    onChange={() => toggleSelect(product.id)}
+                    disabled={isBusy}
+                  />
+                </label>
+                <span className={`dp-source-badge dp-source-${source}`}>
+                  {source === 'meta' ? 'ميتا' : 'انستغرام'}
+                </span>
                 {product.video_url ? (
                   <video
                     src={product.video_url}
@@ -239,7 +370,7 @@ export default function DraftProductsPage() {
                 <div className="dp-field">
                   <label>الوصف</label>
                   <textarea
-                    rows={3}
+                    rows={2}
                     value={card.description}
                     onChange={(e) => updateCard(product.id, { description: e.target.value })}
                     disabled={isBusy}

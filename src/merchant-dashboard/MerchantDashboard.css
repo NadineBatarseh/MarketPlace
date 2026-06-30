@@ -1376,6 +1376,22 @@
   border: 1px solid #bbf7d0;
 }
 
+/* ── Meta-import source badge on product card ── */
+.meta-import-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 20px;
+  background: #eff6ff;
+  color: #1877f2;
+  border: 1px solid #bfdbfe;
+  margin-top: 0.3rem;
+  align-self: flex-start;
+}
+
 /* ── Capacity select & hint inside EditProductModal ── */
 .cap-select {
   width: 100%;
@@ -1445,6 +1461,78 @@
 .mep-tab:hover { color: #1a1a2e; }
 .mep-tab--active { color: #1a1a2e; border-bottom-color: #e8572a; }
 .mep-tab--disabled { opacity: 0.45; cursor: not-allowed; }
+
+.mep-tab-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f97316;
+  margin-right: 0.35rem;
+  vertical-align: middle;
+}
+
+/* ── Settings page layout — vertical tabs on the right ── */
+.mep-settings-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+}
+
+.mep-tabs-vertical {
+  width: 230px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  background: #fff;
+  border-radius: 16px;
+  padding: 0.75rem;
+  box-shadow: 0 2px 10px rgba(26,26,46,0.06);
+  border: 1px solid #f0ede8;
+  position: sticky;
+  top: 1.75rem;
+}
+
+.mep-tab-vertical {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0.78rem 1rem;
+  background: none;
+  border: none;
+  border-radius: 10px;
+  font-family: var(--font-main);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  text-align: right;
+  transition: background 0.15s, color 0.15s;
+}
+.mep-tab-vertical:hover { background: #f8f7f5; color: #1a1a2e; }
+.mep-tab-vertical--active {
+  background: #fff0eb;
+  color: #e8572a;
+  font-weight: 700;
+}
+
+.mep-settings-content {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 860px) {
+  .mep-settings-layout { flex-direction: column; }
+  .mep-tabs-vertical {
+    width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    position: static;
+    top: auto;
+  }
+  .mep-tab-vertical { white-space: nowrap; width: auto; }
+}
 
 .mep-save-btn {
   padding: 0.85rem 2rem;

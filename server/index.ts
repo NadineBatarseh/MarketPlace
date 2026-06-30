@@ -16,6 +16,7 @@ import metaCatalogRouter from "./routes/metaCatalogAPIRouter.js";
 import productCRUDRouter from "./routes/productCRUDRouter.js";
 import supabaseProductWebhookRouter from "./routes/supabaseProductWebhookRouter.js";
 import instagramAuthRouter from "./routes/instagramAuthRouter.js";
+import metaCatalogConnectRouter from "./routes/metaCatalogConnectRouter.js";
 import applicationUploadRouter from "./routes/applicationUploadRouter.js";
 import adminArchiveRouter from "./routes/adminArchiveRouter.js";
 import synonymsAdminRouter from "./routes/synonymsAdminRouter.js";
@@ -1030,6 +1031,10 @@ app.post("/api/activate", async (req: Request, res: Response) => {
 /* ---------- INSTAGRAM AUTH ---------- */
 app.use("/auth/instagram", instagramAuthRouter);
 app.use("/api/instagram", instagramAuthRouter);
+
+/* ---------- META CATALOG CONNECT (Phase 1: connect + one-time import) ---------- */
+app.use("/auth/meta-catalog", metaCatalogConnectRouter);
+app.use("/api/meta-catalog", metaCatalogConnectRouter);
 
 /* ---------- META AUTH CALLBACK ---------- */
 
