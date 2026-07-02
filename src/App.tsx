@@ -7,7 +7,6 @@ import DriverRouteMap from './pages/delivery-agent/DriverRouteMap';
 import RoleGuard from './components/RoleGuard';
 import OrderHistoryPage from './pages/orderHistory/OrderHistoryPage';
 import OrderTrackingPage from './pages/orderTrackingPage/OrderTrackingPage';
-import MetaConnectPage from './pages/MetaConnectPage';
 import PrivacyPolicyPage from './pages/privacy/PrivacyPolicyPage';
 import PaytabsReturnPage from './pages/payment/PaytabsReturnPage';
 import ProfileSettingsPage from './pages/profile/ProfileSettingsPage';
@@ -87,7 +86,6 @@ export default function App() {
               <Route path="/delivery-application" element={<DeliveryApplication />} />
               <Route path="/activate" element={<Activate />} />
               <Route path="/sync" element={<ProductsPage />} />
-              <Route path="/meta-connect" element={<MetaConnectPage />} />
               <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
 
               {/* Customer or guest browsing — other roles redirected to their home */}

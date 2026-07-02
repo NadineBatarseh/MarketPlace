@@ -85,6 +85,21 @@ export interface ProductSyncInput {
   deleted?: boolean;
 }
 
+/**
+ * Which product attributes are allowed to flow outbound (SouqLink → Meta) on an
+ * UPDATE push. Only meaningful for UPDATE — a CREATE always sends every field
+ * since the item doesn't exist in Meta yet. Meta's catalog schema used here has
+ * no separate numeric "quantity" field, so `quantity` and `availability` both
+ * gate the same `availability` attribute.
+ */
+export interface OutboundSyncFields {
+  price: boolean;
+  quantity: boolean;
+  availability: boolean;
+  details: boolean;
+  images: boolean;
+}
+
 /** Input to the syncProductsToMeta function */
 export interface CatalogSyncOptions {
   products: ProductSyncInput[];
@@ -92,6 +107,11 @@ export interface CatalogSyncOptions {
   catalogId?: string;
   /** Override the access token from env */
   accessToken?: string;
+  /**
+   * Restricts which fields are sent on UPDATE pushes (per the merchant's
+   * outbound_sync_fields setting). Omit to send every field, as before.
+   */
+  outboundFields?: OutboundSyncFields;
 }
 
 /** Validation failure for a single product */

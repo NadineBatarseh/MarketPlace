@@ -8,6 +8,7 @@ import type {
   CatalogSyncOptions,
   MetaAvailability,
   MetaCurrency,
+  OutboundSyncFields,
 } from './metaCatalogAPITypes.js';
 import { formatMetaPrice } from './metaCatalogAPIValidator.js';
 
@@ -35,7 +36,7 @@ function toMetaAvailability(stockQty: number | null | undefined): MetaAvailabili
   return stockQty > 0 ? 'in stock' : 'out of stock';
 }
 
-function buildBatchRequest(product: ProductSyncInput): MetaBatchRequest {
+function buildBatchRequest(product: ProductSyncInput, outboundFields?: OutboundSyncFields): MetaBatchRequest {
   const retailer_id = product.meta_product_id ?? product.id;
   const currency: MetaCurrency = product.currency ?? 'ILS';
 
@@ -48,21 +49,41 @@ function buildBatchRequest(product: ProductSyncInput): MetaBatchRequest {
   // idempotency, so a re-run won't create duplicates).
   const method = product.meta_product_id ? 'UPDATE' : 'CREATE';
 
-  return {
-    method,
-    retailer_id,
-    data: {
-      id: retailer_id,
-      title: product.title.trim(),
-      description: product.description?.trim() ?? undefined,
-      price: formatMetaPrice(product.price!, currency),
-      availability: toMetaAvailability(product.stock_Quantity),
-      condition: product.condition ?? 'new',
-      image_link: product.image_urls?.[0] ?? undefined,
-      // url is required by Meta — falls back to the app's public base URL
-      url: `${process.env.APP_BASE_URL ?? 'https://attently-hard-juanita.ngrok-free.dev'}/product/${retailer_id}`,
-    },
+  const fullData = {
+    id: retailer_id,
+    title: product.title.trim(),
+    description: product.description?.trim() ?? undefined,
+    price: formatMetaPrice(product.price!, currency),
+    availability: toMetaAvailability(product.stock_Quantity),
+    condition: product.condition ?? 'new',
+    image_link: product.image_urls?.[0] ?? undefined,
+    // url is required by Meta — falls back to the app's public base URL
+    url: `${process.env.APP_BASE_URL ?? 'https://attently-hard-juanita.ngrok-free.dev'}/product/${retailer_id}`,
   };
+
+  // CREATE always sends everything — the item doesn't exist in Meta yet, so
+  // there is nothing to "partially" update. Field selection only applies to
+  // UPDATE pushes for an already-synced item.
+  if (method === 'CREATE' || !outboundFields) {
+    return { method, retailer_id, data: fullData };
+  }
+
+  const data: NonNullable<MetaBatchRequest['data']> = {
+    id: fullData.id,
+    url: fullData.url,
+    condition: fullData.condition,
+  };
+  if (outboundFields.price) data.price = fullData.price;
+  // Meta's schema here has no separate numeric quantity field — both the
+  // "quantity" and "availability" merchant toggles gate this one attribute.
+  if (outboundFields.quantity || outboundFields.availability) data.availability = fullData.availability;
+  if (outboundFields.details) {
+    data.title = fullData.title;
+    data.description = fullData.description;
+  }
+  if (outboundFields.images) data.image_link = fullData.image_link;
+
+  return { method, retailer_id, data };
 }
 
 /* ------------------------------------------------------------------ */
@@ -217,7 +238,7 @@ export async function syncProductsToMeta(
     return [{ ok: true, handles: [], itemCount: 0 }];
   }
 
-  const requests = options.products.map(buildBatchRequest);
+  const requests = options.products.map((p) => buildBatchRequest(p, options.outboundFields));
 
   // Split into chunks of BATCH_SIZE
   const batches: MetaBatchRequest[][] = [];
