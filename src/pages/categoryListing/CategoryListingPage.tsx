@@ -1,6 +1,7 @@
 import type { MouseEvent } from 'react';
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import '../singleStore/storePage.css';
 import './categoryListing.css';
 
@@ -9,6 +10,7 @@ import { useCategoryProducts } from './hooks/useCategoryProducts';
 import { useToast } from '../singleStore/hooks/useToast';
 import { useSharedAuth } from '../../context/AuthContext';
 import { useShop } from '../../context/ShopContext';
+import { useLanguage } from '../../context/LanguageContext';
 import type { Product } from '../singleStore/types';
 import type { GeneralFilters } from '../singleStore/components/Sidebar';
 import supabase from '../../lib/supabase';
@@ -23,6 +25,9 @@ import CategorySidebar from './components/CategorySidebar';
 export default function CategoryListingPage() {
   const { categoryId } = useParams<{ categoryId: string }>();
   const id = categoryId ?? '';
+
+  const { t } = useTranslation('customer');
+  const { direction } = useLanguage();
 
   const { category, stores, filterDefs, availableColors, loading: dataLoading } = useCategoryData(id);
 
@@ -158,19 +163,19 @@ export default function CategoryListingPage() {
 
   function toggleWishlist(e: MouseEvent, pid: string) {
     e.stopPropagation();
-    if (!rawUser) { showToast('يجب تسجيل الدخول أو إنشاء حساب أولاً'); return; }
-    if (role !== 'customer') { showToast('متاح للعملاء فقط'); return; }
+    if (!rawUser) { showToast(t('toast.loginRequired')); return; }
+    if (role !== 'customer') { showToast(t('toast.customersOnly')); return; }
     const product = displayedProducts.find(p => p.id === pid);
     if (!product) return;
     const price = typeof product.price === 'number' ? product.price : parseFloat(String(product.price ?? '0')) || 0;
     toggleFavorite({ id: product.id, name: product.title, image: product.image_urls?.[0] ?? '', price, inStock: true });
-    showToast(isFavorited(pid) ? 'تمت الإزالة من المفضلة' : '❤ تمت الإضافة للمفضلة');
+    showToast(isFavorited(pid) ? t('toast.removedFav') : t('toast.addedFav'));
   }
 
   function addToCart(e: MouseEvent, product: Product) {
     e.stopPropagation();
-    if (!rawUser) { showToast('يجب تسجيل الدخول أو إنشاء حساب أولاً'); return; }
-    if (role !== 'customer') { showToast('متاح للعملاء فقط'); return; }
+    if (!rawUser) { showToast(t('toast.loginRequired')); return; }
+    if (role !== 'customer') { showToast(t('toast.customersOnly')); return; }
     if (isInCart(product.id)) { setConfirmProduct(product); return; }
     addToCartCtx({
       id: product.id,
@@ -178,7 +183,7 @@ export default function CategoryListingPage() {
       image: product.image_urls?.[0] ?? '',
       price: typeof product.price === 'number' ? product.price : parseFloat(String(product.price ?? '0')) || 0,
     });
-    showToast('✓ تمت الإضافة إلى السلة');
+    showToast(t('toast.addedToCart'));
   }
 
   return (
@@ -186,7 +191,7 @@ export default function CategoryListingPage() {
       <Topbar />
       <StoreNav />
 
-      <div className="cat-page" dir="rtl">
+      <div className="cat-page" dir={direction}>
 
       {/* ── Category Hero ── per-category banner from Supabase ── */}
       <section className="cat-hero">
@@ -205,8 +210,7 @@ export default function CategoryListingPage() {
             {dataLoading ? '...' : (category?.label ?? '')}
           </h1>
           <p className="cat-hero-desc">
-            {category?.description?.trim() ||
-              'اكتشف المنتجات والمتاجر المتوفرة ضمن هذه الفئة'}
+            {category?.description?.trim() || t('category.heroFallbackDesc')}
           </p>
         </div>
       </section>
@@ -257,7 +261,7 @@ export default function CategoryListingPage() {
               image: confirmProduct.image_urls?.[0] ?? '',
               price: typeof confirmProduct.price === 'number' ? confirmProduct.price : parseFloat(String(confirmProduct.price ?? '0')) || 0,
             });
-            showToast('✓ تمت إضافة قطعة أخرى إلى السلة');
+            showToast(t('toast.addedAnotherToCart'));
             setConfirmProduct(null);
           }}
           onCancel={() => setConfirmProduct(null)}

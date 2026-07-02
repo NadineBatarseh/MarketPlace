@@ -1,0 +1,307 @@
+{
+  "deliveryIssues": {
+    "confirmResolveTitle": "Confirm issue resolution",
+    "confirmResolveMessage": "Mark the delay report for order #{{orderId}} as resolved? It will be removed from the open issues list.",
+    "confirmResolveLabel": "Resolved",
+    "loadError": "Failed to load data: {{error}}",
+    "resolveError": "Failed to update status: {{error}}",
+    "title": "Delivery Issues",
+    "refresh": "Refresh",
+    "openIssuesLabel": "Open delay reports",
+    "loading": "Loading...",
+    "noIssues": "No open delivery issues",
+    "table": {
+      "orderNumber": "Order #",
+      "shipmentNumber": "Shipment #",
+      "customer": "Customer",
+      "customerNote": "Customer note",
+      "reportDate": "Report date",
+      "currentStatus": "Current shipment status",
+      "actions": "Actions"
+    },
+    "markResolved": "Mark resolved",
+    "status": {
+      "pending": "Preparing",
+      "available": "Ready for pickup",
+      "delayed": "Delayed",
+      "batched": "Batched for transport",
+      "reserved": "Reserved for delivery",
+      "picked_up": "Out for delivery",
+      "delivered": "Delivered",
+      "stranded": "Transport issue"
+    }
+  },
+  "categoryImages": {
+    "loadError": "Failed to load categories: {{error}}",
+    "invalidFile": "Please choose a valid image file",
+    "rlsError": "Not saved — you don't have permission to edit categories (check RLS policies).",
+    "uploadError": "Failed to upload image: {{error}}",
+    "removeError": "Failed to remove image: {{error}}",
+    "title": "Category Images",
+    "subtitle": "Upload the cover (banner) image shown at the top of each category page. A wide (horizontal) image works best.",
+    "refresh": "Refresh",
+    "loadingCategories": "Loading categories…",
+    "noCategories": "No categories.",
+    "noImage": "No image",
+    "defaultImageBadge": "Default image (cover)",
+    "saved": "Saved",
+    "changeImage": "Change image",
+    "uploadImage": "Upload image",
+    "delete": "Delete"
+  },
+  "financialAnalytics": {
+    "gran": { "day": "daily", "week": "weekly", "month": "monthly" },
+    "period": {
+      "week": "Week",
+      "month": "Month",
+      "2months": "2 months",
+      "6months": "6 months",
+      "year": "Year",
+      "sinceStart": "Since platform launch"
+    },
+    "sessionExpired": "Your session has expired — please log in again.",
+    "loadError": "Failed to load analytics.",
+    "connectionError": "Failed to connect to the server.",
+    "title": "Analytics",
+    "subtitle": "A visual analytics overview. Choose the time period and chart type to display.",
+    "chartType": {
+      "revenue": "Revenue over time",
+      "distribution": "Money distribution",
+      "topMerchants": "Top-earning merchants"
+    },
+    "loading": "Loading analytics...",
+    "noData": "No data in this period.",
+    "xAxis": "X-axis (horizontal)",
+    "yAxis": "Y-axis (vertical)",
+    "merchants": "Merchants",
+    "couriers": "Couriers",
+    "platform": "Platform",
+    "total": "Total",
+    "revenueOverTime": "Revenue over time ({{gran}} aggregation)",
+    "revenueXAxis": "Time — each point is a {{gran}} period",
+    "revenueYAxis": "Amount distributed ({{currency}}), split by merchants/couriers/platform",
+    "distributionTitle": "Money distribution between parties",
+    "topMerchantsTitle": "Top-earning merchants (top 10)",
+    "topMerchantsXAxis": "Merchant's total earnings ({{currency}}) — longer bar means higher earnings",
+    "topMerchantsYAxis": "Merchant name"
+  },
+  "salesLedger": {
+    "type": { "shop": "Merchant", "courier": "Courier", "platform": "Platform" },
+    "status": {
+      "distributed": "Distributed via PayTabs",
+      "platform_held": "Held by platform",
+      "pending": "Pending",
+      "queued": "Queued",
+      "submitted": "Processing transfer",
+      "paid": "Paid",
+      "failed": "Failed",
+      "skipped": "Skipped",
+      "reversed": "Reversed"
+    },
+    "sessionExpired": "Your session has expired — please log in again.",
+    "loadError": "Failed to load the ledger.",
+    "connectionError": "Failed to connect to the server.",
+    "title": "Sales & Earnings Ledger",
+    "subtitle": "A record of money distributed to merchants, couriers, and the platform, with totals and export.",
+    "cards": {
+      "customerPaid": "Customer payments",
+      "merchantShares": "Merchant shares",
+      "courierFees": "Courier fees",
+      "platformCommission": "Platform commission"
+    },
+    "filters": {
+      "allPayees": "All payees",
+      "allStatuses": "All statuses",
+      "from": "From",
+      "to": "To",
+      "searchPlaceholder": "Search by name...",
+      "apply": "Apply",
+      "exportCsv": "Export CSV"
+    },
+    "tabs": { "byTransaction": "By transaction", "byPayee": "By payee" },
+    "loading": "Loading ledger...",
+    "noRecords": "No matching records.",
+    "order": "Order",
+    "paidAtDate": "Payout date",
+    "csv": {
+      "date": "Date",
+      "orderNumber": "Order #",
+      "payee": "Payee",
+      "type": "Type",
+      "amount": "Amount",
+      "currency": "Currency",
+      "status": "Status",
+      "total": "Total",
+      "distributed": "Distributed",
+      "held": "Held",
+      "transactionCount": "Transaction count"
+    }
+  },
+  "logisticsSettings": {
+    "title": "Algorithm Settings",
+    "subtitle": "Tune the logistics batching algorithm",
+    "categories": {
+      "batch": "Batch settings",
+      "flow": "Flow settings",
+      "scoring": "Scoring weights",
+      "scoringFormulaVars": "N̂ = shipment count  ·  Û = urgency  ·  D̂ = route duration",
+      "route": "Route settings",
+      "assignment": "Driver assignment"
+    },
+    "weightGroups": { "batchScoreWeights": "Batch scoring weights" },
+    "settings": {
+      "MAX_VOLUME": {
+        "label": "Max volume per batch",
+        "unit": "volume unit",
+        "explanation": "The maximum capacity a driver's vehicle can carry in a single trip."
+      },
+      "MAX_STOPS": {
+        "label": "Max stops per batch",
+        "unit": "stop",
+        "explanation": "The maximum number of pickup or drop-off stops in a single batch."
+      },
+      "MIN_BATCH_THRESHOLD": {
+        "label": "Minimum batch size",
+        "unit": "shipment",
+        "explanation": "The minimum number of shipments required to send a batch. If fewer, it's deferred to the next cycle."
+      },
+      "CYCLE_INTERVAL_MINUTES": {
+        "label": "Grouping cycle interval",
+        "unit": "minute",
+        "explanation": "How often the grouping cycle runs and batches available shipments."
+      },
+      "MAX_FLOW_WAITING_MINUTES": {
+        "label": "Max flow waiting time",
+        "unit": "minute",
+        "explanation": "If flow shipments wait longer than this, the batch is force-sent regardless of size."
+      },
+      "MAX_DISTANCE_KM": {
+        "label": "Max distance between zones",
+        "unit": "km",
+        "explanation": "The maximum allowed distance between two zones on the same route."
+      },
+      "W_N": {
+        "label": "Shipment count weight (W_n)",
+        "unit": "ratio",
+        "explanation": "The impact of shipment count on batch scoring. Higher = a larger count raises priority more."
+      },
+      "W_U": {
+        "label": "Urgency weight (W_u)",
+        "unit": "ratio",
+        "explanation": "The impact of urgency on batch ordering. Higher = the most urgent is sent first."
+      },
+      "W_D": {
+        "label": "Route duration weight (W_d)",
+        "unit": "ratio",
+        "explanation": "Penalty for long routes. Higher = longer routes are deprioritized more."
+      },
+      "BASE_PENALTY": {
+        "label": "Dead-end penalty",
+        "unit": "points",
+        "explanation": "The penalty subtracted from a batch's score when there's no order in the destination zone. penalty = BASE_PENALTY × (1 − Û)"
+      },
+      "COST_PER_KM": {
+        "label": "Cost per kilometer",
+        "unit": "₪/km",
+        "explanation": "The calculated cost per kilometer. Used to compare extending a route vs. dispatching a new driver."
+      },
+      "ROAD_FACTOR": {
+        "label": "Distance adjustment factor",
+        "unit": "factor",
+        "explanation": "The ratio of actual road distance to straight-line distance. Compensates for turns and bends."
+      },
+      "INTRA_CITY_MIN_TIME_BUFFER_MINUTES": {
+        "label": "Min time buffer for mid-trip addition",
+        "unit": "minute",
+        "explanation": "The minimum time remaining to reach zone B before new shipments can be added mid-trip."
+      },
+      "DRIVERS_PER_ROUND": {
+        "label": "Drivers per round",
+        "unit": "driver",
+        "explanation": "The number of drivers notified of a batch in each assignment round."
+      },
+      "MAX_ASSIGNMENT_ROUNDS": {
+        "label": "Max assignment rounds",
+        "unit": "round",
+        "explanation": "If all drivers decline or time out in every round, the batch is escalated to a supervisor."
+      },
+      "ASSIGNMENT_TIMEOUT_SECONDS": {
+        "label": "Driver acceptance timeout",
+        "unit": "second",
+        "explanation": "How long the system waits for a driver to accept in each round before moving to the next."
+      }
+    },
+    "unit": { "minute": "minute", "hour": "hour" },
+    "weightsValid": "Weights are valid",
+    "weightsMustEqualOne": "Must equal 1.000",
+    "settingSingular": "setting",
+    "settingPlural": "settings",
+    "columns": { "setting": "Setting", "value": "Value", "unit": "Unit" },
+    "errors": {
+      "mustBeNumber": "Must be a number",
+      "min": "Minimum {{min}}",
+      "max": "Maximum {{max}}",
+      "weightsMustEqualOne": "Weights must equal 1"
+    },
+    "saveSuccess": "Settings saved successfully to the database.",
+    "saveFailed": "Save failed: {{error}}",
+    "saving": "Saving...",
+    "saved": "Saved",
+    "saveFailedShort": "Save failed",
+    "saveChanges": "Save changes",
+    "searchPlaceholder": "Search settings...",
+    "allCategories": "All categories",
+    "unsaved": "Unsaved",
+    "errorCount": "{{count}} error(s)",
+    "weightErrorCount": "{{count}} weight error(s)",
+    "restore": "Restore",
+    "categoriesLabel": "Categories",
+    "summary": "Summary",
+    "totalSettings": "Total settings",
+    "errorsLabel": "Errors",
+    "noMatchingSettings": "No settings match \"{{query}}\"",
+    "clearSearch": "Clear search"
+  },
+  "paymentSettings": {
+    "title": "Payment Settings",
+    "subtitle": "Configure commission, delivery fee, and settlement timing",
+    "sessionExpired": "Your session has expired — please log in again.",
+    "loadError": "Failed to load settings.",
+    "connectionError": "Failed to connect to the server.",
+    "categories": { "fees": "Commissions & Fees" },
+    "settings": {
+      "platform_commission_rate": {
+        "label": "Platform commission",
+        "unit": "ratio",
+        "explanation": "The percentage deducted from each store's total sales (0.10 = 10%)."
+      },
+      "delivery_fee": {
+        "label": "Delivery fee",
+        "unit": "₪",
+        "explanation": "Added to the customer's order total and paid to the assigned driver."
+      }
+    }
+  },
+  "sentMessages": {
+    "loadError": "Failed to load messages",
+    "defaultUser": "User",
+    "replyError": "Failed to send reply",
+    "title": "Messages",
+    "newCount": "{{count}} new",
+    "refresh": "Refresh",
+    "newMessage": "New Message",
+    "chooseRecipient": "Choose recipient",
+    "recipientSearchPlaceholder": "Search for a courier or store...",
+    "loading": "Loading...",
+    "noResults": "No results",
+    "courierType": "Delivery courier",
+    "shopType": "Merchant / Store",
+    "noConversations": "No conversations yet",
+    "noConversationsHint": "Click \"New Message\" to start a conversation",
+    "conversationSearchPlaceholder": "Search conversations...",
+    "back": "Back",
+    "adminInitial": "A",
+    "noText": "No text",
+    "replyPlaceholder": "Type your reply... (Enter to send, Shift+Enter for new line)"
+  }
+}

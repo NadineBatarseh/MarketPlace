@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMerchantAuth } from '../context/MerchantAuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import supabase from '../../lib/supabase';
 
 interface CustomerInfo {
@@ -26,15 +28,18 @@ interface Bill {
   items: BillItem[];
 }
 
-function formatDate(iso: string) {
-  return new Intl.DateTimeFormat('ar-SA', {
+function formatDate(iso: string, numLocale: string) {
+  return new Intl.DateTimeFormat(numLocale, {
     year: 'numeric', month: 'long', day: 'numeric',
   }).format(new Date(iso));
 }
 
 function BillCard({ bill }: { bill: Bill }) {
+  const { t } = useTranslation('merchant');
+  const { lang } = useLanguage();
+  const numLocale = lang === 'ar' ? 'ar-EG' : 'en-US';
   const isPaid = bill.payment_status === 'paid';
-  const customerName = bill.customer?.full_name ?? `عميل #${bill.user_id.slice(0, 8)}`;
+  const customerName = bill.customer?.full_name ?? t('billing.customerFallback', { id: bill.user_id.slice(0, 8) });
   const phone = bill.customer?.phone;
   const address = bill.customer?.address;
 
@@ -43,7 +48,7 @@ function BillCard({ bill }: { bill: Bill }) {
       <div className="mb-bill-header">
         <div className="mb-bill-name">{customerName}</div>
         <span className={`mb-status-badge ${isPaid ? 'paid' : 'unpaid'}`}>
-          {isPaid ? '✅ مدفوعة' : '⏳ غير مدفوعة'}
+          {isPaid ? `✅ ${t('billing.statusPaid')}` : `⏳ ${t('billing.statusUnpaid')}`}
         </span>
       </div>
 
@@ -92,19 +97,19 @@ function BillCard({ bill }: { bill: Bill }) {
             <line x1="8" y1="2" x2="8" y2="6" />
             <line x1="3" y1="10" x2="21" y2="10" />
           </svg>
-          <span>{formatDate(bill.created_at)}</span>
+          <span>{formatDate(bill.created_at, numLocale)}</span>
         </div>
       </div>
 
       <div className="mb-divider" />
 
       <div className="mb-products-list">
-        <div className="mb-products-label">المنتجات المطلوبة:</div>
+        <div className="mb-products-label">{t('billing.productsRequested')}</div>
         {bill.items.map((item, idx) => (
           <div key={idx} className="mb-product-row">
             <span className="mb-product-name">{item.productTitle} × {item.qty}</span>
             <span className="mb-product-cost">
-              {(item.qty * item.unitPrice).toLocaleString('ar-SA')} ₪
+              {(item.qty * item.unitPrice).toLocaleString(numLocale)} ₪
             </span>
           </div>
         ))}
@@ -113,14 +118,16 @@ function BillCard({ bill }: { bill: Bill }) {
       <div className="mb-divider" />
 
       <div className="mb-total">
-        <span className="mb-total-label">الإجمالي</span>
-        <span className="mb-total-value">{Number(bill.total_price).toLocaleString('ar-SA')} ₪</span>
+        <span className="mb-total-label">{t('billing.total')}</span>
+        <span className="mb-total-value">{Number(bill.total_price).toLocaleString(numLocale)} ₪</span>
       </div>
     </div>
   );
 }
 
 export default function MerchantBilling() {
+  const { t } = useTranslation('merchant');
+  const { direction } = useLanguage();
   const { merchant } = useMerchantAuth();
   const [bills, setBills] = useState<Bill[]>([]);
   const [tab, setTab] = useState<'unpaid' | 'paid'>('unpaid');
@@ -167,7 +174,7 @@ export default function MerchantBilling() {
         if (!detailsByOrder[row.order_id]) detailsByOrder[row.order_id] = [];
         const prod = productMap[row.product_id];
         detailsByOrder[row.order_id].push({
-          productTitle: prod?.title ?? 'منتج',
+          productTitle: prod?.title ?? t('billing.productFallback'),
           qty: row.qty,
           unitPrice: prod?.price ?? 0,
         });
@@ -213,7 +220,7 @@ export default function MerchantBilling() {
 
       setBills(mapped);
     } catch (err: unknown) {
-      setError('تعذّر تحميل الفواتير');
+      setError(t('billing.loadFailed'));
       console.error(err);
     }
     setLoading(false);
@@ -223,27 +230,27 @@ export default function MerchantBilling() {
   const paid = bills.filter(b => b.payment_status === 'paid');
   const displayed = tab === 'unpaid' ? unpaid : paid;
 
-  if (loading) return <div className="mb-root"><div className="md-page-loading">جاري تحميل الفواتير...</div></div>;
-  if (!merchant?.shop) return <div className="mb-root"><div className="md-page-empty">لا يوجد متجر مرتبط بحسابك.</div></div>;
+  if (loading) return <div className="mb-root" dir={direction}><div className="md-page-loading">{t('billing.loading')}</div></div>;
+  if (!merchant?.shop) return <div className="mb-root" dir={direction}><div className="md-page-empty">{t('billing.noShop')}</div></div>;
 
   return (
-    <div className="mb-root">
+    <div className="mb-root" dir={direction}>
       <div className="mb-header">
-        <h1 className="mb-title">الفواتير</h1>
+        <h1 className="mb-title">{t('billing.title')}</h1>
         <div className="mb-tabs">
           <button
             type="button"
             className={`mb-tab${tab === 'unpaid' ? ' mb-tab-active' : ''}`}
             onClick={() => setTab('unpaid')}
           >
-            ⏳ غير مدفوعة ({unpaid.length})
+            ⏳ {t('billing.tabUnpaid')} ({unpaid.length})
           </button>
           <button
             type="button"
             className={`mb-tab${tab === 'paid' ? ' mb-tab-active' : ''}`}
             onClick={() => setTab('paid')}
           >
-            ✅ مدفوعة ({paid.length})
+            ✅ {t('billing.tabPaid')} ({paid.length})
           </button>
         </div>
       </div>
@@ -253,7 +260,7 @@ export default function MerchantBilling() {
       <div className="mb-grid">
         {displayed.length === 0 ? (
           <div className="mb-empty">
-            {tab === 'unpaid' ? 'لا توجد فواتير غير مدفوعة 🎉' : 'لا توجد فواتير مدفوعة بعد'}
+            {tab === 'unpaid' ? `${t('billing.emptyUnpaid')} 🎉` : t('billing.emptyPaid')}
           </div>
         ) : (
           displayed.map(bill => <BillCard key={bill.id} bill={bill} />)

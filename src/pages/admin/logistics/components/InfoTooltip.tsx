@@ -1,11 +1,13 @@
 import React, { useState, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom';
+import { useLanguage } from '../../../../context/LanguageContext';
 
 interface InfoTooltipProps {
   text: string;
 }
 
 const InfoTooltip: React.FC<InfoTooltipProps> = ({ text }) => {
+  const { direction } = useLanguage();
   const [visible, setVisible] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0, below: true });
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -46,8 +48,8 @@ const InfoTooltip: React.FC<InfoTooltipProps> = ({ text }) => {
               borderRadius: 8,
               padding: '10px 14px',
               boxShadow: '0 8px 32px rgba(15,43,78,0.3)',
-              direction: 'rtl',
-              textAlign: 'right',
+              direction,
+              textAlign: direction === 'rtl' ? 'right' : 'left',
             }}
           >
             <div style={{ color: '#E2E8F0', fontSize: 12, lineHeight: 1.6, fontFamily: 'sans-serif' }}>

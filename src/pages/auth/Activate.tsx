@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import zxcvbn from 'zxcvbn';
 
 import PasswordStrengthBar from './PasswordStrengthBar';
 import './Auth.css';
 
 export default function Activate() {
+  const { t } = useTranslation('auth');
   const [platformEmail, setPlatformEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -18,15 +20,15 @@ export default function Activate() {
     setError('');
 
     if (password !== confirm) {
-      setError('كلمتا المرور غير متطابقتين');
+      setError(t('errors.mismatch'));
       return;
     }
     if (password.length < 6) {
-      setError('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      setError(t('errors.tooShort'));
       return;
     }
     if (zxcvbn(password).score < 2) {
-      setError('كلمة المرور ضعيفة جداً — اختر كلمة مرور أصعب');
+      setError(t('errors.tooWeak'));
       return;
     }
 
@@ -42,7 +44,7 @@ export default function Activate() {
     setLoading(false);
 
     if (!result.ok) {
-      setError(result.error ?? 'حدث خطأ غير متوقع');
+      setError(result.error ?? t('errors.unexpected'));
       return;
     }
 
@@ -51,16 +53,16 @@ export default function Activate() {
 
   if (success) {
     return (
-      <div className="auth-page" dir="rtl">
+      <div className="auth-page">
         <div className="auth-card auth-success-card">
           <div className="auth-success-icon">🎉</div>
-          <h2 className="auth-title">تم تفعيل حسابك بنجاح!</h2>
+          <h2 className="auth-title">{t('activate.success.title')}</h2>
           <p className="auth-success-msg">
-            أرسلنا رسالة تأكيد إلى بريدك الإلكتروني الرسمي.<br /><br />
-            افتح الرسالة واضغط على رابط التأكيد، ثم سجّل الدخول باستخدام بريدك الرسمي وكلمة المرور التي أنشأتها.
+            {t('activate.success.messagePre')}<br /><br />
+            {t('activate.success.messagePost')}
           </p>
           <Link to="/login" className="auth-submit" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
-            تسجيل الدخول
+            {t('activate.success.login')}
           </Link>
         </div>
       </div>
@@ -68,29 +70,30 @@ export default function Activate() {
   }
 
   return (
-    <div className="auth-page" dir="rtl">
+    <div className="auth-page">
       <div className="auth-card">
         <img src="/logo.png" alt="سوق لينك" className="auth-logo auth-logo-img" />
-        <h1 className="auth-title">تفعيل الحساب</h1>
-        <p className="auth-sub">أدخل بريدك الإلكتروني الرسمي وأنشئ كلمة مرور لحسابك</p>
+        <h1 className="auth-title">{t('activate.title')}</h1>
+        <p className="auth-sub">{t('activate.subtitle')}</p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="auth-field">
-            <label>البريد الإلكتروني الرسمي</label>
+            <label>{t('activate.officialEmailLabel')}</label>
             <input
               type="email"
-              placeholder="البريد الذي أرسلناه لك في رسالة القبول"
+              placeholder={t('activate.officialEmailPlaceholder')}
               value={platformEmail}
               onChange={e => setPlatformEmail(e.target.value)}
               required
               autoComplete="email"
+              dir="ltr"
             />
           </div>
           <div className="auth-field">
-            <label>كلمة المرور</label>
+            <label>{t('shared.passwordLabel')}</label>
             <input
               type="password"
-              placeholder="6 أحرف على الأقل"
+              placeholder={t('shared.passwordPlaceholder')}
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
@@ -99,10 +102,10 @@ export default function Activate() {
             <PasswordStrengthBar password={password} />
           </div>
           <div className="auth-field">
-            <label>تأكيد كلمة المرور</label>
+            <label>{t('shared.confirmPasswordLabel')}</label>
             <input
               type="password"
-              placeholder="أعد كتابة كلمة المرور"
+              placeholder={t('shared.confirmPlaceholder2')}
               value={confirm}
               onChange={e => setConfirm(e.target.value)}
               required
@@ -113,13 +116,13 @@ export default function Activate() {
           {error && <p className="auth-error">{error}</p>}
 
           <button type="submit" className="auth-submit" disabled={loading}>
-            {loading ? 'جارٍ تفعيل الحساب...' : 'تفعيل الحساب'}
+            {loading ? t('activate.loading') : t('activate.submit')}
           </button>
         </form>
 
         <p className="auth-switch">
-          لديك حساب بالفعل؟{' '}
-          <Link to="/login">تسجيل الدخول</Link>
+          {t('shared.hasAccount')}{' '}
+          <Link to="/login">{t('shared.backToLoginLink')}</Link>
         </p>
       </div>
     </div>

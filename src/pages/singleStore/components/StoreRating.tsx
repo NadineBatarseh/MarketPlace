@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useCustomerAuth } from '../../../context/CustomerAuthContext';
 
 interface Props {
@@ -7,6 +8,7 @@ interface Props {
 }
 
 export default function StoreRating({ shopId, onSubmitted }: Props) {
+  const { t } = useTranslation('customer');
   const { customer } = useCustomerAuth();
   const [hovered, setHovered] = useState(0);
   const [selected, setSelected] = useState(0);
@@ -37,16 +39,16 @@ export default function StoreRating({ shopId, onSubmitted }: Props) {
   }
 
   if (!customer) {
-    return <p className="store-rating-thanks">يجب تسجيل الدخول لتتمكن من التقييم</p>;
+    return <p className="store-rating-thanks">{t('storeRating.loginRequired')}</p>;
   }
 
   if (submitted) {
-    return <p className="store-rating-thanks">شكراً على تقييمك!</p>;
+    return <p className="store-rating-thanks">{t('storeRating.thanks')}</p>;
   }
 
   return (
     <div className="store-rating-input">
-      <span className="store-rating-label">قيّم المتجر:</span>
+      <span className="store-rating-label">{t('storeRating.label')}</span>
       <div className="store-rating-stars">
         {[1, 2, 3, 4, 5].map(i => (
           <svg
@@ -66,7 +68,7 @@ export default function StoreRating({ shopId, onSubmitted }: Props) {
       {error && <p className="store-rating-error">{error}</p>}
       {selected > 0 && !error && (
         <button className="store-rating-submit" onClick={submit} disabled={loading}>
-          {loading ? '...' : 'إرسال'}
+          {loading ? '...' : t('storeRating.submit')}
         </button>
       )}
     </div>

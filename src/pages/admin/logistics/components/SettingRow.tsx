@@ -1,5 +1,7 @@
 import React, { useCallback, useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { SettingDef, SettingsValues } from '../settingsData';
+import { useLanguage } from '../../../../context/LanguageContext';
 import InfoTooltip from './InfoTooltip';
 import ToggleSwitch from './ToggleSwitch';
 
@@ -96,13 +98,15 @@ const NumericInput: React.FC<{
 const SettingRow: React.FC<SettingRowProps> = ({
   def, values, errors, onChange, highlight,
 }) => {
+  const { t } = useTranslation('admin');
+  const { direction } = useLanguage();
   const val = values[def.key];
   const error = errors[def.key];
 
   // Time-unit toggle. Use the field's custom units if provided, else fall back to the
   // legacy minute/hour toggle for 'minutes'-type fields. First unit is the stored base.
   const units = def.timeUnits ?? (def.type === 'minutes'
-    ? [{ label: 'دقيقة', factor: 1 }, { label: 'ساعة', factor: 60, step: 0.5 }]
+    ? [{ label: t('logisticsSettings.unit.minute'), factor: 1 }, { label: t('logisticsSettings.unit.hour'), factor: 60, step: 0.5 }]
     : null);
   const hasUnits = !!units && units.length > 1;
   const [unitIdx, setUnitIdx] = useState(0);
@@ -212,7 +216,7 @@ const SettingRow: React.FC<SettingRowProps> = ({
         background: highlight ? 'rgba(249,115,22,0.04)' : 'transparent',
         transition: 'background 0.15s',
         borderBottom: '1px solid #F1F5F9',
-        direction: 'rtl',
+        direction,
       }}
       onMouseEnter={e => {
         if (!highlight) (e.currentTarget as HTMLElement).style.background = '#FAFAFA';

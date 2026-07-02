@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../../context/LanguageContext';
 import supabase from '../../lib/supabase';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import StoreNav from '../../components/StoreNav';
@@ -7,6 +9,7 @@ import ExpandedDrawer, { DrawerItemData } from '../../components/ExpandedDrawer'
 import Topbar from '../../components/Topbar';
 import type { ShipmentStatus } from '../../../shared/status';
 import { fetchUnreadOrderNotifications } from '../../lib/orderNotifications';
+import i18n from '../../i18n/config';
 import './OrderHistoryPage.css';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -25,7 +28,6 @@ interface Shipment {
   created_at: string;
   picked_up_at: string | null;
   delivered_at: string | null;
-  /** created_at of this shipment's 'customer_confirmed' tracking event, if any. */
   confirmedAt: string | null;
 }
 
@@ -60,37 +62,16 @@ interface Order {
   order_details: OrderDetail[];
 }
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ── Static badge meta (display-language-independent) ─────────────────────────
 
-const STEPS = ['تم الطلب', 'قيد المعالجة', 'تم الاستلام', 'قيد التوصيل', 'اكتمل الطلب'];
-
-const STEP_BADGE = [
-  { label: 'تم الطلب',     badgeClass: 'badge-pending',    statusKey: 'pending'    },
-  { label: 'قيد المعالجة', badgeClass: 'badge-processing', statusKey: 'processing' },
-  { label: 'تم الاستلام',  badgeClass: 'badge-ready',      statusKey: 'ready'      },
-  { label: 'قيد التوصيل',  badgeClass: 'badge-shipped',    statusKey: 'shipping'   },
+const STEP_BADGE_META = [
+  { badgeClass: 'badge-pending',    statusKey: 'pending'    },
+  { badgeClass: 'badge-processing', statusKey: 'processing' },
+  { badgeClass: 'badge-ready',      statusKey: 'ready'      },
+  { badgeClass: 'badge-shipped',    statusKey: 'shipping'   },
 ];
 
-// Filter bucket for the search/filter bar above the list. Driven by the same
-// getOrderProgress() the timeline uses (payment_status + shipment status),
-// not by orders.status — orders.status alone can't tell pending apart from
-// processing/ready, and never holds payment or cancellation info.
-const FILTER_LABELS: Record<string, string> = {
-  all:        'الكل',
-  pending:    'تم الطلب',
-  processing: 'قيد المعالجة',
-  ready:      'تم الاستلام',
-  shipping:   'قيد التوصيل',
-  delivered:  'تم التسليم',
-};
-
-const DATE_FILTER_OPTIONS = [
-  { key: 'all',     label: 'جميع الفترات' },
-  { key: 'today',   label: 'اليوم' },
-  { key: 'week',    label: 'هذا الأسبوع' },
-  { key: 'month',   label: 'هذا الشهر' },
-  { key: '3months', label: 'آخر 3 أشهر' },
-] as const;
+const DATE_FILTER_KEYS = ['all', 'today', 'week', 'month', '3months'] as const;
 
 function getDateFilterStart(key: string): Date | null {
   const now = new Date();
@@ -105,33 +86,37 @@ function getDateFilterStart(key: string): Date | null {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatOrderId(id: number) {
-  return `#${id}`;
+type TFunc = (key: string, opts?: Record<string, unknown>) => string;
+
+function dateLocale() {
+  return i18n.language === 'ar' ? 'ar-EG' : 'en-US';
 }
 
+function formatOrderId(id: number) { return `#${id}`; }
+
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('ar-EG', {
+  return new Date(iso).toLocaleDateString(dateLocale(), {
     month: 'long', day: 'numeric', year: 'numeric',
   });
 }
 
 function formatDateShort(date: Date) {
-  return date.toLocaleDateString('ar-EG', { month: 'long', day: 'numeric' });
+  return date.toLocaleDateString(dateLocale(), { month: 'long', day: 'numeric' });
 }
 
 function formatTime(date: Date) {
-  return date.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', hour12: true });
+  return date.toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit', hour12: true });
 }
 
 function formatDateTime(iso: string) {
   const d = new Date(iso);
-  const date = d.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' });
+  const date = d.toLocaleDateString(dateLocale(), { day: 'numeric', month: 'long', year: 'numeric' });
   const time = formatTime(d);
   return `${date} - ${time}`;
 }
 
 function formatDateFull(date: Date) {
-  return date.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' });
+  return date.toLocaleDateString(dateLocale(), { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 function addHours(date: Date, h: number): Date {
@@ -144,19 +129,7 @@ function addDays(date: Date, d: number): Date {
   return r;
 }
 
-// ── Order progress (timeline) ────────────────────────────────────────────────
-//
-// Steps: 0=تم الطلب  1=قيد المعالجة  2=تم الاستلام  3=قيد التوصيل
-//
-// تم الطلب      -> done as soon as orders.payment_status = 'paid'
-// قيد المعالجة   -> active after payment, done once any shipment is 'available'
-// تم الاستلام    -> active once any shipment is 'available', done once any shipment is 'picked_up'
-// قيد التوصيل    -> active once any shipment is 'picked_up', done (isCompleted) once ALL shipments are 'delivered'
-//
-// isConfirmed (step 4, "اكتمل الطلب") is tracked separately from isCompleted:
-// isCompleted means every shipment is 'delivered'; isConfirmed means every
-// shipment additionally has a 'customer_confirmed' tracking event — the order
-// is only ever fully done once the customer has confirmed every product.
+// ── Order progress ────────────────────────────────────────────────────────────
 
 interface OrderProgress {
   step: number;
@@ -187,11 +160,10 @@ function getOrderProgress(order: Order): OrderProgress {
   return { step: 0, isCompleted: false, isCancelled: false, isConfirmed };
 }
 
-// Maps progress onto the filter-bar bucket keys (FILTER_LABELS above).
 function getFilterKey(progress: OrderProgress): string {
   if (progress.isCancelled) return 'cancelled';
   if (progress.isCompleted) return 'delivered';
-  return STEP_BADGE[progress.step].statusKey;
+  return STEP_BADGE_META[progress.step].statusKey;
 }
 
 function earliestShipmentDate(order: Order, statuses: ShipmentStatus[]): Date | null {
@@ -235,37 +207,41 @@ function getEstimatedDelivery(order: Order, progress: OrderProgress): Date {
   return addDays(base, 3);
 }
 
-function getDeliveryEstimateText(progress: OrderProgress, estDelivery: Date): string {
+function getDeliveryEstimateText(progress: OrderProgress, estDelivery: Date, t: TFunc): string {
   if (progress.isCancelled) return '';
-  if (progress.isCompleted) return 'تم التسليم بنجاح';
+  if (progress.isCompleted) return t('orders:history.estimate.delivered');
   if (progress.step === 3) {
-    return isToday(estDelivery) ? `اليوم، ${formatTime(estDelivery)}` : 'خلال ساعات';
+    return isToday(estDelivery)
+      ? t('orders:history.estimate.today', { time: formatTime(estDelivery) })
+      : t('orders:history.estimate.hours');
   }
   const days = Math.round((estDelivery.getTime() - Date.now()) / 86_400_000);
-  if (days <= 0) return 'بعد قليل';
-  if (days === 1) return 'خلال يوم واحد';
-  if (days === 2) return 'خلال يومين';
-  return `خلال ${days} أيام`;
+  if (days <= 0) return t('orders:history.estimate.soon');
+  if (days === 1) return t('orders:history.estimate.oneDay');
+  if (days === 2) return t('orders:history.estimate.twoDays');
+  return t('orders:history.estimate.days', { count: days });
 }
 
 function getStepTimestamps(order: Order): (Date | null)[] {
   const base = new Date(order.created_at);
   return [
-    base,                                                                // تم الطلب
-    order.payment_status === 'paid' ? base : null,                      // قيد المعالجة
-    earliestShipmentDate(order, ['available', 'picked_up', 'delivered']), // تم الاستلام
-    earliestPickedUpAt(order) ?? latestDeliveredAt(order),               // قيد التوصيل
-    latestConfirmedAt(order),                                            // اكتمل الطلب
+    base,
+    order.payment_status === 'paid' ? base : null,
+    earliestShipmentDate(order, ['available', 'picked_up', 'delivered']),
+    earliestPickedUpAt(order) ?? latestDeliveredAt(order),
+    latestConfirmedAt(order),
   ];
 }
 
-function getTimeRemaining(target: Date): string {
+function getTimeRemaining(target: Date, t: TFunc): string {
   const mins = Math.round((target.getTime() - Date.now()) / 60_000);
-  if (mins <= 0) return 'بعد قليل';
-  if (mins < 60) return `${mins} دقيقة`;
+  if (mins <= 0) return t('orders:history.time.soon');
+  if (mins < 60) return t('orders:history.time.minutes', { count: mins });
   const h = Math.floor(mins / 60);
   const m = mins % 60;
-  return m > 0 ? `${h} ساعة و${m} دقيقة` : `${h} ساعة`;
+  return m > 0
+    ? t('orders:history.time.hourAndMinutes', { h, m })
+    : t('orders:history.time.hour', { count: h });
 }
 
 function isToday(date: Date): boolean {
@@ -278,8 +254,29 @@ function isToday(date: Date): boolean {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function OrderHistoryPage() {
+  const { t } = useTranslation('orders');
+  const { direction } = useLanguage();
   const { customer, isLoading: authLoading } = useCustomerAuth();
   const navigate = useNavigate();
+
+  const STEPS = t('orders:steps.order', { returnObjects: true }) as string[];
+
+  const DATE_FILTER_OPTIONS = [
+    { key: 'all',     label: t('orders:history.filter.period') },
+    { key: 'today',   label: t('orders:history.filter.today')  },
+    { key: 'week',    label: t('orders:history.filter.week')   },
+    { key: 'month',   label: t('orders:history.filter.month')  },
+    { key: '3months', label: t('orders:history.filter.months3')},
+  ];
+
+  const FILTER_LABELS: Record<string, string> = {
+    all:        t('orders:history.filter.all'),
+    pending:    t('orders:badges.pending'),
+    processing: t('orders:badges.processing'),
+    ready:      t('orders:badges.ready'),
+    shipping:   t('orders:badges.shipping'),
+    delivered:  t('orders:badges.delivered'),
+  };
 
   const [orders, setOrders]       = useState<Order[]>([]);
   const [loading, setLoading]     = useState(true);
@@ -295,12 +292,8 @@ export default function OrderHistoryPage() {
 
   useEffect(() => {
     function handleOutside(e: MouseEvent) {
-      if (statusRef.current && !statusRef.current.contains(e.target as Node)) {
-        setStatusOpen(false);
-      }
-      if (dateRef.current && !dateRef.current.contains(e.target as Node)) {
-        setDateOpen(false);
-      }
+      if (statusRef.current && !statusRef.current.contains(e.target as Node)) setStatusOpen(false);
+      if (dateRef.current && !dateRef.current.contains(e.target as Node)) setDateOpen(false);
     }
     document.addEventListener('mousedown', handleOutside);
     return () => document.removeEventListener('mousedown', handleOutside);
@@ -397,7 +390,7 @@ export default function OrderHistoryPage() {
 
         if (!cancelled) setOrders(merged);
       } catch (e: unknown) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'حدث خطأ أثناء تحميل الطلبات');
+        if (!cancelled) setError(e instanceof Error ? e.message : t('orders:history.error.load'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -433,14 +426,18 @@ export default function OrderHistoryPage() {
       <>
         <Topbar />
         <StoreNav />
-        <div className="oh-page" dir="rtl">
+        <div className="oh-page" dir={direction}>
           <div className="oh-empty">
             <div className="oh-empty-icon">🔒</div>
-            <h3>يجب تسجيل الدخول لعرض طلباتك</h3>
-            <p>قم بتسجيل الدخول أو إنشاء حساب للوصول إلى سجل طلباتك</p>
+            <h3>{t('orders:history.loginRequired.title')}</h3>
+            <p>{t('orders:history.loginRequired.subtitle')}</p>
             <div className="oh-guest-actions">
-              <button type="button" className="oh-btn oh-btn-primary" onClick={() => navigate('/login')}>تسجيل الدخول</button>
-              <button type="button" className="oh-btn" onClick={() => navigate('/signup')}>إنشاء حساب</button>
+              <button type="button" className="oh-btn oh-btn-primary" onClick={() => navigate('/login')}>
+                {t('orders:history.loginRequired.login')}
+              </button>
+              <button type="button" className="oh-btn" onClick={() => navigate('/signup')}>
+                {t('orders:history.loginRequired.signup')}
+              </button>
             </div>
           </div>
         </div>
@@ -453,8 +450,8 @@ export default function OrderHistoryPage() {
       <>
         <Topbar />
         <StoreNav />
-        <div className="oh-page" dir="rtl">
-          <div className="oh-loading">جارٍ تحميل طلباتك…</div>
+        <div className="oh-page" dir={direction}>
+          <div className="oh-loading">{t('orders:history.loading')}</div>
         </div>
       </>
     );
@@ -465,10 +462,10 @@ export default function OrderHistoryPage() {
       <>
         <Topbar />
         <StoreNav />
-        <div className="oh-page" dir="rtl">
+        <div className="oh-page" dir={direction}>
           <div className="oh-empty">
             <div className="oh-empty-icon">⚠️</div>
-            <h3>حدث خطأ ما</h3>
+            <h3>{t('orders:history.error.title')}</h3>
             <p>{error}</p>
           </div>
         </div>
@@ -480,15 +477,13 @@ export default function OrderHistoryPage() {
     <>
       <Topbar />
       <StoreNav />
-      <div className="oh-page" dir="rtl">
+      <div className="oh-page" dir={direction}>
 
-        {/* Header */}
         <div className="oh-header">
-          <h1>طلباتي</h1>
-          <p>تتبّع جميع طلباتك وحالة التوصيل</p>
+          <h1>{t('orders:history.title')}</h1>
+          <p>{t('orders:history.subtitle')}</p>
         </div>
 
-        {/* Stats */}
         <div className="oh-stats">
           <div className="oh-stat" data-type="orders">
             <div className="oh-stat-icon">
@@ -500,8 +495,7 @@ export default function OrderHistoryPage() {
             </div>
             <div className="oh-stat-body">
               <div className="oh-stat-val">{stats.total}</div>
-              <div className="oh-stat-lbl">إجمالي الطلبات</div>
-
+              <div className="oh-stat-lbl">{t('orders:history.stats.total')}</div>
             </div>
           </div>
           <div className="oh-stat" data-type="spending">
@@ -513,8 +507,7 @@ export default function OrderHistoryPage() {
             </div>
             <div className="oh-stat-body">
               <div className="oh-stat-val">₪{stats.spent.toFixed(2)}</div>
-              <div className="oh-stat-lbl">إجمالي الإنفاق</div>
-
+              <div className="oh-stat-lbl">{t('orders:history.stats.spent')}</div>
             </div>
           </div>
           <div className="oh-stat" data-type="active">
@@ -527,16 +520,12 @@ export default function OrderHistoryPage() {
             </div>
             <div className="oh-stat-body">
               <div className="oh-stat-val">{stats.inProgress}</div>
-              <div className="oh-stat-lbl">قيد التوصيل</div>
-
+              <div className="oh-stat-lbl">{t('orders:history.stats.inProgress')}</div>
             </div>
           </div>
         </div>
 
-        {/* Filters */}
         <div className="oh-filter-bar">
-
-          {/* Right (RTL): Search box */}
           <div className="oh-fbar-search-wrap">
             <span className="oh-fbar-search-icon">
               <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -546,12 +535,17 @@ export default function OrderHistoryPage() {
             <input
               className="oh-fbar-search"
               type="text"
-              placeholder="ابحث في الطلبات..."
+              placeholder={t('orders:history.filter.search')}
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
             {search && (
-              <button type="button" className="oh-fbar-search-clear" aria-label="مسح البحث" onClick={() => setSearch('')}>
+              <button
+                type="button"
+                className="oh-fbar-search-clear"
+                aria-label={t('orders:history.filter.clearSearch')}
+                onClick={() => setSearch('')}
+              >
                 <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                   <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                 </svg>
@@ -559,7 +553,6 @@ export default function OrderHistoryPage() {
             )}
           </div>
 
-          {/* Center: Status dropdown */}
           <div className="oh-fbar-status-wrap" ref={statusRef}>
             <button
               type="button"
@@ -569,7 +562,7 @@ export default function OrderHistoryPage() {
               <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
               </svg>
-              <span>{activeFilter === 'all' ? 'حالة الطلب' : FILTER_LABELS[activeFilter]}</span>
+              <span>{activeFilter === 'all' ? t('orders:history.filter.status') : FILTER_LABELS[activeFilter]}</span>
               <svg className="oh-fbar-chevron" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                 <path d="m6 9 6 6 6-6"/>
               </svg>
@@ -595,7 +588,6 @@ export default function OrderHistoryPage() {
             )}
           </div>
 
-          {/* Left: Date filter */}
           <div className="oh-fbar-status-wrap" ref={dateRef}>
             <button
               type="button"
@@ -605,7 +597,7 @@ export default function OrderHistoryPage() {
               <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
               </svg>
-              <span>{DATE_FILTER_OPTIONS.find(o => o.key === dateFilter)?.label ?? 'جميع الفترات'}</span>
+              <span>{DATE_FILTER_OPTIONS.find(o => o.key === dateFilter)?.label ?? t('orders:history.filter.period')}</span>
               <svg className="oh-fbar-chevron" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                 <path d="m6 9 6 6 6-6"/>
               </svg>
@@ -630,20 +622,18 @@ export default function OrderHistoryPage() {
               </div>
             )}
           </div>
-
         </div>
 
-        {/* List */}
         <div className="oh-list">
           {filtered.length === 0 ? (
             <div className="oh-empty">
               <div className="oh-empty-icon">📦</div>
-              <h3>لا توجد طلبات</h3>
-              <p>جرّب فلتراً أو كلمة بحث مختلفة.</p>
+              <h3>{t('orders:history.empty.title')}</h3>
+              <p>{t('orders:history.empty.subtitle')}</p>
             </div>
           ) : (
             filtered.map((order, idx) => (
-              <OrderCard key={order.id} order={order} idx={idx} unreadCount={unreadByOrder[order.id] ?? 0} />
+              <OrderCard key={order.id} order={order} idx={idx} unreadCount={unreadByOrder[order.id] ?? 0} t={t} steps={STEPS} />
             ))
           )}
         </div>
@@ -655,29 +645,43 @@ export default function OrderHistoryPage() {
 
 // ── OrderCard ─────────────────────────────────────────────────────────────────
 
-function OrderCard({ order, idx, unreadCount }: { order: Order; idx: number; unreadCount: number }) {
-  const progress      = getOrderProgress(order);
-  const badge         = progress.isCancelled
-    ? { label: 'ملغي', badgeClass: 'badge-cancelled', statusKey: 'cancelled' }
+function OrderCard({
+  order, idx, unreadCount, t, steps,
+}: {
+  order: Order;
+  idx: number;
+  unreadCount: number;
+  t: TFunc;
+  steps: string[];
+}) {
+  const progress = getOrderProgress(order);
+  const badge = progress.isCancelled
+    ? { label: t('orders:badges.cancelled'), badgeClass: 'badge-cancelled', statusKey: 'cancelled' }
     : progress.isCompleted
-    ? { label: 'تم التسليم', badgeClass: 'badge-delivered', statusKey: 'delivered' }
-    : STEP_BADGE[progress.step];
+    ? { label: t('orders:badges.delivered'), badgeClass: 'badge-delivered', statusKey: 'delivered' }
+    : {
+        label: t(`orders:badges.${STEP_BADGE_META[progress.step].statusKey}`),
+        ...STEP_BADGE_META[progress.step],
+      };
 
-  const items         = order.order_details;
-  const navigate      = useNavigate();
+  const items     = order.order_details;
+  const navigate  = useNavigate();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const firstName  = items[0]?.product?.title ?? 'منتج';
-  const summary    = items.length > 1
-    ? `${firstName} و${items.length - 1} منتج${items.length - 1 > 1 ? 'ات' : ''} أخرى`
+  const fallbackProduct = t('orders:history.card.product');
+  const firstName = items[0]?.product?.title ?? fallbackProduct;
+  const extraCount = items.length - 1;
+  const summary = items.length > 1
+    ? `${firstName} ${extraCount === 1
+        ? t('orders:history.card.andOneOther', { count: 1 })
+        : t('orders:history.card.andManyOther', { count: extraCount })}`
     : firstName;
-  const totalQty   = items.reduce((s, d) => s + (d.qty ?? 1), 0);
-  const storeName  = items[0]?.product ? null : null; // placeholder for real store data
+  const totalQty  = items.reduce((s, d) => s + (d.qty ?? 1), 0);
 
-  const isDelivering   = !progress.isCancelled && !progress.isCompleted && progress.step === 3;
-  const isCompleted    = progress.isCompleted;
-  const showDelivery   = !progress.isCancelled;
-  const showTrack      = !progress.isCancelled;
+  const isDelivering = !progress.isCancelled && !progress.isCompleted && progress.step === 3;
+  const isCompleted  = progress.isCompleted;
+  const showDelivery = !progress.isCancelled;
+  const showTrack    = !progress.isCancelled;
 
   const estDelivery    = getEstimatedDelivery(order, progress);
   const stepTimestamps = getStepTimestamps(order);
@@ -685,7 +689,7 @@ function OrderCard({ order, idx, unreadCount }: { order: Order; idx: number; unr
 
   const drawerItems: DrawerItemData[] = items.map(d => ({
     imageUrl:  d.product?.image_urls?.[0] ?? null,
-    name:      d.product?.title ?? 'منتج',
+    name:      d.product?.title ?? fallbackProduct,
     price:     `₪${(d.unit_price || d.product?.price || 0).toFixed(2)}`,
     qty:       d.qty,
     productId: d.product_id ?? null,
@@ -697,21 +701,17 @@ function OrderCard({ order, idx, unreadCount }: { order: Order; idx: number; unr
       data-status={badge.statusKey}
       style={{ '--oh-delay': `${idx * 40}ms` } as React.CSSProperties}
     >
-
       {unreadCount > 0 && (
         <div className="oh-update-banner">
           <span className="oh-update-banner-badge">{unreadCount}</span>
-          لديك تحديث جديد على هذا الطلب
+          {t('orders:history.card.unreadUpdate')}
         </div>
       )}
 
-      {/* 4-column premium header */}
       <div className="oh-card-head-grid">
-
-        {/* Col 1 (far right): Order Info */}
         <div className="oh-col-order">
           <div className="oh-grid-order-id-row">
-            <span className="oh-grid-order-label">رقم الطلب</span>
+            <span className="oh-grid-order-label">{t('orders:history.card.orderNumber')}</span>
             <span className="oh-grid-order-id">{formatOrderId(order.id)}</span>
           </div>
           <div className="oh-grid-order-date">
@@ -723,7 +723,6 @@ function OrderCard({ order, idx, unreadCount }: { order: Order; idx: number; unr
           <span className={`oh-badge oh-grid-badge ${badge.badgeClass}`}>{badge.label}</span>
         </div>
 
-        {/* Col 2: Product Info */}
         <div className="oh-col-product">
           <div
             className={`oh-grid-prod-img${items[0]?.product_id ? ' oh-grid-prod-img--link' : ''}`}
@@ -748,19 +747,20 @@ function OrderCard({ order, idx, unreadCount }: { order: Order; idx: number; unr
           </div>
           <div className="oh-grid-prod-info">
             <div className="oh-grid-prod-name">{summary}</div>
-            {storeName && <div className="oh-grid-prod-store">المتجر: {storeName}</div>}
-            <span className="oh-grid-qty-badge">{totalQty} {totalQty === 1 ? 'قطعة' : 'قطع'}</span>
+            <span className="oh-grid-qty-badge">
+              {totalQty} {totalQty === 1 ? t('orders:history.card.unit') : t('orders:history.card.units')}
+            </span>
           </div>
         </div>
 
-        {/* Col 3: Total */}
         <div className="oh-col-total">
-          <div className="oh-grid-total-label">المجموع</div>
+          <div className="oh-grid-total-label">{t('orders:history.card.total')}</div>
           <div className="oh-grid-total-amount">₪{(order.total_price ?? 0).toFixed(2)}</div>
-          <div className="oh-grid-total-items">{totalQty} {totalQty === 1 ? 'منتج' : 'منتجات'}</div>
+          <div className="oh-grid-total-items">
+            {totalQty} {totalQty === 1 ? t('orders:history.card.product') : t('orders:history.card.products')}
+          </div>
         </div>
 
-        {/* Col 4 (far left): Delivery Info */}
         <div className="oh-col-delivery">
           {showDelivery ? (
             <>
@@ -770,21 +770,19 @@ function OrderCard({ order, idx, unreadCount }: { order: Order; idx: number; unr
                 </svg>
               </div>
               <div className="oh-grid-del-label">
-                {isCompleted ? 'تاريخ التسليم' : 'التوصيل المتوقع'}
+                {isCompleted ? t('orders:history.card.deliveryDate') : t('orders:history.card.expectedDelivery')}
               </div>
               <div className="oh-grid-del-date">{formatDateFull(estDelivery)}</div>
-              <div className="oh-grid-del-est">{getDeliveryEstimateText(progress, estDelivery)}</div>
+              <div className="oh-grid-del-est">{getDeliveryEstimateText(progress, estDelivery, t)}</div>
             </>
           ) : (
-            <div className="oh-grid-del-cancelled">تم إلغاء الطلب</div>
+            <div className="oh-grid-del-cancelled">{t('orders:history.card.cancelled')}</div>
           )}
         </div>
       </div>
 
-      {/* Expanded drawer */}
       <ExpandedDrawer items={drawerItems} isOpen={drawerOpen} />
 
-      {/* Active delivery panel */}
       {isDelivering && (
         <div className="oh-delivery-panel">
           <div className="oh-dp-icon-wrap">
@@ -795,31 +793,32 @@ function OrderCard({ order, idx, unreadCount }: { order: Order; idx: number; unr
             </svg>
           </div>
           <div className="oh-dp-body">
-            <div className="oh-dp-title">طلبك في الطريق</div>
+            <div className="oh-dp-title">{t('orders:history.card.delivering.title')}</div>
             <div className="oh-dp-rows">
               <div className="oh-dp-row">
-                <span className="oh-dp-label">الوصول المتوقع:</span>
+                <span className="oh-dp-label">{t('orders:history.card.delivering.arrivalLabel')}</span>
                 <span className="oh-dp-val">
-                  {isToday(estDelivery) ? `اليوم، ${formatTime(estDelivery)}` : formatDateShort(estDelivery)}
+                  {isToday(estDelivery)
+                    ? t('orders:history.estimate.today', { time: formatTime(estDelivery) })
+                    : formatDateShort(estDelivery)}
                 </span>
               </div>
               <div className="oh-dp-row">
-                <span className="oh-dp-label">الوقت المتبقي:</span>
-                <span className="oh-dp-val oh-dp-timer">{getTimeRemaining(estDelivery)}</span>
+                <span className="oh-dp-label">{t('orders:history.card.delivering.remainingLabel')}</span>
+                <span className="oh-dp-val oh-dp-timer">{getTimeRemaining(estDelivery, t)}</span>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Progress tracker */}
       {showTrack && (
         <div className="oh-tracker">
           <div className="oh-track-inner">
             <div className="oh-track-line" />
             <div className="oh-track-progress" data-step={progress.isConfirmed ? 4 : progress.step} />
             <div className="oh-track-steps">
-              {STEPS.map((s, i) => {
+              {steps.map((s, i) => {
                 const isFinalStep = i === 4;
                 const state = isFinalStep
                   ? (progress.isConfirmed ? 'done' : progress.isCompleted ? 'current' : 'future')
@@ -827,7 +826,7 @@ function OrderCard({ order, idx, unreadCount }: { order: Order; idx: number; unr
                   : i < progress.step ? 'done'
                   : i === progress.step ? 'current'
                   : 'future';
-                const ts    = stepTimestamps[i];
+                const ts = stepTimestamps[i];
                 const isDeliverStep = i === 3;
                 return (
                   <div key={s} className="oh-track-step" data-state={state}>
@@ -844,9 +843,7 @@ function OrderCard({ order, idx, unreadCount }: { order: Order; idx: number; unr
                           <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
                         </svg>
                       )}
-                      {state === 'current' && !isDeliverStep && (
-                        <span className="oh-dot-pulse" />
-                      )}
+                      {state === 'current' && !isDeliverStep && <span className="oh-dot-pulse" />}
                       {state === 'future' && (
                         <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                           <path d="m5 12 5 5L20 7"/>
@@ -855,9 +852,9 @@ function OrderCard({ order, idx, unreadCount }: { order: Order; idx: number; unr
                     </div>
                     <span className="oh-step-lbl">{s}</span>
                     {state === 'current' && isDeliverStep ? (
-                      <span className="oh-step-sub">جاري التوصيل</span>
+                      <span className="oh-step-sub">{t('orders:history.card.timeline.delivering')}</span>
                     ) : state === 'current' && isFinalStep ? (
-                      <span className="oh-step-sub">في انتظار تأكيدك</span>
+                      <span className="oh-step-sub">{t('orders:history.card.timeline.awaitingConfirm')}</span>
                     ) : (state === 'done' || state === 'current') && ts ? (
                       <span className="oh-step-time">{formatDateShort(ts)} - {formatTime(ts)}</span>
                     ) : (
@@ -871,7 +868,6 @@ function OrderCard({ order, idx, unreadCount }: { order: Order; idx: number; unr
         </div>
       )}
 
-      {/* Completed success block */}
       {isCompleted && (
         <div className="oh-success-block">
           <div className="oh-success-icon-wrap">
@@ -880,14 +876,14 @@ function OrderCard({ order, idx, unreadCount }: { order: Order; idx: number; unr
             </svg>
           </div>
           <div className="oh-success-body">
-            <div className="oh-success-title">تم تسليم الطلب بنجاح</div>
+            <div className="oh-success-title">{t('orders:history.card.success.title')}</div>
             <div className="oh-success-rows">
               <div className="oh-success-row">
-                <span className="oh-success-label">تاريخ التسليم:</span>
+                <span className="oh-success-label">{t('orders:history.card.success.deliveryDate')}</span>
                 <span className="oh-success-val">{formatDateShort(estDelivery)}</span>
               </div>
               <div className="oh-success-row">
-                <span className="oh-success-label">وقت التسليم:</span>
+                <span className="oh-success-label">{t('orders:history.card.success.deliveryTime')}</span>
                 <span className="oh-success-val">{formatTime(estDelivery)}</span>
               </div>
             </div>
@@ -895,24 +891,23 @@ function OrderCard({ order, idx, unreadCount }: { order: Order; idx: number; unr
         </div>
       )}
 
-      {/* Footer */}
       <div className="oh-card-foot">
         <div className="oh-foot-summary">
           <div className="oh-foot-row">
-            <span className="oh-foot-label">عدد المنتجات:</span>
+            <span className="oh-foot-label">{t('orders:history.card.foot.itemCount')}</span>
             <span className="oh-foot-val">{totalQty}</span>
           </div>
           <div className="oh-foot-row">
-            <span className="oh-foot-label">المجموع:</span>
+            <span className="oh-foot-label">{t('orders:history.card.foot.total')}</span>
             <span className="oh-foot-val oh-foot-price">₪{(order.total_price ?? 0).toFixed(2)}</span>
           </div>
           <div className="oh-foot-row oh-foot-row--muted">
-            <span className="oh-foot-label">تاريخ الطلب:</span>
+            <span className="oh-foot-label">{t('orders:history.card.foot.orderDate')}</span>
             <span className="oh-foot-val">{formatDateShort(new Date(order.created_at))}</span>
           </div>
           {showDelivery && (
             <div className="oh-foot-row oh-foot-row--muted">
-              <span className="oh-foot-label">موعد التسليم المتوقع:</span>
+              <span className="oh-foot-label">{t('orders:history.card.foot.expectedDelivery')}</span>
               <span className="oh-foot-val">{formatDateShort(estDelivery)}</span>
             </div>
           )}
@@ -923,18 +918,17 @@ function OrderCard({ order, idx, unreadCount }: { order: Order; idx: number; unr
               <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                 <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/>
               </svg>
-              إعادة الطلب
+              {t('orders:history.card.actions.reorder')}
             </button>
           )}
           <button type="button" className="oh-btn oh-btn-primary" onClick={() => navigate(`/orders/${order.id}`)}>
             <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
               <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
             </svg>
-            تتبّع الطلب
+            {t('orders:history.card.actions.track')}
           </button>
         </div>
       </div>
-
     </div>
   );
 }

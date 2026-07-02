@@ -1,20 +1,23 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import ProductListTemplate from '../components/ProductListTemplate';
 import ProductRow from '../components/ProductRow';
 import Topbar from '../components/Topbar';
 import CartConfirmModal from '../components/CartConfirmModal';
 import { useShop } from '../context/ShopContext';
 import type { FavoriteItem } from '../context/ShopContext';
+import i18n from '../i18n/config';
 import '../styles/productTable.css';
 
 const formatDate = (dateStr: string) =>
-  new Date(dateStr).toLocaleDateString('ar-SA', {
+  new Date(dateStr).toLocaleDateString(i18n.language === 'ar' ? 'ar-SA' : 'en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
   });
 
 export default function Favorite() {
+  const { t } = useTranslation('cart-checkout');
   const {
     favoriteItems,
     removeFromFavorites,
@@ -45,10 +48,10 @@ export default function Favorite() {
   const bottomBar = (
     <div className="pt-bottom-actions">
       <button type="button" className="pt-btn-add-all" onClick={handleAddAllToCart}>
-        إضافة الكل للسلة
+        {t('favorites.actions.addAllToCart')}
       </button>
       <button type="button" className="pt-btn-clear" onClick={() => setShowClearConfirm(true)}>
-        مسح المفضلة
+        {t('favorites.actions.clear')}
       </button>
     </div>
   );
@@ -61,9 +64,9 @@ export default function Favorite() {
         <div className="pt-page">
           <div className="pt-empty">
             <div className="pt-empty-icon">♡</div>
-            <h2>قائمة المفضلة فارغة</h2>
-            <p>لم تقم بإضافة أي منتجات للمفضلة بعد</p>
-            <a href="/store" className="pt-btn-shop">تصفح المنتجات</a>
+            <h2>{t('favorites.empty.title')}</h2>
+            <p>{t('favorites.empty.subtitle')}</p>
+            <a href="/store" className="pt-btn-shop">{t('favorites.empty.browse')}</a>
           </div>
         </div>
       </>
@@ -73,9 +76,15 @@ export default function Favorite() {
   return (
     <>
       <ProductListTemplate
-        title="المفضلة"
+        title={t('favorites.title')}
         itemCount={favoriteItems.length}
-        columns={['المنتج', 'السعر', 'تاريخ الإضافة', 'المخزون', 'الإجراء']}
+        columns={[
+          t('favorites.columns.product'),
+          t('favorites.columns.price'),
+          t('favorites.columns.dateAdded'),
+          t('favorites.columns.stock'),
+          t('favorites.columns.action'),
+        ]}
         bottomBar={bottomBar}
       >
         {favoriteItems.map((item) => (
@@ -95,7 +104,7 @@ export default function Favorite() {
 
             <td className="pt-cell pt-cell-stock">
               <span className={`pt-stock-badge ${item.inStock ? 'in-stock' : 'out-of-stock'}`}>
-                {item.inStock ? 'متوفر' : 'نفذ المخزون'}
+                {item.inStock ? t('favorites.stock.inStock') : t('favorites.stock.outOfStock')}
               </span>
             </td>
 
@@ -106,7 +115,7 @@ export default function Favorite() {
                 onClick={() => handleAddToCart(item.id)}
                 disabled={!item.inStock}
               >
-                {addedToCart.has(item.id) ? '✓ أُضيف للسلة' : 'أضف للسلة'}
+                {addedToCart.has(item.id) ? t('favorites.actions.added') : t('favorites.actions.addToCart')}
               </button>
             </td>
           </ProductRow>
@@ -115,9 +124,9 @@ export default function Favorite() {
 
       {pendingRemove && (
         <CartConfirmModal
-          message={`هل أنت متأكد أنك تريد حذف "${pendingRemove.name}" من المفضلة؟`}
-          confirmLabel="حذف"
-          cancelLabel="إلغاء"
+          message={t('favorites.confirm.removeItem', { name: pendingRemove.name })}
+          confirmLabel={t('favorites.confirm.delete')}
+          cancelLabel={t('favorites.confirm.cancel')}
           confirmDanger
           onConfirm={() => { removeFromFavorites(pendingRemove.id); setPendingRemove(null); }}
           onCancel={() => setPendingRemove(null)}
@@ -126,9 +135,9 @@ export default function Favorite() {
 
       {showClearConfirm && (
         <CartConfirmModal
-          message="هل أنت متأكد أنك تريد مسح جميع المنتجات من المفضلة؟"
-          confirmLabel="مسح الكل"
-          cancelLabel="إلغاء"
+          message={t('favorites.confirm.clearAll')}
+          confirmLabel={t('favorites.confirm.clearAllBtn')}
+          cancelLabel={t('favorites.confirm.cancel')}
           confirmDanger
           onConfirm={() => { clearFavorites(); setShowClearConfirm(false); }}
           onCancel={() => setShowClearConfirm(false)}

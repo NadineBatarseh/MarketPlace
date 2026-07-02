@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import supabase from '../../lib/supabase';
 import PasswordStrengthBar from './PasswordStrengthBar';
 import './Auth.css';
@@ -22,6 +23,7 @@ function EyeIcon({ open }: { open: boolean }) {
 
 export default function ResetPassword() {
   const navigate = useNavigate();
+  const { t } = useTranslation('auth');
   const [status, setStatus] = useState<Status>('loading');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -37,7 +39,6 @@ export default function ResetPassword() {
       }
     });
 
-    // If no recovery event arrives within 4 seconds, the link is invalid/expired
     const timer = setTimeout(() => {
       setStatus(s => s === 'loading' ? 'invalid' : s);
     }, 4000);
@@ -51,16 +52,16 @@ export default function ResetPassword() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (newPassword.length < 6) { setError('كلمة المرور يجب أن تكون 6 أحرف على الأقل'); return; }
-    if (newPassword !== confirmPassword) { setError('كلمتا المرور غير متطابقتين'); return; }
+    if (newPassword.length < 6) { setError(t('errors.tooShort')); return; }
+    if (newPassword !== confirmPassword) { setError(t('errors.mismatch')); return; }
     setLoading(true);
     const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
     setLoading(false);
     if (updateError) {
       if (updateError.status === 422 || updateError.message?.includes('invalid')) {
-        setError('انتهت صلاحية الرابط أو تم استخدامه مسبقاً — اطلب رابطاً جديداً من صفحة نسيت كلمة المرور');
+        setError(t('resetPassword.errors.expiredLink'));
       } else {
-        setError('حدث خطأ أثناء تغيير كلمة المرور، حاول مرة أخرى');
+        setError(t('resetPassword.errors.failed'));
       }
       return;
     }
@@ -69,10 +70,10 @@ export default function ResetPassword() {
 
   if (status === 'loading') {
     return (
-      <div className="auth-page" dir="rtl">
+      <div className="auth-page">
         <div className="auth-card auth-card--centered">
           <img src="/logo.png" alt="سوق لينك" className="auth-logo auth-logo-img" />
-          <h1 className="auth-title">جاري التحقق من الرابط...</h1>
+          <h1 className="auth-title">{t('resetPassword.verifyingTitle')}</h1>
         </div>
       </div>
     );
@@ -80,23 +81,20 @@ export default function ResetPassword() {
 
   if (status === 'invalid') {
     return (
-      <div className="auth-page" dir="rtl">
+      <div className="auth-page">
         <div className="auth-card auth-success-card">
           <div className="auth-success-icon">⚠️</div>
-          <h1 className="auth-title">رابط غير صالح</h1>
+          <h1 className="auth-title">{t('resetPassword.invalid.title')}</h1>
           <p className="auth-success-msg">
-            هذا الرابط منتهي الصلاحية أو تم استخدامه مسبقاً.
+            {t('resetPassword.invalid.message')}
             <br />
-            يمكنك طلب رابط جديد من صفحة نسيت كلمة المرور.
+            {t('resetPassword.invalid.hint')}
           </p>
-          <Link
-            to="/forgot-password"
-            className="auth-submit auth-submit--link"
-          >
-            طلب رابط جديد
+          <Link to="/forgot-password" className="auth-submit auth-submit--link">
+            {t('resetPassword.invalid.requestNew')}
           </Link>
           <p className="auth-switch">
-            <Link to="/login">العودة لتسجيل الدخول</Link>
+            <Link to="/login">{t('shared.backToLogin')}</Link>
           </p>
         </div>
       </div>
@@ -105,21 +103,17 @@ export default function ResetPassword() {
 
   if (status === 'success') {
     return (
-      <div className="auth-page" dir="rtl">
+      <div className="auth-page">
         <div className="auth-card auth-success-card">
           <div className="auth-success-icon">✅</div>
-          <h1 className="auth-title">تم تغيير كلمة المرور</h1>
+          <h1 className="auth-title">{t('resetPassword.success.title')}</h1>
           <p className="auth-success-msg">
-            تم تعيين كلمة المرور الجديدة بنجاح.
+            {t('resetPassword.success.message')}
             <br />
-            يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة.
+            {t('resetPassword.success.hint')}
           </p>
-          <button
-            type="button"
-            className="auth-submit"
-            onClick={() => navigate('/login')}
-          >
-            تسجيل الدخول
+          <button type="button" className="auth-submit" onClick={() => navigate('/login')}>
+            {t('resetPassword.success.login')}
           </button>
         </div>
       </div>
@@ -127,19 +121,19 @@ export default function ResetPassword() {
   }
 
   return (
-    <div className="auth-page" dir="rtl">
+    <div className="auth-page">
       <div className="auth-card">
         <img src="/logo.png" alt="سوق لينك" className="auth-logo auth-logo-img" />
-        <h1 className="auth-title">تعيين كلمة مرور جديدة</h1>
-        <p className="auth-sub">اختر كلمة مرور قوية لحسابك</p>
+        <h1 className="auth-title">{t('resetPassword.title')}</h1>
+        <p className="auth-sub">{t('resetPassword.subtitle')}</p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="auth-field">
-            <label>كلمة المرور الجديدة</label>
+            <label>{t('resetPassword.newPasswordLabel')}</label>
             <div className="auth-input-wrap">
               <input
                 type={showNew ? 'text' : 'password'}
-                placeholder="6 أحرف على الأقل"
+                placeholder={t('shared.passwordPlaceholder')}
                 value={newPassword}
                 onChange={e => setNewPassword(e.target.value)}
                 required
@@ -155,11 +149,11 @@ export default function ResetPassword() {
           </div>
 
           <div className="auth-field">
-            <label>تأكيد كلمة المرور</label>
+            <label>{t('shared.confirmPasswordLabel')}</label>
             <div className="auth-input-wrap">
               <input
                 type={showConfirm ? 'text' : 'password'}
-                placeholder="أعد إدخال كلمة المرور"
+                placeholder={t('shared.confirmPlaceholder')}
                 value={confirmPassword}
                 onChange={e => setConfirmPassword(e.target.value)}
                 required
@@ -175,7 +169,7 @@ export default function ResetPassword() {
           {error && <p className="auth-error">{error}</p>}
 
           <button type="submit" className="auth-submit" disabled={loading}>
-            {loading ? 'جاري الحفظ...' : 'حفظ كلمة المرور'}
+            {loading ? t('resetPassword.saving') : t('resetPassword.submit')}
           </button>
         </form>
       </div>

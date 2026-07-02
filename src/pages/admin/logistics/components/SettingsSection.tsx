@@ -1,5 +1,7 @@
 import React from 'react';
-import { CategoryDef, SettingDef, SettingsValues, WEIGHT_GROUPS, isWeightGroupValid } from '../settingsData';
+import { useTranslation } from 'react-i18next';
+import { CategoryDef, SettingDef, SettingsValues, isWeightGroupValid } from '../settingsData';
+import { useLanguage } from '../../../../context/LanguageContext';
 import SettingRow from './SettingRow';
 import WeightGroupWarning from './WeightGroupWarning';
 
@@ -10,11 +12,14 @@ interface SettingsSectionProps {
   errors: Record<string, string>;
   onChange: (key: string, val: number | boolean | string) => void;
   searchQuery: string;
+  weightGroups: Record<string, { label: string; keys: string[] }>;
 }
 
 const SettingsSection: React.FC<SettingsSectionProps> = ({
-  category, settings, values, errors, onChange, searchQuery,
+  category, settings, values, errors, onChange, searchQuery, weightGroups,
 }) => {
+  const { t } = useTranslation('admin');
+  const { direction } = useLanguage();
   const visible = settings.filter(s => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
@@ -27,7 +32,7 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
     new Set(settings.map(s => s.weightGroup).filter(Boolean))
   ) as string[];
 
-  const hasInvalidWeights = groupsInSection.some(g => !isWeightGroupValid(g, values));
+  const hasInvalidWeights = groupsInSection.some(g => !isWeightGroupValid(g, values, weightGroups));
 
   return (
     <div
@@ -47,7 +52,7 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
           padding: '12px 16px',
           background: hasInvalidWeights ? '#FFF5F5' : '#F8FAFC',
           borderBottom: `1px solid ${hasInvalidWeights ? '#FCA5A5' : '#E2E8F0'}`,
-          direction: 'rtl',
+          direction,
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -94,7 +99,7 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
                   padding: '1px 7px',
                 }}
               >
-                {visible.length} إعداد{visible.length !== 1 ? 'ات' : ''}
+                {visible.length} {visible.length === 1 ? t('logisticsSettings.settingSingular') : t('logisticsSettings.settingPlural')}
               </span>
             </div>
           </div>
@@ -115,7 +120,7 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
               {category.formula}
             </div>
             {category.formulaVars && (
-              <div style={{ fontSize: 11, color: '#92400E', marginTop: 3, textAlign: 'right', direction: 'rtl' }}>
+              <div style={{ fontSize: 11, color: '#92400E', marginTop: 3, textAlign: direction === 'rtl' ? 'right' : 'left', direction }}>
                 {category.formulaVars}
               </div>
             )}
@@ -126,7 +131,7 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
         {groupsInSection.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 8 }}>
             {groupsInSection.map(g => (
-              <WeightGroupWarning key={g} groupKey={g} values={values} />
+              <WeightGroupWarning key={g} groupKey={g} values={values} weightGroups={weightGroups} />
             ))}
           </div>
         )}
@@ -141,10 +146,10 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({
           padding: '5px 16px',
           background: '#F8FAFC',
           borderBottom: '1px solid #E2E8F0',
-          direction: 'rtl',
+          direction,
         }}
       >
-        {['الإعداد', 'القيمة', 'الوحدة', ''].map(h => (
+        {[t('logisticsSettings.columns.setting'), t('logisticsSettings.columns.value'), t('logisticsSettings.columns.unit'), ''].map(h => (
           <div
             key={h}
             style={{

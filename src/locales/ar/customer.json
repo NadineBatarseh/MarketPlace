@@ -1,0 +1,340 @@
+{
+  "home": {
+    "slides": [
+      { "title": "اكتشف متاجر موثوقة", "subtitle": "تسوق من أفضل المتاجر المحلية في مكان واحد" },
+      { "title": "منتجات أصيلة بأسعار منافسة", "subtitle": "اختر من بين آلاف المنتجات من متاجر موثوقة" },
+      { "title": "توصيل سريع إلى بابك", "subtitle": "خدمة توصيل احترافية لجميع مناطق فلسطين" }
+    ],
+    "hero": {
+      "shopNow": "تسوق الآن",
+      "prev": "السابق",
+      "next": "التالي",
+      "slideAria": "الشريحة {{n}}"
+    },
+    "categories": {
+      "title": "الفئات",
+      "empty": "لا توجد أقسام حالياً"
+    },
+    "stores": {
+      "title": "المتاجر الأعلى تقييما",
+      "empty": "لا توجد متاجر حالياً"
+    },
+    "products": {
+      "title": "منتجات و عروض مميزة",
+      "tabBestSelling": "الاكثر مبيعا",
+      "tabDeals": "عروض خاصة",
+      "emptyDeals": "لا توجد عروض خاصة",
+      "emptyAll": "لا توجد منتجات",
+      "showMore": "عرض المزيد من المنتجات",
+      "showLess": "عرض أقل",
+      "addToCart": "أضف إلى السلة",
+      "inCart": "في السلة",
+      "addToFav": "أضف للمفضلة",
+      "prevImg": "صورة سابقة",
+      "nextImg": "صورة تالية",
+      "imgAria": "صورة {{n}}"
+    }
+  },
+  "storeList": {
+    "hero": {
+      "title": "استكشف المتاجر المحلية",
+      "desc": "اكتشف المتاجر المحلية الموثوقة وتصفح منتجاتها بسهولة. ادعم مجتمعك من خلال التسوق من الأعمال المملوكة بشكل مستقل."
+    },
+    "filters": {
+      "title": "الفلاتر",
+      "clearAll": "مسح الكل",
+      "search": "بحث",
+      "searchPlaceholder": "ابحث عن المتاجر...",
+      "category": "الفئة",
+      "city": "المدينة"
+    },
+    "toolbar": {
+      "loading": "جاري التحميل…",
+      "storeCount": "{{count}} متجر",
+      "sortAria": "ترتيب المتاجر"
+    },
+    "sort": {
+      "newest": "الأحدث",
+      "popular": "الأكثر شهرة",
+      "az": "أبجدياً"
+    },
+    "badge": {
+      "open": "مفتوح",
+      "closed": "مغلق"
+    },
+    "card": {
+      "viewStore": "عرض المتجر",
+      "fallbackDesc": "متجر محلي على سوق لينك."
+    },
+    "empty": {
+      "title": "لم يتم العثور على متاجر",
+      "desc": "لم نتمكن من العثور على أي متاجر تطابق بحثك أو عوامل التصفية. حاول تعديل معاييرك.",
+      "clearFilters": "مسح كل عوامل التصفية"
+    },
+    "loadMore": "تحميل المزيد من المتاجر",
+    "footer": {
+      "brand": "سوق لينك",
+      "copyright": "© 2024 سوق لينك ماركتبليس. نربط المجتمعات المحلية من خلال توفير منصة للمتاجر المحلية لتزدهر وللعملاء لاكتشاف منتجات فريدة.",
+      "marketplace": "السوق",
+      "aboutUs": "من نحن",
+      "terms": "شروط الخدمة",
+      "privacy": "سياسة الخصوصية",
+      "support": "الدعم",
+      "contactSupport": "اتصل بالدعم",
+      "careers": "الوظائف",
+      "helpCenter": "مركز المساعدة"
+    }
+  },
+  "search": {
+    "title": "نتائج البحث عن:",
+    "subtitle": "وجدنا لك منتجات ومتاجر مناسبة من السوق المحلي",
+    "filter": {
+      "title": "تصفية النتائج",
+      "clearAll": "مسح الكل",
+      "price": "السعر",
+      "priceFrom": "من",
+      "priceTo": "إلى",
+      "applyPrice": "تطبيق",
+      "minPriceAria": "الحد الأدنى للسعر",
+      "maxPriceAria": "الحد الأقصى للسعر",
+      "rating": "التقييم",
+      "rating5": "5★ فقط",
+      "rating4": "4★ فأعلى",
+      "rating3": "3★ فأعلى",
+      "zone": "المنطقة",
+      "availability": "التوفر",
+      "inStock": "متوفر",
+      "outOfStock": "نفدت الكمية"
+    },
+    "toolbar": {
+      "sortBy": "ترتيب حسب",
+      "sortAria": "ترتيب النتائج",
+      "showCount": "عرض {{count}} نتيجة",
+      "gridTitle": "شبكة",
+      "listTitle": "قائمة"
+    },
+    "sort": {
+      "newest": "الأحدث",
+      "priceAsc": "السعر الأقل",
+      "priceDesc": "السعر الأعلى",
+      "priceAscMobile": "السعر ↑",
+      "priceDescMobile": "السعر ↓",
+      "rating": "الأعلى تقييمًا"
+    },
+    "mobile": {
+      "filters": "الفلاتر",
+      "showResults": "عرض النتائج ({{count}})",
+      "close": "إغلاق",
+      "drawerTitle": "تصفية النتائج"
+    },
+    "card": {
+      "addFav": "أضف للمفضلة",
+      "addToCart": "أضف للسلة",
+      "outOfStock": "نفدت الكمية",
+      "priceOnRequest": "السعر عند الطلب"
+    },
+    "pagination": {
+      "prev": "الصفحة السابقة",
+      "next": "الصفحة التالية"
+    },
+    "empty": {
+      "noResults": "لم نجد نتائج مطابقة",
+      "noResultsSub": "جرّب البحث بكلمة أخرى أو تصفح الفئات لاكتشاف منتجات من السوق المحلي",
+      "browse": "تصفح الفئات",
+      "noFilters": "لا توجد نتائج بهذه الفلاتر",
+      "noFiltersSub": "جرّب تغيير الفلاتر أو مسحها للاطلاع على جميع النتائج",
+      "clearFilters": "مسح الفلاتر"
+    },
+    "error": "خطأ في البحث",
+    "fetchError": "فشل في البحث"
+  },
+  "category": {
+    "heroFallbackDesc": "اكتشف المنتجات والمتاجر المتوفرة ضمن هذه الفئة"
+  },
+  "sidebar": {
+    "filters": "الفلاتر",
+    "clearAll": "مسح الكل",
+    "stores": "المتاجر",
+    "selectAll": "تحديد الكل",
+    "deselectAll": "إلغاء التحديد",
+    "priceRange": "نطاق السعر",
+    "priceFrom": "من",
+    "priceTo": "إلى",
+    "minPriceAria": "الحد الأدنى للسعر",
+    "maxPriceAria": "الحد الأعلى للسعر",
+    "availability": "التوفر",
+    "inStockOnly": "متاح في المخزون فقط",
+    "loadingFilters": "جاري تحميل الفلاتر...",
+    "viewMore": "+ عرض المزيد ({{count}})",
+    "viewLess": "− عرض أقل",
+    "yes": "نعم",
+    "priceChip": {
+      "minOnly": "من {{min}} ₪",
+      "maxOnly": "حتى {{max}} ₪"
+    },
+    "inStockChip": "متاح فقط"
+  },
+  "toast": {
+    "loginRequired": "يجب تسجيل الدخول أو إنشاء حساب أولاً",
+    "customersOnly": "متاح للعملاء فقط",
+    "addedFav": "❤ تمت الإضافة للمفضلة",
+    "removedFav": "تمت الإزالة من المفضلة",
+    "addedToCart": "✓ تمت الإضافة إلى السلة",
+    "addedAnotherToCart": "✓ تمت إضافة قطعة أخرى إلى السلة"
+  },
+  "storeHero": {
+    "loading": "جاري التحميل...",
+    "stats": {
+      "location": "الموقع",
+      "products": "منتج",
+      "rating": "التقييم"
+    },
+    "rateBtn": "قيّم",
+    "ratingPopupTitle": "قيّم هذا المتجر"
+  },
+  "storeRating": {
+    "loginRequired": "يجب تسجيل الدخول لتتمكن من التقييم",
+    "thanks": "شكراً على تقييمك!",
+    "label": "قيّم المتجر:",
+    "submit": "إرسال"
+  },
+  "productsSection": {
+    "sort": {
+      "bestSelling": "الأكثر مبيعاً",
+      "newest": "الأحدث",
+      "priceAsc": "السعر: من الأقل للأعلى",
+      "priceDesc": "السعر: من الأعلى للأقل",
+      "rating": "التقييم"
+    },
+    "toolbar": {
+      "showing": "عرض {{shown}} من {{total}} منتج",
+      "sortAria": "ترتيب المنتجات",
+      "gridTitle": "شبكة",
+      "gridAria": "عرض شبكة",
+      "listTitle": "قائمة",
+      "listAria": "عرض قائمة"
+    },
+    "loading": "جاري تحميل المنتجات...",
+    "empty": "لا توجد منتجات",
+    "pagination": {
+      "prev": "الصفحة السابقة",
+      "next": "الصفحة التالية",
+      "pageAria": "صفحة {{n}}"
+    }
+  },
+  "productCard": {
+    "addToCart": "أضف للسلة",
+    "addWishlist": "إضافة إلى قائمة الرغبات",
+    "removeWishlist": "إزالة من قائمة الرغبات",
+    "prevImage": "صورة سابقة",
+    "nextImage": "صورة تالية",
+    "imageAria": "صورة {{n}}"
+  },
+  "pdp": {
+    "loading": "جاري تحميل البيانات...",
+    "noProducts": "لا توجد منتجات متاحة حالياً",
+    "fetchError": "حدث خطأ أثناء جلب البيانات",
+    "breadcrumb": {
+      "home": "الرئيسية"
+    },
+    "discount": {
+      "save": "وفر {{pct}}%"
+    },
+    "trust": {
+      "verified": "موثوق"
+    },
+    "stock": {
+      "inStock": "متوفر في المخزون",
+      "inStockLow": "متوفر في المخزون — تبقى {{count}} قطع",
+      "outOfStock": "غير متوفر حالياً"
+    },
+    "variants": {
+      "color": "اللون:",
+      "chooseColor": "اختر اللون",
+      "size": "المقاس:",
+      "chooseSize": "اختر المقاس",
+      "outOfStock": "نفد المخزون",
+      "chooseSizeHint": "اختر اللون أولاً لمعرفة المقاسات المتاحة"
+    },
+    "qty": {
+      "label": "الكمية:",
+      "aria": "الكمية"
+    },
+    "actions": {
+      "addToCart": "أضف إلى السلة",
+      "buyNow": "شراء الآن",
+      "addFav": "أضف للمفضلة",
+      "share": "مشاركة"
+    },
+    "trustStrip": {
+      "fastDelivery": "توصيل سريع",
+      "fastDeliverySub": "توصيل سريع وآمن إلى باب منزلك",
+      "securePay": "دفع آمن",
+      "securePaySub": "دفع آمن ومشفّر — بياناتك محمية",
+      "shipping": "الشحن",
+      "shippingSub": "يتم حسابه عند إتمام الدفع"
+    },
+    "tabs": {
+      "desc": "الوصف",
+      "specs": "المواصفات",
+      "reviews": "التقييمات ({{count}})"
+    },
+    "specs": {
+      "empty": "المواصفات غير متوفرة حالياً"
+    },
+    "reviews": {
+      "basedOn": "بناءً على {{count}} تقييم",
+      "authLoading": "جاري التحقق من حسابك...",
+      "loginRequired": "يجب تسجيل الدخول لإضافة تقييم",
+      "loginLink": "تسجيل الدخول",
+      "customersOnly": "فقط العملاء يمكنهم إضافة تقييم.",
+      "success": "✅ تم إرسال تقييمك بنجاح، شكراً لك!",
+      "formTitle": "أضف تقييمك",
+      "yourRating": "تقييمك:",
+      "placeholder": "اكتب تقييمك هنا...",
+      "addPhotos": "أضف صور (اختياري)",
+      "previewAlt": "معاينة {{n}}",
+      "submit": "إرسال التقييم",
+      "submitting": "جاري الإرسال...",
+      "empty": "لا توجد تقييمات بعد — كن أول من يقيّم هذا المنتج!",
+      "storeReply": "رد المتجر:",
+      "imageAlt": "صورة {{n}}",
+      "error": {
+        "noRating": "يرجى اختيار تقييم بالنجوم",
+        "noText": "يرجى كتابة تقييمك",
+        "submitFailed": "حدث خطأ أثناء إرسال التقييم"
+      }
+    },
+    "login": {
+      "title": "تسجيل الدخول",
+      "hint": "أدخل بريدك الإلكتروني للتحقق من حسابك.",
+      "placeholder": "example@email.com",
+      "verifying": "جاري التحقق...",
+      "enter": "دخول",
+      "errors": {
+        "emailInvalid": "يرجى إدخال بريد إلكتروني صحيح",
+        "fetchError": "حدث خطأ أثناء التحقق، حاول مجدداً",
+        "notRegistered": "هذا البريد الإلكتروني غير مسجل",
+        "notCustomer": "يجب عليك التسجيل كعميل لتتمكن من إضافة تقييم"
+      }
+    },
+    "lightbox": {
+      "alt": "صورة مكبّرة"
+    },
+    "cart": {
+      "loginRequired": "يجب تسجيل الدخول أو إنشاء حساب أولاً",
+      "customersOnly": "متاح للعملاء فقط",
+      "chooseColor": "يرجى اختيار اللون أولاً",
+      "chooseSize": "يرجى اختيار المقاس أولاً",
+      "added": "✓ تمت الإضافة إلى السلة",
+      "addedAnother": "✓ تمت إضافة قطعة أخرى إلى السلة"
+    },
+    "customer": "عميل #{{id}}",
+    "product": {
+      "share": "منتج من سوق لينك"
+    },
+    "thumb": {
+      "imageAlt": "صورة {{n}}"
+    }
+  }
+}

@@ -1,19 +1,21 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import './Footer.css';
 
 export default function Footer() {
+  const { t } = useTranslation('common');
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
   const quick = [
-    { l: 'الرئيسية',  a: () => navigate('/home') },
-    { l: 'المتاجر',   a: () => navigate('/stores-list') },
-    { l: 'الفئات',    a: () => document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth' }) },
-    { l: 'العروض',    a: () => document.getElementById('deals')?.scrollIntoView({ behavior: 'smooth' }) },
+    { l: t('footer.quickNav.home'),       a: () => navigate('/home') },
+    { l: t('footer.quickNav.stores'),     a: () => navigate('/stores-list') },
+    { l: t('footer.quickNav.categories'), a: () => document.getElementById('categories')?.scrollIntoView({ behavior: 'smooth' }) },
+    { l: t('footer.quickNav.offers'),     a: () => document.getElementById('deals')?.scrollIntoView({ behavior: 'smooth' }) },
   ];
-  const service = ['تواصل معنا', 'الأسئلة الشائعة', 'سياسة الاسترجاع', 'سياسة الشحن', 'تتبع الطلب'];
-  const help    = ['عن سوق لينك', 'الشروط والأحكام', 'سياسة الخصوصية'];
+  const service = t('footer.serviceLinks', { returnObjects: true }) as string[];
+  const help    = t('footer.helpLinks',    { returnObjects: true }) as string[];
 
   return (
     <footer className="hp-footer">
@@ -23,13 +25,15 @@ export default function Footer() {
             <img src="/logo.png" alt="Souq Link" className="hp-footer__logo"
               onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
             <div>
-              <div className="hp-footer__name-ar">سوق لينك</div>
-              <div className="hp-footer__name-en">SOUQ LINK</div>
+              <div className="hp-footer__name-ar">{t('logo.ar')}</div>
+              <div className="hp-footer__name-en">{t('logo.en')}</div>
             </div>
           </div>
           {open && (
             <>
-              <p className="hp-footer__about">منصة تجمع أفضل المتاجر المحلية الموثوقة.<br />تجربة تسوق مميزة وآمنة.</p>
+              <p className="hp-footer__about">
+                {t('footer.aboutLine1')}<br />{t('footer.aboutLine2')}
+              </p>
               <div className="hp-footer__socials">
                 <a href="#" className="hp-footer__social" title="Instagram" aria-label="Instagram">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -58,22 +62,22 @@ export default function Footer() {
         </div>
 
         <div>
-          <h4 className="hp-footer__col-ttl">روابط سريعة</h4>
+          <h4 className="hp-footer__col-ttl">{t('footer.quickLinks')}</h4>
           {open && <ul className="hp-footer__links">{quick.map(x => <li key={x.l}><button type="button" className="hp-footer__lbtn" onClick={x.a}>{x.l}</button></li>)}</ul>}
         </div>
 
         <div>
-          <h4 className="hp-footer__col-ttl">خدمة العملاء</h4>
+          <h4 className="hp-footer__col-ttl">{t('footer.customerService')}</h4>
           {open && <ul className="hp-footer__links">{service.map(s => <li key={s}><button type="button" className="hp-footer__lbtn">{s}</button></li>)}</ul>}
         </div>
 
         <div>
-          <h4 className="hp-footer__col-ttl">مساعدة</h4>
+          <h4 className="hp-footer__col-ttl">{t('footer.help')}</h4>
           {open && <ul className="hp-footer__links">{help.map(s => <li key={s}><button type="button" className="hp-footer__lbtn">{s}</button></li>)}</ul>}
         </div>
 
         <div>
-          <h4 className="hp-footer__col-ttl">طرق الدفع</h4>
+          <h4 className="hp-footer__col-ttl">{t('footer.paymentMethods')}</h4>
           {open && (
             <div className="hp-footer__payments">
               {['VISA', 'MC', 'PayPal', 'Apple Pay'].map(p => (
@@ -83,7 +87,7 @@ export default function Footer() {
           )}
         </div>
 
-        <button type="button" className="hp-footer__toggle" onClick={() => setOpen(o => !o)} aria-label="تبديل الفوتر">
+        <button type="button" className="hp-footer__toggle" onClick={() => setOpen(o => !o)} aria-label={t('footer.toggleLabel')}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
             className={open ? 'hp-footer__toggle-icon hp-footer__toggle-icon--open' : 'hp-footer__toggle-icon'}>
             <path d="M6 9l6 6 6-6"/>
@@ -93,7 +97,7 @@ export default function Footer() {
 
       <div className="hp-footer__bottom">
         <div className="hp-wrap hp-footer__bottom-inner">
-          <p>جميع الحقوق محفوظة © 2026 سوق لينك</p>
+          <p>{t('footer.copyright')}</p>
         </div>
       </div>
     </footer>

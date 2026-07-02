@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMerchantAuth } from '../context/MerchantAuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import supabase from '../../lib/supabase';
 
 interface ProductAttribute {
@@ -35,13 +37,8 @@ interface CategoryFilterDef {
 
 type FilterValuesMap = Record<string, string[]>;
 
-const CAPACITY_LABELS: Record<number, string> = {
-  1: 'صغير جداً',
-  2: 'صغير',
-  3: 'متوسط',
-  4: 'كبير',
-  5: 'كبير جداً',
-};
+// Labels are UI-facing (not stored data) — resolved via t('editPage.capacityLabels.<n>') at render time.
+const capacityLabelKey = (level: number) => `editPage.capacityLabels.${level}`;
 
 const API_BASE = 'http://localhost:4000';
 
@@ -184,6 +181,7 @@ function ColorPicker({ colors, onChange }: {
   colors: string[];
   onChange: (colors: string[]) => void;
 }) {
+  const { t } = useTranslation('merchant');
   const [showCustom, setShowCustom] = useState(false);
   const [customHex, setCustomHex] = useState('#3b82f6');
   const [customName, setCustomName] = useState('');
@@ -205,7 +203,7 @@ function ColorPicker({ colors, onChange }: {
 
   const handlePredefinedClick = (c: { name: string; hex: string }) => {
     if (isNameTaken(c.name)) {
-      showPaletteMsg(`اللون "${c.name}" مختار بالفعل — اضغط × على الشريحة لإزالته`);
+      showPaletteMsg(t('editPage.colorPicker.alreadySelectedMsg', { name: c.name }));
     } else {
       onChange([...colors, `${c.name}|${c.hex}`]);
     }
@@ -216,11 +214,11 @@ function ColorPicker({ colors, onChange }: {
   const addCustom = () => {
     const name = customName.trim();
     if (!name) {
-      setCustomNameError('يرجى إدخال اسم اللون');
+      setCustomNameError(t('editPage.colorPicker.nameRequired'));
       return;
     }
     if (isNameTaken(name)) {
-      setCustomNameError(`اللون "${name}" مختار بالفعل`);
+      setCustomNameError(t('editPage.colorPicker.nameTaken', { name }));
       return;
     }
     onChange([...colors, `${name}|${customHex}`]);
@@ -239,7 +237,7 @@ function ColorPicker({ colors, onChange }: {
 
   return (
     <div className="color-picker-wrap">
-      <span className="tag-input-label">الألوان المتاحة</span>
+      <span className="tag-input-label">{t('editPage.colorPicker.availableColors')}</span>
 
       {colors.length > 0 && (
         <div className="color-chips-row">
@@ -273,7 +271,7 @@ function ColorPicker({ colors, onChange }: {
           type="button"
           className="palette-custom-btn"
           onClick={() => { setShowCustom(v => !v); setCustomNameError(''); }}
-          title="لون مخصص"
+          title={t('editPage.colorPicker.customColorTitle')}
         >+</button>
       </div>
 
@@ -288,12 +286,12 @@ function ColorPicker({ colors, onChange }: {
             value={customHex}
             onChange={e => setCustomHex(e.target.value)}
             className="custom-color-input"
-            aria-label="اختر لوناً مخصصاً"
+            aria-label={t('editPage.colorPicker.chooseCustomColorAria')}
           />
           <div className="custom-color-name-wrap">
             <input
               type="text"
-              placeholder="اسم اللون *"
+              placeholder={t('editPage.colorPicker.colorNamePlaceholder')}
               value={customName}
               onChange={e => { setCustomName(e.target.value); setCustomNameError(''); }}
               className={`custom-color-name${customNameError ? ' custom-color-name--error' : ''}`}
@@ -303,11 +301,11 @@ function ColorPicker({ colors, onChange }: {
               <span className="custom-color-name-error">{customNameError}</span>
             )}
           </div>
-          <button type="button" className="custom-color-add-btn" onClick={addCustom}>إضافة</button>
-          <button type="button" className="custom-color-cancel-btn" onClick={closeCustom}>إلغاء</button>
+          <button type="button" className="custom-color-add-btn" onClick={addCustom}>{t('editPage.colorPicker.addBtn')}</button>
+          <button type="button" className="custom-color-cancel-btn" onClick={closeCustom}>{t('editPage.common.cancel')}</button>
         </div>
       )}
-      <span className="tag-input-hint">اضغط على الدائرة لاختيار اللون، أو أضف لوناً مخصصاً</span>
+      <span className="tag-input-hint">{t('editPage.colorPicker.hint')}</span>
     </div>
   );
 }
@@ -396,6 +394,7 @@ function VariantMatrixEditor({ matrix, onChange }: {
   matrix: VariantMatrix;
   onChange: (m: VariantMatrix) => void;
 }) {
+  const { t } = useTranslation('merchant');
   const handleColorsChange = (newColors: string[]) => {
     const removed = matrix.colors.filter(c => !newColors.includes(c));
     const newQty = { ...matrix.quantities };
@@ -433,15 +432,15 @@ function VariantMatrixEditor({ matrix, onChange }: {
     <div className="var-matrix">
       {/* ── Inputs section ── */}
       <div className="var-matrix-inputs-section">
-        <div className="var-matrix-section-title">متغيرات المنتج</div>
+        <div className="var-matrix-section-title">{t('editPage.variantMatrix.sectionTitle')}</div>
         <div className="var-matrix-fields">
           <ColorPicker colors={matrix.colors} onChange={handleColorsChange} />
           <TagInput
-            label="المقاسات المتاحة"
+            label={t('editPage.variantMatrix.sizesLabel')}
             tags={matrix.sizes}
             onChange={handleSizesChange}
-            placeholder="مثال: S"
-            hint="اكتب المقاس ثم اضغط Enter أو فاصلة ، للانتقال للتالي"
+            placeholder={t('editPage.variantMatrix.sizesPlaceholder')}
+            hint={t('editPage.variantMatrix.sizesHint')}
           />
         </div>
       </div>
@@ -454,13 +453,15 @@ function VariantMatrixEditor({ matrix, onChange }: {
             className="var-matrix-generate-btn"
             onClick={() => onChange({ ...matrix, tableGenerated: true })}
           >
-            إنشاء جدول الكميات
+            {t('editPage.variantMatrix.generateBtn')}
             <span className="var-matrix-btn-arrow">←</span>
           </button>
           <p className="var-matrix-generate-hint">
-            {matrix.colors.length} لون × {matrix.sizes.length} مقاس
-            &nbsp;·&nbsp;
-            {matrix.colors.length * matrix.sizes.length} خلية
+            {t('editPage.variantMatrix.generateHint', {
+              colors: matrix.colors.length,
+              sizes: matrix.sizes.length,
+              cells: matrix.colors.length * matrix.sizes.length,
+            })}
           </p>
         </div>
       )}
@@ -469,13 +470,13 @@ function VariantMatrixEditor({ matrix, onChange }: {
       {showTable && (
         <div className="var-matrix-table-section">
           <div className="var-matrix-table-label">
-            الكمية المتاحة لكل مجموعة (لون × مقاس)
+            {t('editPage.variantMatrix.tableLabel')}
           </div>
           <div className="var-matrix-table-wrap">
             <table className="var-matrix-table">
               <thead>
                 <tr>
-                  <th className="var-matrix-corner">اللون \ المقاس</th>
+                  <th className="var-matrix-corner">{t('editPage.variantMatrix.tableCorner')}</th>
                   {matrix.sizes.map(size => <th key={size}>{size}</th>)}
                 </tr>
               </thead>
@@ -502,7 +503,7 @@ function VariantMatrixEditor({ matrix, onChange }: {
                             value={matrix.quantities[colorVal]?.[size] ?? ''}
                             onChange={e => setQty(colorVal, size, e.target.value)}
                             className="var-matrix-qty"
-                            aria-label={`كمية ${colorName} - ${size}`}
+                            aria-label={t('editPage.variantMatrix.qtyAria', { color: colorName, size })}
                           />
                         </td>
                       ))}
@@ -523,6 +524,7 @@ function AttributesEditor({ attributes, onChange }: {
   attributes: ProductAttribute[];
   onChange: (attrs: ProductAttribute[]) => void;
 }) {
+  const { t } = useTranslation('merchant');
   const [nameInput, setNameInput] = useState('');
   const [valueInput, setValueInput] = useState('');
   const [inputError, setInputError] = useState('');
@@ -530,9 +532,9 @@ function AttributesEditor({ attributes, onChange }: {
   const add = () => {
     const name = nameInput.trim();
     const value = valueInput.trim();
-    if (!name || !value) { setInputError('يرجى إدخال الاسم والقيمة'); return; }
+    if (!name || !value) { setInputError(t('editPage.attributes.missingFields')); return; }
     if (attributes.some(a => a.attribute_name === name)) {
-      setInputError(`"${name}" موجود بالفعل`);
+      setInputError(t('editPage.attributes.alreadyExists', { name }));
       return;
     }
     onChange([...attributes, { attribute_name: name, attribute_value: value }]);
@@ -545,7 +547,7 @@ function AttributesEditor({ attributes, onChange }: {
 
   return (
     <div className="attr-editor">
-      <span className="tag-input-label">مواصفات المنتج</span>
+      <span className="tag-input-label">{t('editPage.attributes.sectionTitle')}</span>
 
       {attributes.length > 0 && (
         <div className="attr-list">
@@ -564,7 +566,7 @@ function AttributesEditor({ attributes, onChange }: {
         <input
           type="text"
           className="attr-input"
-          placeholder="الاسم (مثال: الخامة)"
+          placeholder={t('editPage.attributes.namePlaceholder')}
           value={nameInput}
           onChange={e => { setNameInput(e.target.value); setInputError(''); }}
           onKeyDown={e => e.key === 'Enter' && add()}
@@ -572,12 +574,12 @@ function AttributesEditor({ attributes, onChange }: {
         <input
           type="text"
           className="attr-input"
-          placeholder="القيمة (مثال: قطن)"
+          placeholder={t('editPage.attributes.valuePlaceholder')}
           value={valueInput}
           onChange={e => { setValueInput(e.target.value); setInputError(''); }}
           onKeyDown={e => e.key === 'Enter' && add()}
         />
-        <button type="button" className="attr-add-btn" onClick={add}>+ إضافة</button>
+        <button type="button" className="attr-add-btn" onClick={add}>{t('editPage.attributes.addBtn')}</button>
       </div>
       {inputError && <span className="attr-error">{inputError}</span>}
     </div>
@@ -594,6 +596,7 @@ function CategoryFiltersSection({
   values: FilterValuesMap;
   onChange: (v: FilterValuesMap) => void;
 }) {
+  const { t } = useTranslation('merchant');
   const setVal = (id: string, vals: string[]) => onChange({ ...values, [id]: vals });
 
   const visibleFilters = filters.filter(f => f.filter_type !== 'color');
@@ -601,7 +604,7 @@ function CategoryFiltersSection({
 
   return (
     <div className="cat-filters-section">
-      <div className="cat-filters-title">خصائص الفئة</div>
+      <div className="cat-filters-title">{t('editPage.categoryFilters.sectionTitle')}</div>
       {visibleFilters.map(f => (
         <div key={f.id} className="cat-filter-field">
           <label className="cat-filter-label">
@@ -617,7 +620,7 @@ function CategoryFiltersSection({
               value={values[f.id]?.[0] ?? ''}
               onChange={e => setVal(f.id, e.target.value ? [e.target.value] : [])}
             >
-              <option value="">— اختر —</option>
+              <option value="">{t('editPage.categoryFilters.selectPlaceholder')}</option>
               {f.options.map(opt => (
                 <option key={opt} value={opt}>{opt}</option>
               ))}
@@ -654,7 +657,7 @@ function CategoryFiltersSection({
                 checked={values[f.id]?.[0] === 'true'}
                 onChange={e => setVal(f.id, [String(e.target.checked)])}
               />
-              <span>نعم</span>
+              <span>{t('editPage.categoryFilters.yesLabel')}</span>
             </label>
           )}
         </div>
@@ -669,6 +672,7 @@ function EditProductModal({ product, onSave, onClose }: {
   onSave: (p: DBProduct) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation('merchant');
   const [form, setForm] = useState<ProductForm>({
     name: product.title,
     description: product.description ?? '',
@@ -796,7 +800,7 @@ function EditProductModal({ product, onSave, onClose }: {
 
   const handleSave = async () => {
     if (!form.name.trim() || !form.price.trim() || !form.quantity.trim()) {
-      setError('يرجى ملء الحقول المطلوبة');
+      setError(t('editPage.modal.missingRequiredFields'));
       return;
     }
 
@@ -811,7 +815,7 @@ function EditProductModal({ product, onSave, onClose }: {
       const { data: uploadData, error: uploadErr } = await supabase.storage
         .from('product-images')
         .upload(path, file, { upsert: true });
-      if (uploadErr) { setError('تعذّر رفع الصورة: ' + uploadErr.message); continue; }
+      if (uploadErr) { setError(t('editPage.modal.uploadImageError', { message: uploadErr.message })); continue; }
       const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(uploadData.path);
       uploadedUrls.push(urlData.publicUrl);
     }
@@ -839,7 +843,7 @@ function EditProductModal({ product, onSave, onClose }: {
       .eq('id', product.id);
 
     if (updateErr) {
-      setError('تعذّر تحديث المنتج: ' + updateErr.message);
+      setError(t('editPage.modal.updateProductError', { message: updateErr.message }));
       setSaving(false);
       return;
     }
@@ -857,7 +861,7 @@ function EditProductModal({ product, onSave, onClose }: {
       );
       const { error: varErr } = await supabase.from('product_variants').insert(rows);
       if (varErr) {
-        setError('تعذّر حفظ المتغيرات: ' + varErr.message);
+        setError(t('editPage.modal.saveVariantsError', { message: varErr.message }));
         setSaving(false);
         return;
       }
@@ -868,7 +872,7 @@ function EditProductModal({ product, onSave, onClose }: {
       const attrRows = attributes.map(a => ({ product_id: product.id, attribute_name: a.attribute_name, attribute_value: a.attribute_value }));
       const { error: attrErr } = await supabase.from('product_attributes').insert(attrRows);
       if (attrErr) {
-        setError('تعذّر حفظ المواصفات: ' + attrErr.message);
+        setError(t('editPage.modal.saveAttributesError', { message: attrErr.message }));
         setSaving(false);
         return;
       }
@@ -885,7 +889,7 @@ function EditProductModal({ product, onSave, onClose }: {
     if (filterRows.length > 0) {
       const { error: filterInsertErr } = await supabase.from('product_filter_values').insert(filterRows);
       if (filterInsertErr) {
-        setError('تعذّر حفظ خصائص الفئة: ' + filterInsertErr.message);
+        setError(t('editPage.modal.saveCategoryFiltersError', { message: filterInsertErr.message }));
         setSaving(false);
         return;
       }
@@ -910,86 +914,86 @@ function EditProductModal({ product, onSave, onClose }: {
     <div className="apm-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="apm-modal">
         <div className="apm-header">
-          <h3>تعديل المنتج</h3>
+          <h3>{t('editPage.modal.editTitle')}</h3>
           <button type="button" className="apm-close" onClick={onClose}>✕</button>
         </div>
 
         <div className="apm-fields">
           <div className="apm-field">
-            <label>صور المنتج</label>
+            <label>{t('editPage.modal.imagesLabel')}</label>
             <div className="apm-imgs-row">
               {existingUrls.map((url, idx) => (
                 <div key={`ex-${idx}`} className="apm-img-thumb">
-                  <img src={url} alt={`صورة ${idx + 1}`} />
+                  <img src={url} alt={t('editPage.modal.imageAlt', { index: idx + 1 })} />
                   <button type="button" className="apm-img-remove" onClick={() => removeExisting(idx)}>✕</button>
                 </div>
               ))}
               {previewUrls.map((url, idx) => (
                 <div key={`new-${idx}`} className="apm-img-thumb">
-                  <img src={url} alt={`صورة جديدة ${idx + 1}`} />
+                  <img src={url} alt={t('editPage.modal.newImageAlt', { index: idx + 1 })} />
                   <button type="button" className="apm-img-remove" onClick={() => removeNew(idx)}>✕</button>
                 </div>
               ))}
               <div className="apm-img-add" onClick={() => imgInputRef.current?.click()}>
                 <span>📷</span>
-                <span>إضافة صورة</span>
+                <span>{t('editPage.modal.addImageBtn')}</span>
               </div>
             </div>
-            <input ref={imgInputRef} type="file" accept="image/*" multiple onChange={handleImageChange} className="mep-file-hidden" aria-label="اختر صور المنتج" />
+            <input ref={imgInputRef} type="file" accept="image/*" multiple onChange={handleImageChange} className="mep-file-hidden" aria-label={t('editPage.modal.chooseImagesAria')} />
           </div>
 
           <div className="apm-field">
-            <label>اسم المنتج *</label>
-            <input type="text" placeholder="مثال: قميص صيفي" value={form.name}
+            <label>{t('editPage.modal.nameLabel')}</label>
+            <input type="text" placeholder={t('editPage.modal.namePlaceholder')} value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
           </div>
 
           <div className="apm-field">
-            <label>وصف المنتج</label>
-            <textarea placeholder="اكتب وصفاً مختصراً..." value={form.description}
+            <label>{t('editPage.modal.descriptionLabel')}</label>
+            <textarea placeholder={t('editPage.modal.descriptionPlaceholder')} value={form.description}
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
           </div>
 
           <div className="apm-field">
-            <label>السعر الأساسي (₪) *</label>
+            <label>{t('editPage.modal.priceLabel')}</label>
             <input type="number" min="0" step="0.5" placeholder="150" value={form.price}
               onChange={e => setForm(f => ({ ...f, price: e.target.value }))} />
           </div>
 
           <div className="apm-field">
-            <label>الكمية الإجمالية المتاحة *</label>
+            <label>{t('editPage.modal.quantityLabel')}</label>
             <input type="number" min="0" placeholder="20" value={form.quantity}
               onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} />
           </div>
 
           <div className="apm-field">
-            <label>نسبة الخصم (%)</label>
-            <input type="number" min="0" max="100" step="1" placeholder="بدون خصم" value={form.discount}
+            <label>{t('editPage.modal.discountLabel')}</label>
+            <input type="number" min="0" max="100" step="1" placeholder={t('editPage.modal.discountPlaceholder')} value={form.discount}
               onChange={e => setForm(f => ({ ...f, discount: e.target.value }))} />
-            <span className="cap-hint">اتركه فارغاً لإزالة الخصم — يظهر للزبائن كشارة "خصم %"</span>
+            <span className="cap-hint">{t('editPage.modal.discountHint')}</span>
           </div>
 
           <div className="apm-field">
-            <label>حجم المنتج للتوصيل</label>
+            <label>{t('editPage.modal.capacityLabel')}</label>
             <select
               className="cap-select"
-              aria-label="حجم المنتج للتوصيل"
+              aria-label={t('editPage.modal.capacityLabel')}
               value={capacityUnits}
               onChange={e => setCapacityUnits(Number(e.target.value))}
-              title="حجم المنتج للتوصيل"
+              title={t('editPage.modal.capacityLabel')}
             >
               {[1, 2, 3, 4, 5].map(v => (
-                <option key={v} value={v}>{v} — {CAPACITY_LABELS[v]}</option>
+                <option key={v} value={v}>{v} — {t(capacityLabelKey(v))}</option>
               ))}
             </select>
-            <span className="cap-hint">يُستخدم لحساب سعة الشاحنة عند التوصيل</span>
+            <span className="cap-hint">{t('editPage.modal.capacityHint')}</span>
           </div>
 
           {catFiltersLoading && (
-            <div className="cat-filters-loading">جاري تحميل خصائص الفئة...</div>
+            <div className="cat-filters-loading">{t('editPage.modal.loadingCategoryFilters')}</div>
           )}
           {catFiltersError && (
-            <div className="cat-filters-fetch-error">⚠ خطأ في تحميل خصائص الفئة: {catFiltersError}</div>
+            <div className="cat-filters-fetch-error">{t('editPage.modal.categoryFiltersFetchError', { message: catFiltersError })}</div>
           )}
           {catFilters.length > 0 && (
             <CategoryFiltersSection
@@ -1006,7 +1010,7 @@ function EditProductModal({ product, onSave, onClose }: {
           {error && <div className="md-page-error">{error}</div>}
 
           <button type="button" className="apm-add-btn" onClick={handleSave} disabled={saving}>
-            {saving ? 'جاري الحفظ...' : '💾 حفظ التعديلات'}
+            {saving ? t('editPage.modal.saving') : t('editPage.modal.saveBtn')}
           </button>
         </div>
       </div>
@@ -1021,6 +1025,7 @@ function AddProductModal({ shopId, onAdd, onClose }: {
   onAdd: (p: DBProduct) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation('merchant');
   const [form, setForm] = useState<ProductForm>({ name: '', description: '', price: '', quantity: '', discount: '' });
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
@@ -1090,7 +1095,7 @@ function AddProductModal({ shopId, onAdd, onClose }: {
 
   const handleAdd = async () => {
     if (!form.name.trim() || !form.price.trim() || !form.quantity.trim()) {
-      setError('يرجى ملء الحقول المطلوبة');
+      setError(t('editPage.modal.missingRequiredFields'));
       return;
     }
 
@@ -1112,7 +1117,7 @@ function AddProductModal({ shopId, onAdd, onClose }: {
       .single();
 
     if (insertErr || !data) {
-      setError('تعذّر إضافة المنتج: ' + (insertErr?.message ?? 'خطأ غير معروف'));
+      setError(t('editPage.modal.addProductError', { message: insertErr?.message ?? t('editPage.modal.unknownError') }));
       setSaving(false);
       return;
     }
@@ -1127,7 +1132,7 @@ function AddProductModal({ shopId, onAdd, onClose }: {
       const { data: uploadData, error: uploadErr } = await supabase.storage
         .from('product-images')
         .upload(path, file, { upsert: true });
-      if (uploadErr) { setError('تعذّر رفع الصورة: ' + uploadErr.message); continue; }
+      if (uploadErr) { setError(t('editPage.modal.uploadImageError', { message: uploadErr.message })); continue; }
       const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(uploadData.path);
       uploadedUrls.push(urlData.publicUrl);
     }
@@ -1147,7 +1152,7 @@ function AddProductModal({ shopId, onAdd, onClose }: {
       );
       const { error: varErr } = await supabase.from('product_variants').insert(rows);
       if (varErr) {
-        setError('تعذّر حفظ المتغيرات: ' + varErr.message);
+        setError(t('editPage.modal.saveVariantsError', { message: varErr.message }));
         setSaving(false);
         return;
       }
@@ -1166,7 +1171,7 @@ function AddProductModal({ shopId, onAdd, onClose }: {
     if (filterRows.length > 0) {
       const { error: filterInsertErr } = await supabase.from('product_filter_values').insert(filterRows);
       if (filterInsertErr) {
-        setError('تعذّر حفظ خصائص الفئة: ' + filterInsertErr.message);
+        setError(t('editPage.modal.saveCategoryFiltersError', { message: filterInsertErr.message }));
         setSaving(false);
         return;
       }
@@ -1196,57 +1201,57 @@ function AddProductModal({ shopId, onAdd, onClose }: {
     <div className="apm-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="apm-modal">
         <div className="apm-header">
-          <h3>إضافة منتج جديد</h3>
+          <h3>{t('editPage.modal.addTitle')}</h3>
           <button type="button" className="apm-close" onClick={onClose}>✕</button>
         </div>
 
         <div className="apm-fields">
           <div className="apm-field">
-            <label>صور المنتج</label>
+            <label>{t('editPage.modal.imagesLabel')}</label>
             <div className="apm-imgs-row">
               {previewUrls.map((url, idx) => (
                 <div key={idx} className="apm-img-thumb">
-                  <img src={url} alt={`صورة ${idx + 1}`} />
+                  <img src={url} alt={t('editPage.modal.imageAlt', { index: idx + 1 })} />
                   <button type="button" className="apm-img-remove" onClick={() => removeImage(idx)}>✕</button>
                 </div>
               ))}
               <div className="apm-img-add" onClick={() => imgInputRef.current?.click()}>
                 <span>📷</span>
-                <span>إضافة صورة</span>
+                <span>{t('editPage.modal.addImageBtn')}</span>
               </div>
             </div>
-            <input ref={imgInputRef} type="file" accept="image/*" multiple onChange={handleImageChange} className="mep-file-hidden" aria-label="اختر صور المنتج" />
+            <input ref={imgInputRef} type="file" accept="image/*" multiple onChange={handleImageChange} className="mep-file-hidden" aria-label={t('editPage.modal.chooseImagesAria')} />
           </div>
 
           <div className="apm-field">
-            <label>اسم المنتج *</label>
-            <input type="text" placeholder="مثال: قميص صيفي" value={form.name}
+            <label>{t('editPage.modal.nameLabel')}</label>
+            <input type="text" placeholder={t('editPage.modal.namePlaceholder')} value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
           </div>
 
           <div className="apm-field">
-            <label>وصف المنتج</label>
-            <textarea placeholder="اكتب وصفاً مختصراً..." value={form.description}
+            <label>{t('editPage.modal.descriptionLabel')}</label>
+            <textarea placeholder={t('editPage.modal.descriptionPlaceholder')} value={form.description}
               onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
           </div>
 
           <div className="apm-field">
-            <label>السعر الأساسي (₪) *</label>
+            <label>{t('editPage.modal.priceLabel')}</label>
             <input type="number" min="0" step="0.5" placeholder="150" value={form.price}
               onChange={e => setForm(f => ({ ...f, price: e.target.value }))} />
           </div>
 
           <div className="apm-field">
-            <label>الكمية الإجمالية المتاحة *</label>
+            <label>{t('editPage.modal.quantityLabel')}</label>
             <input type="number" min="0" placeholder="20" value={form.quantity}
               onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} />
           </div>
 
           {catFiltersLoading && (
-            <div className="cat-filters-loading">جاري تحميل خصائص الفئة...</div>
+            <div className="cat-filters-loading">{t('editPage.modal.loadingCategoryFilters')}</div>
           )}
           {catFiltersError && (
-            <div className="cat-filters-fetch-error">⚠ خطأ في تحميل خصائص الفئة: {catFiltersError}</div>
+            <div className="cat-filters-fetch-error">{t('editPage.modal.categoryFiltersFetchError', { message: catFiltersError })}</div>
           )}
           {catFilters.length > 0 && (
             <CategoryFiltersSection
@@ -1263,7 +1268,7 @@ function AddProductModal({ shopId, onAdd, onClose }: {
           {error && <div className="md-page-error">{error}</div>}
 
           <button type="button" className="apm-add-btn" onClick={handleAdd} disabled={saving}>
-            {saving ? 'جاري الحفظ...' : '➕ إضافة المنتج'}
+            {saving ? t('editPage.modal.saving') : t('editPage.modal.addBtn')}
           </button>
         </div>
       </div>
@@ -1273,8 +1278,11 @@ function AddProductModal({ shopId, onAdd, onClose }: {
 
 // ── MerchantEditPage ───────────────────────────────────────────────────────────
 export default function MerchantEditPage() {
+  const { t } = useTranslation('merchant');
+  const { direction, lang } = useLanguage();
   const { merchant } = useMerchantAuth();
   const shop = merchant!.shop;
+  const numLocale = lang === 'ar' ? 'ar-EG' : 'en-US';
 
   const [products, setProducts] = useState<DBProduct[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -1315,7 +1323,7 @@ export default function MerchantEditPage() {
       .eq('shop_id', shop.shop_id);
     if (error) {
       setDeleteStatus('error');
-      setDeleteMsg('حدث خطأ أثناء الحذف، يرجى المحاولة مرة أخرى');
+      setDeleteMsg(t('editPage.deleteModal.siteDeleteError'));
       return;
     }
     setProducts(prev => prev.filter(p => p.id !== id));
@@ -1343,7 +1351,7 @@ export default function MerchantEditPage() {
 
     if (!metaOk) {
       setDeleteStatus('error');
-      setDeleteMsg('تعذر حذف المنتج من كتالوج Meta، يرجى المحاولة مرة أخرى');
+      setDeleteMsg(t('editPage.deleteModal.metaDeleteError'));
       return;
     }
 
@@ -1354,7 +1362,7 @@ export default function MerchantEditPage() {
       .eq('shop_id', shop.shop_id);
     if (error) {
       setDeleteStatus('error');
-      setDeleteMsg('تم الحذف من Meta لكن حدث خطأ في تحديث السجل، يرجى المحاولة مرة أخرى');
+      setDeleteMsg(t('editPage.deleteModal.metaDeletedRecordError'));
       return;
     }
     setProducts(prev => prev.filter(p => p.id !== id));
@@ -1363,12 +1371,12 @@ export default function MerchantEditPage() {
 
   if (!shop) {
     return (
-      <div className="mep-root">
-        <h1 className="mep-title">إدارة المنتجات</h1>
+      <div className="mep-root" dir={direction}>
+        <h1 className="mep-title">{t('editPage.pageTitle')}</h1>
         <div className="mep-section">
           <div className="mr-empty">
-            يجب إنشاء متجرك أولاً قبل إضافة منتجات.<br />
-            اذهب إلى <strong>إعدادات المتجر</strong> من القائمة أعلاه لإنشاء متجرك.
+            {t('editPage.noShop.message')}<br />
+            {t('editPage.noShop.prefix')}<strong>{t('editPage.noShop.storeSettingsLink')}</strong>{t('editPage.noShop.suffix')}
           </div>
         </div>
       </div>
@@ -1376,44 +1384,44 @@ export default function MerchantEditPage() {
   }
 
   return (
-    <div className="mep-root">
-      <h1 className="mep-title">إدارة المنتجات</h1>
+    <div className="mep-root" dir={direction}>
+      <h1 className="mep-title">{t('editPage.pageTitle')}</h1>
 
       <div className="mep-section">
         <div className="mep-products-header">
-          <h2 className="mep-section-title mep-section-title--flush">📦 المنتجات</h2>
+          <h2 className="mep-section-title mep-section-title--flush">{t('editPage.products.sectionTitle')}</h2>
           <button type="button" className="mep-add-product-btn" onClick={() => setShowAddModal(true)}>
-            ➕ إضافة منتج
+            {t('editPage.products.addProductBtn')}
           </button>
         </div>
 
         {loadingProducts ? (
-          <div className="md-page-loading">جاري تحميل المنتجات...</div>
+          <div className="md-page-loading">{t('editPage.products.loading')}</div>
         ) : products.length === 0 ? (
-          <div className="mr-empty mep-products-gap">لا توجد منتجات — أضف أول منتج لك!</div>
+          <div className="mr-empty mep-products-gap">{t('editPage.products.empty')}</div>
         ) : (
           <div className="mep-products-grid mep-products-gap">
             {products.map(p => (
               <div key={p.id} className="mep-product-card">
                 <div className="mep-product-actions">
-                  <button type="button" className="mep-product-edit-btn" onClick={() => setEditingProduct(p)} title="تعديل المنتج">✏️</button>
-                  <button type="button" className="mep-product-del-btn" onClick={() => setPendingDeleteId(p.id)} title="حذف المنتج">🗑</button>
+                  <button type="button" className="mep-product-edit-btn" onClick={() => setEditingProduct(p)} title={t('editPage.products.editTitle')}>✏️</button>
+                  <button type="button" className="mep-product-del-btn" onClick={() => setPendingDeleteId(p.id)} title={t('editPage.products.deleteTitle')}>🗑</button>
                 </div>
                 <div className="mep-product-img">
                   {p.image_urls?.[0] ? <img src={p.image_urls[0]} alt={p.title} /> : '📦'}
                 </div>
                 <div className="mep-product-name">{p.title}</div>
                 {p.product_source === 'meta_import' && (
-                  <span className="meta-import-badge">مستورد من Meta</span>
+                  <span className="meta-import-badge">{t('editPage.products.metaImportBadge')}</span>
                 )}
                 <div className="mep-product-footer">
-                  <span className="mep-product-price">{Number(p.price).toLocaleString('ar-SA')} ₪</span>
-                  <span className="mep-product-qty">الكمية: {p.stock_Quantity}</span>
+                  <span className="mep-product-price">{Number(p.price).toLocaleString(numLocale)} ₪</span>
+                  <span className="mep-product-qty">{t('editPage.products.quantityLabel', { qty: p.stock_Quantity })}</span>
                 </div>
                 {p.capacity_units != null && (
-                  <div className="mep-product-capacity" title="حجم المنتج للتوصيل">
+                  <div className="mep-product-capacity" title={t('editPage.modal.capacityLabel')}>
                     <span className="cap-badge cap-badge--{p.capacity_units}">
-                      📦 {p.capacity_units} — {CAPACITY_LABELS[p.capacity_units]}
+                      📦 {p.capacity_units} — {t(capacityLabelKey(p.capacity_units))}
                     </span>
                   </div>
                 )}
@@ -1443,13 +1451,13 @@ export default function MerchantEditPage() {
       {pendingDeleteId && (
         <div className="mep-del-overlay" onClick={deleteStatus !== 'loading' ? closedDeleteModal : undefined}>
           <div className="mep-del-modal" onClick={e => e.stopPropagation()}>
-            <div className="mep-del-modal-title">🗑 حذف المنتج</div>
+            <div className="mep-del-modal-title">{t('editPage.deleteModal.title')}</div>
             <div className="mep-del-modal-msg">
-              هل تريد حذف المنتج من الموقع فقط، أم من الموقع ومن كتالوج Meta أيضًا؟
+              {t('editPage.deleteModal.confirmMessage')}
             </div>
 
             {deleteStatus === 'loading' && (
-              <div className="mep-del-modal-loading">جارٍ التنفيذ...</div>
+              <div className="mep-del-modal-loading">{t('editPage.deleteModal.loading')}</div>
             )}
 
             {deleteStatus === 'error' && (
@@ -1463,7 +1471,7 @@ export default function MerchantEditPage() {
                 disabled={deleteStatus === 'loading'}
                 onClick={() => handleDeleteSiteAndMeta(pendingDeleteId)}
               >
-                حذف من الموقع و Meta
+                {t('editPage.deleteModal.deleteSiteAndMetaBtn')}
               </button>
               <button
                 type="button"
@@ -1471,7 +1479,7 @@ export default function MerchantEditPage() {
                 disabled={deleteStatus === 'loading'}
                 onClick={() => handleDeleteSiteOnly(pendingDeleteId)}
               >
-                حذف من الموقع فقط
+                {t('editPage.deleteModal.deleteSiteOnlyBtn')}
               </button>
               <button
                 type="button"
@@ -1479,7 +1487,7 @@ export default function MerchantEditPage() {
                 disabled={deleteStatus === 'loading'}
                 onClick={closedDeleteModal}
               >
-                إلغاء
+                {t('editPage.common.cancel')}
               </button>
             </div>
           </div>

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
+import { useLanguage } from '../../context/LanguageContext';
 
 /**
  * Admin — sales & earnings ledger ("كشف سجلات المبيعات").
@@ -68,13 +70,6 @@ interface Summary {
   count: number;
 }
 
-const TYPE_LABEL: Record<PayeeType, string> = { shop: 'تاجر', courier: 'مندوب', platform: 'المنصّة' };
-// Split Payout statuses + legacy ones (so old rows still render).
-const STATUS_LABEL: Record<string, string> = {
-  distributed: 'موزّعة عبر PayTabs', platform_held: 'محتجزة لدى المنصّة',
-  pending: 'قيد الانتظار', queued: 'في الطابور', submitted: 'قيد التحويل',
-  paid: 'مدفوع', failed: 'فشل', skipped: 'متجاوز', reversed: 'معكوس',
-};
 const STATUS_COLOR: Record<string, { bg: string; fg: string }> = {
   distributed: { bg: '#F0FDF4', fg: '#15803D' },
   platform_held: { bg: '#FFF7ED', fg: '#C2410C' },
@@ -123,6 +118,17 @@ const card = (label: string, value: string, accent: string) => (
 );
 
 const SalesLedgerPage: React.FC<{ embedded?: boolean }> = () => {
+  const { t } = useTranslation('admin');
+  const { direction } = useLanguage();
+  const TYPE_LABEL: Record<PayeeType, string> = {
+    shop: t('salesLedger.type.shop'), courier: t('salesLedger.type.courier'), platform: t('salesLedger.type.platform'),
+  };
+  // Split Payout statuses + legacy ones (so old rows still render).
+  const STATUS_LABEL: Record<string, string> = {
+    distributed: t('salesLedger.status.distributed'), platform_held: t('salesLedger.status.platform_held'),
+    pending: t('salesLedger.status.pending'), queued: t('salesLedger.status.queued'), submitted: t('salesLedger.status.submitted'),
+    paid: t('salesLedger.status.paid'), failed: t('salesLedger.status.failed'), skipped: t('salesLedger.status.skipped'), reversed: t('salesLedger.status.reversed'),
+  };
   const [rows, setRows] = useState<LedgerRow[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -142,7 +148,7 @@ const SalesLedgerPage: React.FC<{ embedded?: boolean }> = () => {
     setError('');
     try {
       const token = await getToken();
-      if (!token) { setError('انتهت الجلسة — يرجى تسجيل الدخول من جديد.'); setLoading(false); return; }
+      if (!token) { setError(t('salesLedger.sessionExpired')); setLoading(false); return; }
       const params = new URLSearchParams();
       if (type) params.set('type', type);
       if (status) params.set('status', status);
@@ -153,15 +159,15 @@ const SalesLedgerPage: React.FC<{ embedded?: boolean }> = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json();
-      if (!res.ok) { setError(json.error ?? 'تعذّر تحميل الكشف.'); setLoading(false); return; }
+      if (!res.ok) { setError(json.error ?? t('salesLedger.loadError')); setLoading(false); return; }
       setRows(json.rows ?? []);
       setGroups(json.groups ?? []);
       setSummary(json.summary ?? null);
     } catch {
-      setError('تعذّر الاتصال بالخادم.');
+      setError(t('salesLedger.connectionError'));
     }
     setLoading(false);
-  }, [type, status, from, to, q]);
+  }, [type, status, from, to, q, t]);
 
   useEffect(() => { load(); }, []); // initial load; filters apply via the button
 
@@ -171,7 +177,7 @@ const SalesLedgerPage: React.FC<{ embedded?: boolean }> = () => {
     if (tab === 'transactions') {
       downloadCSV(
         'sales-ledger.csv',
-        ['التاريخ', 'رقم الطلب', 'المستفيد', 'النوع', 'المبلغ', 'العملة', 'الحالة'],
+        [t('salesLedger.csv.date'), t('salesLedger.csv.orderNumber'), t('salesLedger.csv.payee'), t('salesLedger.csv.type'), t('salesLedger.csv.amount'), t('salesLedger.csv.currency'), t('salesLedger.csv.status')],
         rows.map(r => [
           fmtDate(r.created_at), r.order_id ?? '', r.payee_name, TYPE_LABEL[r.payee_type],
           r.amount, r.currency ?? '', STATUS_LABEL[r.status] ?? r.status,
@@ -180,7 +186,7 @@ const SalesLedgerPage: React.FC<{ embedded?: boolean }> = () => {
     } else {
       downloadCSV(
         'sales-by-payee.csv',
-        ['المستفيد', 'النوع', 'الإجمالي', 'موزّعة', 'محتجزة', 'عدد المعاملات'],
+        [t('salesLedger.csv.payee'), t('salesLedger.csv.type'), t('salesLedger.csv.total'), t('salesLedger.csv.distributed'), t('salesLedger.csv.held'), t('salesLedger.csv.transactionCount')],
         groups.map(g => [g.payee_name, TYPE_LABEL[g.payee_type], g.total, g.distributed_total, g.held_total, g.count]),
       );
     }
@@ -196,54 +202,54 @@ const SalesLedgerPage: React.FC<{ embedded?: boolean }> = () => {
     return <span style={{ fontSize: 11, fontWeight: 700, background: c.bg, color: c.fg, borderRadius: 5, padding: '2px 8px' }}>{STATUS_LABEL[s] ?? s}</span>;
   };
 
-  const th: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: '#94A3B8', textAlign: 'right', padding: '8px 12px', borderBottom: '1.5px solid #E2E8F0', whiteSpace: 'nowrap' };
-  const td: React.CSSProperties = { fontSize: 13, color: '#1E3A5F', padding: '9px 12px', borderBottom: '1px solid #F1F5F9', textAlign: 'right' };
+  const th: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: '#94A3B8', textAlign: direction === 'rtl' ? 'right' : 'left', padding: '8px 12px', borderBottom: '1.5px solid #E2E8F0', whiteSpace: 'nowrap' };
+  const td: React.CSSProperties = { fontSize: 13, color: '#1E3A5F', padding: '9px 12px', borderBottom: '1px solid #F1F5F9', textAlign: direction === 'rtl' ? 'right' : 'left' };
 
   const tableHasData = tab === 'transactions' ? rows.length > 0 : groups.length > 0;
 
   return (
-    <div style={{ fontFamily: "'Tajawal', sans-serif", color: '#0F2B4E', direction: 'rtl', background: '#F8FAFC', borderRadius: 8, padding: 16 }}>
+    <div style={{ fontFamily: "'Tajawal', sans-serif", color: '#0F2B4E', direction, background: '#F8FAFC', borderRadius: 8, padding: 16 }}>
       <style>{FONTS_CSS}</style>
 
       <div style={{ marginBottom: 16 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 800, margin: 0 }}>كشف المبيعات والأرباح</h1>
-        <p style={{ fontSize: 13, color: '#64748B', marginTop: 6 }}>سجلّ توزيع الأموال على التجار والمناديب والمنصّة، مع الإجماليات وإمكانية التصدير.</p>
+        <h1 style={{ fontSize: 20, fontWeight: 800, margin: 0 }}>{t('salesLedger.title')}</h1>
+        <p style={{ fontSize: 13, color: '#64748B', marginTop: 6 }}>{t('salesLedger.subtitle')}</p>
       </div>
 
       {/* Summary cards */}
       {summary && (
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
-          {card('مدفوعات العملاء', `${fmtMoney(summary.customer_paid_total)} ${currency}`, '#0F2B4E')}
-          {card('حصص التجار', `${fmtMoney(summary.merchants_total)} ${currency}`, '#0F766E')}
-          {card('أجور المناديب', `${fmtMoney(summary.couriers_total)} ${currency}`, '#7C3AED')}
-          {card('عمولة المنصّة', `${fmtMoney(summary.platform_total)} ${currency}`, '#EA580C')}
-          {card('موزّعة عبر PayTabs', `${fmtMoney(summary.distributed)} ${currency}`, '#15803D')}
-          {card('محتجزة لدى المنصّة', `${fmtMoney(summary.held)} ${currency}`, '#C2410C')}
+          {card(t('salesLedger.cards.customerPaid'), `${fmtMoney(summary.customer_paid_total)} ${currency}`, '#0F2B4E')}
+          {card(t('salesLedger.cards.merchantShares'), `${fmtMoney(summary.merchants_total)} ${currency}`, '#0F766E')}
+          {card(t('salesLedger.cards.courierFees'), `${fmtMoney(summary.couriers_total)} ${currency}`, '#7C3AED')}
+          {card(t('salesLedger.cards.platformCommission'), `${fmtMoney(summary.platform_total)} ${currency}`, '#EA580C')}
+          {card(t('salesLedger.status.distributed'), `${fmtMoney(summary.distributed)} ${currency}`, '#15803D')}
+          {card(t('salesLedger.status.platform_held'), `${fmtMoney(summary.held)} ${currency}`, '#C2410C')}
         </div>
       )}
 
       {/* Filters */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
         <select value={type} onChange={e => setType(e.target.value)} style={inputStyle}>
-          <option value="">كل المستفيدين</option>
-          <option value="shop">التجار</option>
-          <option value="courier">المناديب</option>
-          <option value="platform">المنصّة</option>
+          <option value="">{t('salesLedger.filters.allPayees')}</option>
+          <option value="shop">{t('salesLedger.type.shop')}</option>
+          <option value="courier">{t('salesLedger.type.courier')}</option>
+          <option value="platform">{t('salesLedger.type.platform')}</option>
         </select>
         <select value={status} onChange={e => setStatus(e.target.value)} style={inputStyle}>
-          <option value="">كل الحالات</option>
+          <option value="">{t('salesLedger.filters.allStatuses')}</option>
           {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
-        <input type="date" value={from} onChange={e => setFrom(e.target.value)} style={inputStyle} title="من" />
-        <input type="date" value={to} onChange={e => setTo(e.target.value)} style={inputStyle} title="إلى" />
-        <input type="text" value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') load(); }} placeholder="بحث بالاسم..." style={{ ...inputStyle, flex: '1 1 160px', maxWidth: 240 }} />
-        <button onClick={load} style={{ background: 'linear-gradient(135deg,#F97316,#EA580C)', border: 'none', borderRadius: 7, color: '#fff', fontSize: 13, fontWeight: 700, padding: '8px 18px', cursor: 'pointer', fontFamily: "'Tajawal', sans-serif" }}>تطبيق</button>
-        <button onClick={exportCSV} disabled={!tableHasData} style={{ background: '#FFFFFF', border: '1.5px solid #E2E8F0', borderRadius: 7, color: tableHasData ? '#0F2B4E' : '#CBD5E1', fontSize: 13, fontWeight: 700, padding: '8px 14px', cursor: tableHasData ? 'pointer' : 'not-allowed', fontFamily: "'Tajawal', sans-serif" }}>⬇ تصدير CSV</button>
+        <input type="date" value={from} onChange={e => setFrom(e.target.value)} style={inputStyle} title={t('salesLedger.filters.from')} />
+        <input type="date" value={to} onChange={e => setTo(e.target.value)} style={inputStyle} title={t('salesLedger.filters.to')} />
+        <input type="text" value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') load(); }} placeholder={t('salesLedger.filters.searchPlaceholder')} style={{ ...inputStyle, flex: '1 1 160px', maxWidth: 240 }} />
+        <button onClick={load} style={{ background: 'linear-gradient(135deg,#F97316,#EA580C)', border: 'none', borderRadius: 7, color: '#fff', fontSize: 13, fontWeight: 700, padding: '8px 18px', cursor: 'pointer', fontFamily: "'Tajawal', sans-serif" }}>{t('salesLedger.filters.apply')}</button>
+        <button onClick={exportCSV} disabled={!tableHasData} style={{ background: '#FFFFFF', border: '1.5px solid #E2E8F0', borderRadius: 7, color: tableHasData ? '#0F2B4E' : '#CBD5E1', fontSize: 13, fontWeight: 700, padding: '8px 14px', cursor: tableHasData ? 'pointer' : 'not-allowed', fontFamily: "'Tajawal', sans-serif" }}>⬇ {t('salesLedger.filters.exportCsv')}</button>
       </div>
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
-        {([['transactions', 'حسب المعاملة'], ['byPayee', 'حسب المستفيد']] as const).map(([key, label]) => (
+        {([['transactions', t('salesLedger.tabs.byTransaction')], ['byPayee', t('salesLedger.tabs.byPayee')]] as const).map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)}
             style={{ fontSize: 13, fontWeight: 700, padding: '7px 16px', borderRadius: 7, cursor: 'pointer', fontFamily: "'Tajawal', sans-serif",
               border: tab === key ? '1.5px solid #FED7AA' : '1.5px solid #E2E8F0',
@@ -255,32 +261,32 @@ const SalesLedgerPage: React.FC<{ embedded?: boolean }> = () => {
 
       {/* Body */}
       {loading ? (
-        <div style={{ padding: 40, textAlign: 'center', color: '#64748B' }}>...جاري تحميل الكشف</div>
+        <div style={{ padding: 40, textAlign: 'center', color: '#64748B' }}>{t('salesLedger.loading')}</div>
       ) : error ? (
         <div style={{ padding: 16, color: '#B91C1C', background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 8 }}>{error}</div>
       ) : !tableHasData ? (
-        <div style={{ padding: 40, textAlign: 'center', color: '#94A3B8' }}>لا توجد سجلات مطابقة.</div>
+        <div style={{ padding: 40, textAlign: 'center', color: '#94A3B8' }}>{t('salesLedger.noRecords')}</div>
       ) : (
         <div className="sl-scroll" style={{ background: '#FFFFFF', border: '1.5px solid #E2E8F0', borderRadius: 10, overflow: 'auto' }}>
           {tab === 'transactions' ? (
             <table className="sl-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  <th style={th}>التاريخ</th><th style={th}>الطلب</th><th style={th}>المستفيد</th>
-                  <th style={th}>النوع</th><th style={th}>المبلغ</th><th style={th}>الحالة</th>
-                  <th style={th}>تاريخ الصرف</th>
+                  <th style={th}>{t('salesLedger.csv.date')}</th><th style={th}>{t('salesLedger.order')}</th><th style={th}>{t('salesLedger.csv.payee')}</th>
+                  <th style={th}>{t('salesLedger.csv.type')}</th><th style={th}>{t('salesLedger.csv.amount')}</th><th style={th}>{t('salesLedger.csv.status')}</th>
+                  <th style={th}>{t('salesLedger.paidAtDate')}</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map(r => (
                   <tr key={r.id}>
-                    <td style={td} data-label="التاريخ">{fmtDate(r.created_at)}</td>
-                    <td style={td} data-label="الطلب">{r.order_id ?? '—'}</td>
-                    <td style={{ ...td, fontWeight: 600 }} data-label="المستفيد">{r.payee_name}</td>
-                    <td style={td} data-label="النوع">{TYPE_LABEL[r.payee_type]}</td>
-                    <td style={{ ...td, fontWeight: 700 }} data-label="المبلغ">{fmtMoney(Number(r.amount))} {r.currency ?? currency}</td>
-                    <td style={td} data-label="الحالة">{statusBadge(r.status)}</td>
-                    <td style={td} data-label="تاريخ الصرف">{fmtDate(r.paid_at)}</td>
+                    <td style={td} data-label={t('salesLedger.csv.date')}>{fmtDate(r.created_at)}</td>
+                    <td style={td} data-label={t('salesLedger.order')}>{r.order_id ?? '—'}</td>
+                    <td style={{ ...td, fontWeight: 600 }} data-label={t('salesLedger.csv.payee')}>{r.payee_name}</td>
+                    <td style={td} data-label={t('salesLedger.csv.type')}>{TYPE_LABEL[r.payee_type]}</td>
+                    <td style={{ ...td, fontWeight: 700 }} data-label={t('salesLedger.csv.amount')}>{fmtMoney(Number(r.amount))} {r.currency ?? currency}</td>
+                    <td style={td} data-label={t('salesLedger.csv.status')}>{statusBadge(r.status)}</td>
+                    <td style={td} data-label={t('salesLedger.paidAtDate')}>{fmtDate(r.paid_at)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -289,19 +295,19 @@ const SalesLedgerPage: React.FC<{ embedded?: boolean }> = () => {
             <table className="sl-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  <th style={th}>المستفيد</th><th style={th}>النوع</th><th style={th}>الإجمالي</th>
-                  <th style={th}>موزّعة</th><th style={th}>محتجزة</th><th style={th}>عدد المعاملات</th>
+                  <th style={th}>{t('salesLedger.csv.payee')}</th><th style={th}>{t('salesLedger.csv.type')}</th><th style={th}>{t('salesLedger.csv.total')}</th>
+                  <th style={th}>{t('salesLedger.csv.distributed')}</th><th style={th}>{t('salesLedger.csv.held')}</th><th style={th}>{t('salesLedger.csv.transactionCount')}</th>
                 </tr>
               </thead>
               <tbody>
                 {groups.map(g => (
                   <tr key={`${g.payee_type}:${g.payee_id}`}>
-                    <td style={{ ...td, fontWeight: 600 }} data-label="المستفيد">{g.payee_name}</td>
-                    <td style={td} data-label="النوع">{TYPE_LABEL[g.payee_type]}</td>
-                    <td style={{ ...td, fontWeight: 700 }} data-label="الإجمالي">{fmtMoney(g.total)} {currency}</td>
-                    <td style={{ ...td, color: '#15803D' }} data-label="موزّعة">{fmtMoney(g.distributed_total)} {currency}</td>
-                    <td style={{ ...td, color: '#C2410C' }} data-label="محتجزة">{fmtMoney(g.held_total)} {currency}</td>
-                    <td style={td} data-label="عدد المعاملات">{g.count}</td>
+                    <td style={{ ...td, fontWeight: 600 }} data-label={t('salesLedger.csv.payee')}>{g.payee_name}</td>
+                    <td style={td} data-label={t('salesLedger.csv.type')}>{TYPE_LABEL[g.payee_type]}</td>
+                    <td style={{ ...td, fontWeight: 700 }} data-label={t('salesLedger.csv.total')}>{fmtMoney(g.total)} {currency}</td>
+                    <td style={{ ...td, color: '#15803D' }} data-label={t('salesLedger.csv.distributed')}>{fmtMoney(g.distributed_total)} {currency}</td>
+                    <td style={{ ...td, color: '#C2410C' }} data-label={t('salesLedger.csv.held')}>{fmtMoney(g.held_total)} {currency}</td>
+                    <td style={td} data-label={t('salesLedger.csv.transactionCount')}>{g.count}</td>
                   </tr>
                 ))}
               </tbody>

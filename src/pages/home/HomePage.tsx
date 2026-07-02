@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import Topbar from '../../components/Topbar';
 import supabase from '../../lib/supabase';
 import { useShop } from '../../context/ShopContext';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { getProductBadge } from '../../lib/productBadge';
 import '../../lib/productBadge.css';
 import './HomePage.css';
@@ -40,21 +42,18 @@ interface Product {
 
 // ── Hero ──────────────────────────────────────────────────────────────────────
 
-const SLIDES = [
-  { title: 'اكتشف متاجر موثوقة', subtitle: 'تسوق من أفضل المتاجر المحلية في مكان واحد' },
-  { title: 'منتجات أصيلة بأسعار منافسة', subtitle: 'اختر من بين آلاف المنتجات من متاجر موثوقة' },
-  { title: 'توصيل سريع إلى بابك', subtitle: 'خدمة توصيل احترافية لجميع مناطق فلسطين' },
-];
-
 function HeroSection() {
+  const { t } = useTranslation('customer');
   const navigate = useNavigate();
   const [cur, setCur] = useState(0);
   const timer = useRef<ReturnType<typeof setInterval>>();
 
+  const SLIDES = t('home.slides', { returnObjects: true }) as { title: string; subtitle: string }[];
+
   useEffect(() => {
     timer.current = setInterval(() => setCur(c => (c + 1) % SLIDES.length), 5000);
     return () => clearInterval(timer.current);
-  }, []);
+  }, [SLIDES.length]);
 
   const slide = SLIDES[cur];
 
@@ -67,16 +66,16 @@ function HeroSection() {
           <div className="hp-hero__content" key={cur}>
             <h1 className="hp-hero__title">{slide.title}</h1>
             <p className="hp-hero__subtitle">{slide.subtitle}</p>
-            <button className="hp-hero__cta" onClick={() => navigate('/stores-list')}>تسوق الآن</button>
+            <button className="hp-hero__cta" onClick={() => navigate('/stores-list')}>{t('home.hero.shopNow')}</button>
           </div>
         </div>
 
         {/* Arrows */}
-        <button type="button" aria-label="السابق" title="السابق" className="hp-hero__arr hp-hero__arr--r"
+        <button type="button" aria-label={t('home.hero.prev')} title={t('home.hero.prev')} className="hp-hero__arr hp-hero__arr--r"
           onClick={() => setCur(c => (c - 1 + SLIDES.length) % SLIDES.length)}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 18l-6-6 6-6"/></svg>
         </button>
-        <button type="button" aria-label="التالي" title="التالي" className="hp-hero__arr hp-hero__arr--l"
+        <button type="button" aria-label={t('home.hero.next')} title={t('home.hero.next')} className="hp-hero__arr hp-hero__arr--l"
           onClick={() => setCur(c => (c + 1) % SLIDES.length)}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
         </button>
@@ -84,7 +83,7 @@ function HeroSection() {
         {/* Dots */}
         <div className="hp-hero__dots">
           {SLIDES.map((_, i) => (
-            <button type="button" key={i} aria-label={`الشريحة ${i + 1}`} title={`الشريحة ${i + 1}`} className={`hp-hero__dot${i === cur ? ' hp-hero__dot--on' : ''}`} onClick={() => setCur(i)} />
+            <button type="button" key={i} aria-label={t('home.hero.slideAria', { n: i + 1 })} title={t('home.hero.slideAria', { n: i + 1 })} className={`hp-hero__dot${i === cur ? ' hp-hero__dot--on' : ''}`} onClick={() => setCur(i)} />
           ))}
         </div>
       </section>
@@ -107,11 +106,12 @@ function CategoryCard({ cat }: { cat: Category }) {
 }
 
 function CategoriesSection({ cats, loading }: { cats: Category[]; loading: boolean }) {
+  const { t } = useTranslation('customer');
   return (
     <section className="hp-section" id="categories">
       <div className="hp-wrap">
         <div className="hp-section-hd">
-          <h2 className="hp-section-title">الفئات</h2>
+          <h2 className="hp-section-title">{t('home.categories.title')}</h2>
         </div>
 
         {loading ? (
@@ -124,7 +124,7 @@ function CategoriesSection({ cats, loading }: { cats: Category[]; loading: boole
             ))}
           </div>
         ) : cats.length === 0 ? (
-          <p className="hp-empty">لا توجد أقسام حالياً</p>
+          <p className="hp-empty">{t('home.categories.empty')}</p>
         ) : (
           <div className="hp-cat-grid">
             {cats.map(c => <CategoryCard key={c.id} cat={c} />)}
@@ -164,11 +164,12 @@ function StoreCard({ store }: { store: Store }) {
 }
 
 function StoresSection({ stores, loading }: { stores: Store[]; loading: boolean }) {
+  const { t } = useTranslation('customer');
   return (
     <section className="hp-section hp-section--alt" id="stores">
       <div className="hp-wrap">
         <div className="hp-section-hd">
-          <h2 className="hp-section-title">المتاجر الأعلى تقييما</h2>
+          <h2 className="hp-section-title">{t('home.stores.title')}</h2>
         </div>
 
         {loading ? (
@@ -182,7 +183,7 @@ function StoresSection({ stores, loading }: { stores: Store[]; loading: boolean 
             ))}
           </div>
         ) : stores.length === 0 ? (
-          <p className="hp-empty">لا توجد متاجر حالياً</p>
+          <p className="hp-empty">{t('home.stores.empty')}</p>
         ) : (
           <div className="hp-store-grid">
             {stores.slice(0, STORES_INITIAL).map(s => <StoreCard key={s.shop_id} store={s} />)}
@@ -196,6 +197,7 @@ function StoresSection({ stores, loading }: { stores: Store[]; loading: boolean 
 // ── Products ──────────────────────────────────────────────────────────────────
 
 function ProductCard({ product }: { product: Product }) {
+  const { t } = useTranslation('customer');
   const navigate = useNavigate();
   const { addToCart, isInCart, toggleFavorite, isFavorited } = useShop();
   const { customer } = useCustomerAuth();
@@ -253,7 +255,7 @@ function ProductCard({ product }: { product: Product }) {
   return (
     <div className="hp-prod-card" onClick={() => navigate(`/product/${product.id}`)}>
       {/* Favorite button */}
-      <button type="button" className={`hp-prod-card__fav${faved ? ' hp-prod-card__fav--on' : ''}`} onClick={onFav} aria-label="أضف للمفضلة">
+      <button type="button" className={`hp-prod-card__fav${faved ? ' hp-prod-card__fav--on' : ''}`} onClick={onFav} aria-label={t('home.products.addToFav')}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill={faved ? '#136540' : 'none'} stroke={faved ? '#136540' : '#9ca3af'} strokeWidth="2">
           <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
         </svg>
@@ -273,8 +275,8 @@ function ProductCard({ product }: { product: Product }) {
 
         {hasMultiple && (
           <>
-            <button type="button" className="hp-prod-card__arrow hp-prod-card__arrow--prev" onClick={goPrev} aria-label="صورة سابقة">‹</button>
-            <button type="button" className="hp-prod-card__arrow hp-prod-card__arrow--next" onClick={goNext} aria-label="صورة تالية">›</button>
+            <button type="button" className="hp-prod-card__arrow hp-prod-card__arrow--prev" onClick={goPrev} aria-label={t('home.products.prevImg')}>‹</button>
+            <button type="button" className="hp-prod-card__arrow hp-prod-card__arrow--next" onClick={goNext} aria-label={t('home.products.nextImg')}>›</button>
             <div className="hp-prod-card__dots">
               {images.map((_, i) => (
                 <button
@@ -282,7 +284,7 @@ function ProductCard({ product }: { product: Product }) {
                   type="button"
                   className={`hp-prod-card__dot${i === idx ? ' hp-prod-card__dot--on' : ''}`}
                   onClick={e => goDot(e, i)}
-                  aria-label={`صورة ${i + 1}`}
+                  aria-label={t('home.products.imgAria', { n: i + 1 })}
                 />
               ))}
             </div>
@@ -310,7 +312,7 @@ function ProductCard({ product }: { product: Product }) {
           {inCart ? (
             <>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
-              في السلة
+              {t('home.products.inCart')}
             </>
           ) : (
             <>
@@ -318,7 +320,7 @@ function ProductCard({ product }: { product: Product }) {
                 <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
                 <path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/>
               </svg>
-              أضف إلى السلة
+              {t('home.products.addToCart')}
             </>
           )}
         </button>
@@ -330,6 +332,7 @@ function ProductCard({ product }: { product: Product }) {
 const PRODUCTS_INITIAL = 10;
 
 function ProductsSection({ products, loading }: { products: Product[]; loading: boolean }) {
+  const { t } = useTranslation('customer');
   const [tab, setTab] = useState<'new'|'deals'>('new');
   const [showAll, setShowAll] = useState(false);
   const shown = tab === 'deals' ? products.filter(p => p.discount_pct != null) : products;
@@ -340,10 +343,10 @@ function ProductsSection({ products, loading }: { products: Product[]; loading: 
     <section className="hp-section" id="deals">
       <div className="hp-wrap">
         <div className="hp-section-hd">
-          <h2 className="hp-section-title">منتجات و عروض مميزة</h2>
+          <h2 className="hp-section-title">{t('home.products.title')}</h2>
           <div className="hp-tabs">
-            <button type="button" className={`hp-tab${tab==='new'?' hp-tab--on':''}`} onClick={() => { setTab('new'); setShowAll(false); }}>الاكثر مبيعا</button>
-            <button type="button" className={`hp-tab${tab==='deals'?' hp-tab--on':''}`} onClick={() => { setTab('deals'); setShowAll(false); }}>عروض خاصة</button>
+            <button type="button" className={`hp-tab${tab==='new'?' hp-tab--on':''}`} onClick={() => { setTab('new'); setShowAll(false); }}>{t('home.products.tabBestSelling')}</button>
+            <button type="button" className={`hp-tab${tab==='deals'?' hp-tab--on':''}`} onClick={() => { setTab('deals'); setShowAll(false); }}>{t('home.products.tabDeals')}</button>
           </div>
         </div>
 
@@ -361,7 +364,7 @@ function ProductsSection({ products, loading }: { products: Product[]; loading: 
             ))}
           </div>
         ) : shown.length === 0 ? (
-          <p className="hp-empty">{tab==='deals'?'لا توجد عروض خاصة':'لا توجد منتجات'}</p>
+          <p className="hp-empty">{tab==='deals' ? t('home.products.emptyDeals') : t('home.products.emptyAll')}</p>
         ) : (
           <div className="hp-prod-grid">
             {visible.map(p => <ProductCard key={p.id} product={p} />)}
@@ -371,7 +374,7 @@ function ProductsSection({ products, loading }: { products: Product[]; loading: 
         {hasMore && !loading && (
           <div className="hp-center-action">
             <button type="button" className="hp-see-all-btn" onClick={() => setShowAll(v => !v)}>
-              {showAll ? 'عرض أقل' : 'عرض المزيد من المنتجات'}
+              {showAll ? t('home.products.showLess') : t('home.products.showMore')}
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
                 className={showAll ? 'hp-chevron-up' : 'hp-chevron-down'}>
                 <path d="M6 9l6 6 6-6"/>
@@ -389,6 +392,7 @@ function ProductsSection({ products, loading }: { products: Product[]; loading: 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function HomePage() {
+  const { direction } = useLanguage();
   const [cats, setCats] = useState<Category[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -431,7 +435,7 @@ export default function HomePage() {
   }, []);
 
   return (
-    <div dir="rtl" className="hp-page">
+    <div dir={direction} className="hp-page">
       <Topbar />
       <HeroSection />
       <CategoriesSection cats={cats} loading={loadingCats} />

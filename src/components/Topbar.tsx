@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import './Topbar.css';
 import { useShop } from '../context/ShopContext';
 import { useMerchantAuth } from '../merchant-dashboard/context/MerchantAuthContext';
@@ -7,6 +8,7 @@ import { useCustomerAuth } from '../context/CustomerAuthContext';
 import ChangePasswordModal from './ChangePasswordModal';
 import SearchInput from './SearchInput';
 import { fetchUnreadOrderNotifications } from '../lib/orderNotifications';
+import LanguageSwitcher from './LanguageSwitcher';
 
 interface Props {
   searchQuery?: string;
@@ -21,6 +23,7 @@ export default function Topbar({
   onSearchChange,
   onSearchSubmit,
 }: Props) {
+  const { t } = useTranslation('common');
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [searchParams] = useSearchParams();
@@ -33,9 +36,6 @@ export default function Topbar({
   const { merchant, logout: merchantLogout } = useMerchantAuth();
   const { customer, logout: customerLogout } = useCustomerAuth();
 
-  // Unread order-tracking-update count (driver delivered / admin resolved a
-  // delay report / etc.) — refetched on every navigation so it stays current
-  // after the customer reads updates on the tracking page.
   const [unreadOrderUpdates, setUnreadOrderUpdates] = useState(0);
   useEffect(() => {
     if (!customer) { setUnreadOrderUpdates(0); return; }
@@ -50,7 +50,6 @@ export default function Topbar({
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // ── Search autocomplete suggestions ──
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggest, setShowSuggest] = useState(false);
   const [activeIdx, setActiveIdx] = useState(-1);
@@ -72,7 +71,6 @@ export default function Topbar({
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Debounced fetch of suggestions as the user types.
   useEffect(() => {
     const q = currentQuery.trim();
     if (suggestDebounce.current) clearTimeout(suggestDebounce.current);
@@ -148,6 +146,12 @@ export default function Topbar({
   const displayName = merchant?.displayName ?? customer?.displayName ?? null;
   const isAuthenticated = !!merchant || !!customer;
 
+  const roleLabel =
+    merchant ? t('roles.merchant') :
+    customer?.role === 'admin' ? t('roles.admin') :
+    customer?.role === 'delivery' ? t('roles.delivery') :
+    t('roles.customer');
+
   return (
     <>
       <header className="topbar">
@@ -155,8 +159,8 @@ export default function Topbar({
         <a href="#" className="logo" onClick={(e) => { e.preventDefault(); navigate('/home'); }}>
           <img src="/logo.png" alt="Souq Link" className="logo-img" />
           <div className="logo-text">
-            <div className="ar">سوق لينك</div>
-            <div className="en">SOUQ LINK</div>
+            <div className="ar">{t('logo.ar')}</div>
+            <div className="en">{t('logo.en')}</div>
           </div>
         </a>
 
@@ -165,13 +169,13 @@ export default function Topbar({
           <span
             className={`topbar-nav-link${pathname === '/home' || pathname === '/' ? ' active' : ''}`}
             onClick={() => navigate('/home')}
-          >الصفحة الرئيسية</span>
+          >{t('nav.home')}</span>
           <span
             className={`topbar-nav-link${pathname === '/stores-list' ? ' active' : ''}`}
             onClick={() => navigate('/stores-list')}
-          >المتاجر</span>
-          <span className="topbar-nav-link">الفئات</span>
-          <span className="topbar-nav-link">العروض</span>
+          >{t('nav.stores')}</span>
+          <span className="topbar-nav-link">{t('nav.categories')}</span>
+          <span className="topbar-nav-link">{t('nav.offers')}</span>
         </nav>
 
         {/* Search bar */}
@@ -181,9 +185,15 @@ export default function Topbar({
             value={searchQuery ?? navQuery}
             onChange={handleSearchChange}
             onKeyDown={handleSearchKeyDown}
-            placeholder="ابحث عن منتج أو متجر..."
+            placeholder={t('search.placeholder')}
           />
-          <button className="search-submit-btn" onClick={() => submitSearch()} type="button" title="بحث" aria-label="بحث">
+          <button
+            className="search-submit-btn"
+            onClick={() => submitSearch()}
+            type="button"
+            title={t('search.label')}
+            aria-label={t('search.label')}
+          >
             <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" width="14" height="14">
               <circle cx="11" cy="11" r="8" />
               <path d="m21 21-4.35-4.35" />
@@ -192,7 +202,7 @@ export default function Topbar({
 
           {/* Autocomplete suggestions dropdown */}
           {showSuggest && suggestions.length > 0 && (
-            <ul className="search-suggestions" dir="rtl">
+            <ul className="search-suggestions">
               {suggestions.map((s, i) => (
                 <li
                   key={`${s}-${i}`}
@@ -216,7 +226,7 @@ export default function Topbar({
           <div
             className={`nav-action nav-action--home${pathname === '/home' ? ' nav-action--active' : ''}`}
             onClick={() => navigate('/home')}
-            title="الرئيسية"
+            title={t('nav.home')}
           >
             <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
               <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
@@ -229,7 +239,7 @@ export default function Topbar({
             <div
               className={`nav-action${pathname === '/favorites' ? ' nav-action--active' : ''}`}
               onClick={() => navigate('/favorites')}
-              title="Wishlist"
+              title={t('nav.favorites')}
             >
               {favCount > 0 && <div className="badge">{favCount}</div>}
               <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
@@ -243,7 +253,7 @@ export default function Topbar({
             <div
               className={`nav-action${pathname === '/orders' ? ' nav-action--active' : ''}`}
               onClick={() => navigate('/orders')}
-              title="الطلبات"
+              title={t('nav.orders')}
             >
               {unreadOrderUpdates > 0 && <div className="badge">{unreadOrderUpdates}</div>}
               <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
@@ -258,7 +268,7 @@ export default function Topbar({
             <div
               className={`nav-action${pathname === '/cart' ? ' nav-action--active' : ''}`}
               onClick={() => navigate('/cart')}
-              title="السلة"
+              title={t('nav.cart')}
             >
               {cartCount > 0 && <div className="badge">{cartCount}</div>}
               <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
@@ -268,13 +278,16 @@ export default function Topbar({
             </div>
           )}
 
+          {/* Language switcher */}
+          <LanguageSwitcher />
+
           {/* Account with dropdown */}
           <div className="nav-action-dropdown" ref={dropdownRef}>
             <button
               type="button"
               className="nav-action nav-action-btn"
               onClick={() => setDropdownOpen(v => !v)}
-              title={displayName ?? 'الحساب'}
+              title={displayName ?? t('account.title')}
             >
               <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
@@ -286,38 +299,36 @@ export default function Topbar({
 
             {/* Guest dropdown */}
             {dropdownOpen && !isAuthenticated && (
-              <div className="topbar-dropdown" dir="rtl">
+              <div className="topbar-dropdown">
                 <button type="button" className="topbar-dropdown-item topbar-dropdown-item--login"
                   onClick={() => { navigate('/login'); setDropdownOpen(false); }}>
-                  🔑 تسجيل الدخول
+                  🔑 {t('account.login')}
                 </button>
                 <button type="button" className="topbar-dropdown-item"
                   onClick={() => { navigate('/signup'); setDropdownOpen(false); }}>
-                  👤 إنشاء حساب
+                  👤 {t('account.signup')}
                 </button>
                 <button type="button" className="topbar-dropdown-item"
                   onClick={() => { navigate('/merchant-application'); setDropdownOpen(false); }}>
-                  🏪 تقديم طلب كتاجر
+                  🏪 {t('account.merchantApply')}
                 </button>
                 <button type="button" className="topbar-dropdown-item"
                   onClick={() => { navigate('/delivery-application'); setDropdownOpen(false); }}>
-                  🚚 تقديم طلب كمندوب
+                  🚚 {t('account.deliveryApply')}
                 </button>
                 <button type="button" className="topbar-dropdown-item"
                   onClick={() => { navigate('/admin-dashboard'); setDropdownOpen(false); }}>
-                  🛡️ دخول كمشرف
+                  🛡️ {t('account.adminLogin')}
                 </button>
               </div>
             )}
 
             {/* Logged-in dropdown */}
             {dropdownOpen && isAuthenticated && (
-              <div className="topbar-dropdown" dir="rtl">
+              <div className="topbar-dropdown">
                 <div className="topbar-dropdown-name-row">
                   <div className="topbar-dropdown-name">{displayName}</div>
-                  <div className="topbar-dropdown-role">
-                    {merchant ? 'تاجر' : customer?.role === 'admin' ? 'مشرف' : customer?.role === 'delivery' ? 'مندوب توصيل' : 'عميل'}
-                  </div>
+                  <div className="topbar-dropdown-role">{roleLabel}</div>
                 </div>
                 {dashboardPath && (
                   <button
@@ -325,7 +336,7 @@ export default function Topbar({
                     className="topbar-dropdown-item"
                     onClick={() => { navigate(dashboardPath); setDropdownOpen(false); }}
                   >
-                    🏠 لوحة التحكم
+                    🏠 {t('account.dashboard')}
                   </button>
                 )}
                 {isCustomer && (
@@ -334,7 +345,7 @@ export default function Topbar({
                     className="topbar-dropdown-item"
                     onClick={() => { navigate('/profile'); setDropdownOpen(false); }}
                   >
-                    👤 إعدادات الملف الشخصي
+                    👤 {t('account.profile')}
                   </button>
                 )}
                 <button
@@ -342,14 +353,14 @@ export default function Topbar({
                   className="topbar-dropdown-item"
                   onClick={() => { setChangePasswordOpen(true); setDropdownOpen(false); }}
                 >
-                  🔑 تغيير كلمة المرور
+                  🔑 {t('account.changePassword')}
                 </button>
                 <button
                   type="button"
                   className="topbar-dropdown-item topbar-dropdown-item--logout"
                   onClick={handleLogout}
                 >
-                  🚪 تسجيل الخروج
+                  🚪 {t('account.logout')}
                 </button>
               </div>
             )}

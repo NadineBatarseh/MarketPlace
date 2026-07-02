@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Store } from '../types';
 import StoreRating from './StoreRating';
 
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function StoreHero({ store, loading, error, productCount }: Props) {
+  const { t } = useTranslation('customer');
   const [liveRating, setLiveRating] = useState<{ avg: number; count: number } | null>(null);
   const [ratingOpen, setRatingOpen] = useState(false);
 
@@ -31,7 +33,7 @@ export default function StoreHero({ store, loading, error, productCount }: Props
         </div>
         <div className="sh-name-group">
           <div className="sh-name">
-            {loading ? 'جاري التحميل...' : error ? error : store?.name}
+            {loading ? t('storeHero.loading') : error ? error : store?.name}
           </div>
           {!loading && !error && store?.description && (
             <div className="sh-desc">{store.description}</div>
@@ -49,7 +51,7 @@ export default function StoreHero({ store, loading, error, productCount }: Props
                 <circle cx="12" cy="10" r="3" />
               </svg>
               <span className="sh-stat-value">{store.location}</span>
-              <span className="sh-stat-label">الموقع</span>
+              <span className="sh-stat-label">{t('storeHero.stats.location')}</span>
             </div>
           )}
 
@@ -66,7 +68,7 @@ export default function StoreHero({ store, loading, error, productCount }: Props
                   <polygon points="22,8 12,13 12,21 22,16" opacity="0.85"/>
                 </svg>
                 <span className="sh-stat-value">{productCount}</span>
-                <span className="sh-stat-label">منتج</span>
+                <span className="sh-stat-label">{t('storeHero.stats.products')}</span>
               </div>
             </>
           )}
@@ -79,7 +81,7 @@ export default function StoreHero({ store, loading, error, productCount }: Props
                   <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" fill="#f5a623" stroke="#f5a623" strokeWidth="1" />
                 </svg>
                 <span className="sh-stat-value">{Number(displayRating).toFixed(1)} ({displayCount})</span>
-                <span className="sh-stat-label">التقييم</span>
+                <span className="sh-stat-label">{t('storeHero.stats.rating')}</span>
               </div>
             </>
           )}
@@ -115,16 +117,16 @@ export default function StoreHero({ store, loading, error, productCount }: Props
 
         {store && (
           <div className="rating-btn-wrap">
-            <button type="button" className="rating-open-btn" onClick={() => setRatingOpen(o => !o)} title="قيّم المتجر">
+            <button type="button" className="rating-open-btn" onClick={() => setRatingOpen(o => !o)} title={t('storeHero.ratingPopupTitle')}>
               <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="15" height="15">
                 <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
               </svg>
-              قيّم
+              {t('storeHero.rateBtn')}
             </button>
             {ratingOpen && (
               <div className="rating-popup">
                 <button type="button" className="rating-popup-close" onClick={() => setRatingOpen(false)}>✕</button>
-                <p className="rating-popup-title">قيّم هذا المتجر</p>
+                <p className="rating-popup-title">{t('storeHero.ratingPopupTitle')}</p>
                 <StoreRating
                   shopId={store.shop_id}
                   onSubmitted={(avg, count) => {

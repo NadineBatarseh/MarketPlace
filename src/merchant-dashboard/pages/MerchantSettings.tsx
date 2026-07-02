@@ -1,8 +1,12 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMerchantAuth } from '../context/MerchantAuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import supabase from '../../lib/supabase';
 
 export default function MerchantSettings() {
+  const { t } = useTranslation('merchant');
+  const { direction } = useLanguage();
   const { merchant } = useMerchantAuth();
 
   const [displayName, setDisplayName] = useState(merchant?.displayName ?? '');
@@ -27,15 +31,15 @@ export default function MerchantSettings() {
   const handleChangePassword = async () => {
     setPwError('');
     if (!oldPassword || !newPassword || !confirmPassword) {
-      setPwError('يرجى ملء جميع الحقول');
+      setPwError(t('settings.password.errors.allFields'));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setPwError('كلمة المرور الجديدة غير متطابقة');
+      setPwError(t('settings.password.errors.mismatch'));
       return;
     }
     if (newPassword.length < 6) {
-      setPwError('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      setPwError(t('settings.password.errors.tooShort'));
       return;
     }
     setPwStatus('saving');
@@ -45,7 +49,7 @@ export default function MerchantSettings() {
       password: oldPassword,
     });
     if (signInError) {
-      setPwError('كلمة المرور الحالية غير صحيحة');
+      setPwError(t('settings.password.errors.wrongCurrent'));
       setPwStatus('error');
       setTimeout(() => setPwStatus('idle'), 3000);
       return;
@@ -64,32 +68,33 @@ export default function MerchantSettings() {
   };
 
   return (
-    <div className="ms-root">
-      <h1 className="ms-title">إعدادات الحساب</h1>
+    <div className="ms-root" dir={direction}>
+      <h1 className="ms-title">{t('settings.title')}</h1>
 
       {/* Profile info card */}
       <section className="ms-card">
-        <h2 className="ms-card-title">معلومات الملف الشخصي</h2>
+        <h2 className="ms-card-title">{t('settings.profile.title')}</h2>
 
         <div className="ms-field">
-          <label className="ms-label">البريد الإلكتروني</label>
+          <label className="ms-label">{t('settings.profile.emailLabel')}</label>
           <input
             type="email"
             className="ms-input ms-input-readonly"
             value={merchant?.email ?? ''}
             readOnly
+            dir="ltr"
           />
-          <span className="ms-hint">لا يمكن تغيير البريد الإلكتروني</span>
+          <span className="ms-hint">{t('settings.profile.emailHint')}</span>
         </div>
 
         <div className="ms-field">
-          <label className="ms-label">الاسم المعروض</label>
+          <label className="ms-label">{t('settings.profile.displayNameLabel')}</label>
           <input
             type="text"
             className="ms-input"
             value={displayName}
             onChange={e => setDisplayName(e.target.value)}
-            placeholder="اسمك أو اسم متجرك"
+            placeholder={t('settings.profile.displayNamePlaceholder')}
           />
         </div>
 
@@ -99,17 +104,17 @@ export default function MerchantSettings() {
           onClick={handleSaveName}
           disabled={nameStatus === 'saving'}
         >
-          {nameStatus === 'saving' ? 'جاري الحفظ...' : nameStatus === 'saved' ? 'تم الحفظ ✓' : 'حفظ التغييرات'}
+          {nameStatus === 'saving' ? t('settings.profile.saving') : nameStatus === 'saved' ? t('settings.profile.saved') : t('settings.profile.saveButton')}
         </button>
-        {nameStatus === 'error' && <p className="ms-error">حدث خطأ أثناء الحفظ</p>}
+        {nameStatus === 'error' && <p className="ms-error">{t('settings.profile.saveError')}</p>}
       </section>
 
       {/* Change password card */}
       <section className="ms-card">
-        <h2 className="ms-card-title">تغيير كلمة المرور</h2>
+        <h2 className="ms-card-title">{t('settings.password.title')}</h2>
 
         <div className="ms-field">
-          <label className="ms-label">كلمة المرور الحالية</label>
+          <label className="ms-label">{t('settings.password.currentLabel')}</label>
           <input
             type="password"
             className="ms-input"
@@ -120,7 +125,7 @@ export default function MerchantSettings() {
         </div>
 
         <div className="ms-field">
-          <label className="ms-label">كلمة المرور الجديدة</label>
+          <label className="ms-label">{t('settings.password.newLabel')}</label>
           <input
             type="password"
             className="ms-input"
@@ -131,7 +136,7 @@ export default function MerchantSettings() {
         </div>
 
         <div className="ms-field">
-          <label className="ms-label">تأكيد كلمة المرور الجديدة</label>
+          <label className="ms-label">{t('settings.password.confirmLabel')}</label>
           <input
             type="password"
             className="ms-input"
@@ -149,7 +154,7 @@ export default function MerchantSettings() {
           onClick={handleChangePassword}
           disabled={pwStatus === 'saving'}
         >
-          {pwStatus === 'saving' ? 'جاري التغيير...' : pwStatus === 'saved' ? 'تم التغيير ✓' : 'تغيير كلمة المرور'}
+          {pwStatus === 'saving' ? t('settings.password.saving') : pwStatus === 'saved' ? t('settings.password.saved') : t('settings.password.saveButton')}
         </button>
       </section>
     </div>

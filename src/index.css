@@ -76,7 +76,6 @@ body {
   background: var(--color-bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  direction: rtl;
 }
 
 /* Media never forces the viewport wider than the screen */

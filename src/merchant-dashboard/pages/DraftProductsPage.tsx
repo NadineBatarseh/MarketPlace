@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import supabase from '../../lib/supabase';
 import { useMerchantAuth } from '../context/MerchantAuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import './DraftProductsPage.css';
 
 interface DraftProduct {
@@ -50,6 +52,8 @@ function buildCardState(p: DraftProduct): CardState {
 }
 
 export default function DraftProductsPage() {
+  const { t } = useTranslation('merchant');
+  const { direction } = useLanguage();
   const { merchant } = useMerchantAuth();
   const shopId = merchant?.shop?.shop_id;
 
@@ -80,7 +84,7 @@ export default function DraftProductsPage() {
       .order('created_at', { ascending: false });
 
     if (error) {
-      setFetchError('تعذّر تحميل المسودات. حاول مرة أخرى.');
+      setFetchError(t('drafts.loadFailed'));
       console.error(error);
     } else {
       const list = (data ?? []) as DraftProduct[];
@@ -155,13 +159,13 @@ export default function DraftProductsPage() {
       const body = await response.json().catch(() => ({}));
       console.error(body);
       updateCard(id, { saving: false });
-      showToast('حدث خطأ أثناء النشر. حاول مرة أخرى.');
+      showToast(t('drafts.publishFailed'));
       return;
     }
 
     setDrafts((prev) => prev.filter((p) => p.id !== id));
     setSelectedIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
-    showToast('تم نشر المنتج بنجاح ✓');
+    showToast(t('drafts.publishSuccess'));
   };
 
   const handleDelete = async (id: string) => {
@@ -172,13 +176,13 @@ export default function DraftProductsPage() {
     if (error) {
       console.error(error);
       updateCard(id, { deleting: false });
-      showToast('حدث خطأ أثناء الحذف. حاول مرة أخرى.');
+      showToast(t('drafts.deleteFailed'));
       return;
     }
 
     setDrafts((prev) => prev.filter((p) => p.id !== id));
     setSelectedIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
-    showToast('تم حذف المسودة.');
+    showToast(t('drafts.deleteSuccess'));
   };
 
   const filteredDrafts = drafts.filter((p) => sourceFilter === 'all' || getSource(p) === sourceFilter);
@@ -214,7 +218,7 @@ export default function DraftProductsPage() {
   const handleDeleteSelected = async () => {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
-    if (!window.confirm(`هل تريد حذف ${ids.length} مسودة؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+    if (!window.confirm(t('drafts.bulkDeleteConfirm', { count: ids.length }))) return;
 
     setBulkDeleting(true);
     ids.forEach((id) => updateCard(id, { deleting: true }));
@@ -225,7 +229,7 @@ export default function DraftProductsPage() {
       console.error(error);
       ids.forEach((id) => updateCard(id, { deleting: false }));
       setBulkDeleting(false);
-      showToast('حدث خطأ أثناء حذف المسودات. حاول مرة أخرى.');
+      showToast(t('drafts.bulkDeleteFailed'));
       return;
     }
 
@@ -233,24 +237,24 @@ export default function DraftProductsPage() {
     setDrafts((prev) => prev.filter((p) => !idSet.has(p.id)));
     setSelectedIds(new Set());
     setBulkDeleting(false);
-    showToast(`تم حذف ${ids.length} مسودة.`);
+    showToast(t('drafts.bulkDeleteSuccess', { count: ids.length }));
   };
 
   if (loading) {
-    return <div className="dp-loading">جاري تحميل المسودات…</div>;
+    return <div className="dp-loading" dir={direction}>{t('drafts.loading')}</div>;
   }
 
   return (
-    <div className="dp-root">
+    <div className="dp-root" dir={direction}>
       {/* Header */}
       <div className="dp-header">
         <div>
           <h1 className="dp-title">
-            المسودات
+            {t('drafts.title')}
             {drafts.length > 0 && <span className="dp-badge">{drafts.length}</span>}
           </h1>
           <p className="dp-subtitle">
-            هذه المنتجات تم جلبها تلقائياً من حسابك على انستقرام وتم التعرف عليها بواسطة الذكاء الاصطناعي كمنتجات تتناسب مع نوع متجرك. لم يتم نشرها بعد — راجعها بعناية قبل النشر، إذ قد تحتوي على أخطاء نتيجة المعالجة الآلية.
+            {t('drafts.subtitle')}
           </p>
         </div>
       </div>
@@ -264,19 +268,19 @@ export default function DraftProductsPage() {
               className={`dp-filter-tab ${sourceFilter === 'all' ? 'active' : ''}`}
               onClick={() => handleFilterChange('all')}
             >
-              الكل
+              {t('drafts.filterAll')}
             </button>
             <button
               className={`dp-filter-tab ${sourceFilter === 'instagram' ? 'active' : ''}`}
               onClick={() => handleFilterChange('instagram')}
             >
-              انستغرام
+              {t('drafts.filterInstagram')}
             </button>
             <button
               className={`dp-filter-tab ${sourceFilter === 'meta' ? 'active' : ''}`}
               onClick={() => handleFilterChange('meta')}
             >
-              ميتا
+              {t('drafts.filterMeta')}
             </button>
           </div>
 
@@ -288,11 +292,11 @@ export default function DraftProductsPage() {
                 onChange={toggleSelectAll}
                 disabled={filteredDrafts.length === 0}
               />
-              تحديد الكل
+              {t('drafts.selectAll')}
             </label>
             {selectedIds.size > 0 && (
               <button className="dp-btn-delete-bulk" onClick={handleDeleteSelected} disabled={bulkDeleting}>
-                {bulkDeleting ? 'جاري الحذف…' : `حذف المحدد (${selectedIds.size})`}
+                {bulkDeleting ? t('drafts.deletingSelected') : t('drafts.deleteSelectedBtn', { count: selectedIds.size })}
               </button>
             )}
           </div>
@@ -302,14 +306,14 @@ export default function DraftProductsPage() {
       {drafts.length === 0 && !fetchError && (
         <div className="dp-empty">
           <div className="dp-empty-icon">📭</div>
-          لا توجد مسودات حالياً. استورد منتجات من انستقرام عبر المساعد الذكي.
+          {t('drafts.emptyNoDrafts')}
         </div>
       )}
 
       {drafts.length > 0 && filteredDrafts.length === 0 && (
         <div className="dp-empty">
           <div className="dp-empty-icon">🔍</div>
-          لا توجد مسودات تطابق هذا الفلتر.
+          {t('drafts.emptyNoMatch')}
         </div>
       )}
 
@@ -334,7 +338,7 @@ export default function DraftProductsPage() {
                   />
                 </label>
                 <span className={`dp-source-badge dp-source-${source}`}>
-                  {source === 'meta' ? 'ميتا' : 'انستغرام'}
+                  {source === 'meta' ? t('drafts.sourceMeta') : t('drafts.sourceInstagram')}
                 </span>
                 {product.video_url ? (
                   <video
@@ -355,37 +359,37 @@ export default function DraftProductsPage() {
               {/* Editable fields */}
               <div className="dp-card-body">
                 <div className="dp-field">
-                  <label>اسم المنتج *</label>
+                  <label>{t('drafts.titleFieldLabel')}</label>
                   <input
                     type="text"
                     value={card.title}
                     className={card.titleError ? 'dp-input-error' : ''}
                     onChange={(e) => updateCard(product.id, { title: e.target.value, titleError: false })}
                     disabled={isBusy}
-                    title="اسم المنتج"
+                    title={t('drafts.titleFieldTitleAttr')}
                   />
-                  {card.titleError && <span className="dp-field-error">اسم المنتج مطلوب</span>}
+                  {card.titleError && <span className="dp-field-error">{t('drafts.titleRequired')}</span>}
                 </div>
 
                 <div className="dp-field">
-                  <label>الوصف</label>
+                  <label>{t('drafts.descriptionFieldLabel')}</label>
                   <textarea
                     rows={2}
                     value={card.description}
                     onChange={(e) => updateCard(product.id, { description: e.target.value })}
                     disabled={isBusy}
-                    title="الوصف"
+                    title={t('drafts.descriptionFieldLabel')}
                   />
                 </div>
 
                 <div className="dp-price-row">
                   <div className="dp-field">
-                    <label>السعر (₪) *</label>
+                    <label>{t('drafts.priceFieldLabel')}</label>
                     <input
                       type="number"
                       min="0"
                       step="0.01"
-                      placeholder="مطلوب"
+                      placeholder={t('drafts.pricePlaceholder')}
                       value={card.price}
                       className={card.priceError ? 'dp-input-error' : ''}
                       onChange={(e) =>
@@ -393,21 +397,21 @@ export default function DraftProductsPage() {
                       }
                       disabled={isBusy}
                     />
-                    {card.priceError && <span className="dp-field-error">أدخل سعراً صحيحاً</span>}
+                    {card.priceError && <span className="dp-field-error">{t('drafts.priceRequired')}</span>}
                   </div>
                   <div className="dp-field">
-                    <label>الكمية *</label>
+                    <label>{t('drafts.quantityFieldLabel')}</label>
                     <input
                       type="number"
                       min="0"
                       step="1"
-                      placeholder="مطلوب"
+                      placeholder={t('drafts.quantityPlaceholder')}
                       value={card.quantity}
                       className={card.quantityError ? 'dp-input-error' : ''}
                       onChange={(e) => updateCard(product.id, { quantity: e.target.value, quantityError: false })}
                       disabled={isBusy}
                     />
-                    {card.quantityError && <span className="dp-field-error">أدخل كمية صحيحة</span>}
+                    {card.quantityError && <span className="dp-field-error">{t('drafts.quantityRequired')}</span>}
                   </div>
                 </div>
               </div>
@@ -419,14 +423,14 @@ export default function DraftProductsPage() {
                   onClick={() => handlePublish(product.id)}
                   disabled={isBusy}
                 >
-                  {card.saving ? 'جاري النشر…' : 'نشر'}
+                  {card.saving ? t('drafts.publishing') : t('drafts.publishBtn')}
                 </button>
                 <button
                   className="dp-btn-delete"
                   onClick={() => handleDelete(product.id)}
                   disabled={isBusy}
                 >
-                  {card.deleting ? '…' : 'حذف'}
+                  {card.deleting ? '…' : t('drafts.deleteBtn')}
                 </button>
               </div>
             </div>

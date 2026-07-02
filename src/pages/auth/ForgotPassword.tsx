@@ -1,23 +1,26 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import supabase from '../../lib/supabase';
 import './Auth.css';
 
 type State = 'idle' | 'loading' | 'sent' | 'error';
 
 export default function ForgotPassword() {
+  const { t } = useTranslation('auth');
   const [email, setEmail] = useState('');
   const [state, setState] = useState<State>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+  const [showSignupLink, setShowSignupLink] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
+    setShowSignupLink(false);
     setState('loading');
 
     const trimmed = email.trim().toLowerCase();
 
-    // Step 1: check if email is registered
     const { data: userRow } = await supabase
       .from('Users')
       .select('email, provider')
@@ -25,18 +28,18 @@ export default function ForgotPassword() {
       .maybeSingle();
 
     if (!userRow) {
-      setErrorMsg('هذا البريد الإلكتروني غير مسجل في النظام — هل تريد إنشاء حساب؟');
+      setErrorMsg(t('forgotPassword.errors.notRegistered'));
+      setShowSignupLink(true);
       setState('error');
       return;
     }
 
     if (userRow.provider === 'google') {
-      setErrorMsg('هذا الحساب مرتبط بـ Google — سجّل دخولك عبر زر "تسجيل الدخول بـ Google" ولا تحتاج إلى كلمة مرور');
+      setErrorMsg(t('forgotPassword.errors.googleAccount'));
       setState('error');
       return;
     }
 
-    // Step 2: send the reset link
     const { error } = await supabase.auth.resetPasswordForEmail(trimmed, {
       redirectTo: `${window.location.origin}/reset-password`,
     });
@@ -44,11 +47,11 @@ export default function ForgotPassword() {
     if (error) {
       const msg = error.message?.toLowerCase() ?? '';
       if (msg.includes('rate') || msg.includes('limit') || error.status === 429) {
-        setErrorMsg('تم إرسال رابط مسبقاً — انتظر دقيقة ثم حاول مرة أخرى');
+        setErrorMsg(t('forgotPassword.errors.rateLimited'));
       } else if (msg.includes('email') && msg.includes('not')) {
-        setErrorMsg('هذا البريد غير مسجل في نظام المصادقة — تواصل مع الدعم');
+        setErrorMsg(t('forgotPassword.errors.notInAuth'));
       } else {
-        setErrorMsg('حدث خطأ أثناء إرسال الرابط، حاول مرة أخرى');
+        setErrorMsg(t('forgotPassword.errors.sendFailed'));
       }
       setState('error');
       return;
@@ -59,19 +62,19 @@ export default function ForgotPassword() {
 
   if (state === 'sent') {
     return (
-      <div className="auth-page" dir="rtl">
+      <div className="auth-page">
         <div className="auth-card auth-success-card">
           <div className="auth-success-icon">📩</div>
-          <h1 className="auth-title">تحقق من بريدك</h1>
+          <h1 className="auth-title">{t('forgotPassword.success.title')}</h1>
           <p className="auth-success-msg">
-            أرسلنا رابط استعادة كلمة المرور إلى
+            {t('forgotPassword.success.messagePre')}
             <br />
             <strong>{email.trim()}</strong>
             <br /><br />
-            افتح بريدك الإلكتروني واضغط على الرابط — صلاحيته ساعة واحدة.
+            {t('forgotPassword.success.messagePost')}
           </p>
           <Link to="/login" className="auth-submit auth-submit--link">
-            العودة لتسجيل الدخول
+            {t('shared.backToLogin')}
           </Link>
         </div>
       </div>
@@ -79,15 +82,15 @@ export default function ForgotPassword() {
   }
 
   return (
-    <div className="auth-page" dir="rtl">
+    <div className="auth-page">
       <div className="auth-card">
         <img src="/logo.png" alt="سوق لينك" className="auth-logo auth-logo-img" />
-        <h1 className="auth-title">نسيت كلمة المرور؟</h1>
-        <p className="auth-sub">أدخل بريدك الإلكتروني وسنرسل لك رابط الاستعادة</p>
+        <h1 className="auth-title">{t('forgotPassword.title')}</h1>
+        <p className="auth-sub">{t('forgotPassword.subtitle')}</p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="auth-field">
-            <label>البريد الإلكتروني</label>
+            <label>{t('shared.emailLabel')}</label>
             <input
               type="email"
               placeholder="example@email.com"
@@ -106,17 +109,17 @@ export default function ForgotPassword() {
           )}
 
           <button type="submit" className="auth-submit" disabled={state === 'loading'}>
-            {state === 'loading' ? 'جاري التحقق...' : 'إرسال رابط الاستعادة'}
+            {state === 'loading' ? t('forgotPassword.verifying') : t('forgotPassword.submit')}
           </button>
         </form>
 
         <p className="auth-switch">
-          تذكرت كلمة المرور؟{' '}
-          <Link to="/login">تسجيل الدخول</Link>
+          {t('forgotPassword.rememberPassword')}{' '}
+          <Link to="/login">{t('shared.backToLoginLink')}</Link>
         </p>
-        {state === 'error' && errorMsg.includes('إنشاء حساب') && (
+        {showSignupLink && (
           <p className="auth-switch auth-switch--spaced">
-            <Link to="/signup">إنشاء حساب جديد</Link>
+            <Link to="/signup">{t('forgotPassword.createNewAccount')}</Link>
           </p>
         )}
       </div>

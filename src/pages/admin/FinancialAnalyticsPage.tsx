@@ -3,7 +3,9 @@ import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   PieChart, Pie, Cell, BarChart, Bar,
 } from 'recharts';
+import { useTranslation } from 'react-i18next';
 import { supabase } from '../../lib/supabase';
+import { useLanguage } from '../../context/LanguageContext';
 
 /**
  * Admin — financial analytics overview ("التحليلات المالية").
@@ -28,16 +30,14 @@ interface Summary {
 const CAT = { merchants: '#0F766E', couriers: '#7C3AED', platform: '#EA580C' };
 
 // Period presets. days=null → all time. `gran` is the time bucket used for the trend.
-const PERIODS: { key: string; label: string; days: number | null; gran: 'day' | 'week' | 'month' }[] = [
-  { key: 'week',    label: 'أسبوع',   days: 7,    gran: 'day' },
-  { key: 'month',   label: 'شهر',     days: 30,   gran: 'day' },
-  { key: '2months', label: 'شهرين',   days: 60,   gran: 'week' },
-  { key: '6months', label: '6 أشهر',  days: 180,  gran: 'week' },
-  { key: 'year',    label: 'سنة',     days: 365,  gran: 'month' },
-  { key: 'sinceStart', label: 'منذ بدء المنصّة', days: null, gran: 'month' },
+const PERIODS: { key: string; days: number | null; gran: 'day' | 'week' | 'month' }[] = [
+  { key: 'week',    days: 7,    gran: 'day' },
+  { key: 'month',   days: 30,   gran: 'day' },
+  { key: '2months', days: 60,   gran: 'week' },
+  { key: '6months', days: 180,  gran: 'week' },
+  { key: 'year',    days: 365,  gran: 'month' },
+  { key: 'sinceStart', days: null, gran: 'month' },
 ];
-
-const GRAN_LABEL: Record<string, string> = { day: 'يومي', week: 'أسبوعي', month: 'شهري' };
 
 async function getToken(): Promise<string | null> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -59,6 +59,13 @@ function bucketKey(iso: string, gran: 'day' | 'week' | 'month'): string {
 }
 
 const FinancialAnalyticsPage: React.FC<{ embedded?: boolean }> = () => {
+  const { t } = useTranslation('admin');
+  const { direction } = useLanguage();
+  const GRAN_LABEL: Record<string, string> = {
+    day: t('financialAnalytics.gran.day'),
+    week: t('financialAnalytics.gran.week'),
+    month: t('financialAnalytics.gran.month'),
+  };
   const [rows, setRows] = useState<LedgerRow[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -74,7 +81,7 @@ const FinancialAnalyticsPage: React.FC<{ embedded?: boolean }> = () => {
     setError('');
     try {
       const token = await getToken();
-      if (!token) { setError('انتهت الجلسة — يرجى تسجيل الدخول من جديد.'); setLoading(false); return; }
+      if (!token) { setError(t('financialAnalytics.sessionExpired')); setLoading(false); return; }
       const params = new URLSearchParams();
       if (period.days !== null) {
         const fromDate = new Date(Date.now() - period.days * 86_400_000);
@@ -84,15 +91,15 @@ const FinancialAnalyticsPage: React.FC<{ embedded?: boolean }> = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json();
-      if (!res.ok) { setError(json.error ?? 'تعذّر تحميل التحليلات.'); setLoading(false); return; }
+      if (!res.ok) { setError(json.error ?? t('financialAnalytics.loadError')); setLoading(false); return; }
       setRows(json.rows ?? []);
       setGroups(json.groups ?? []);
       setSummary(json.summary ?? null);
     } catch {
-      setError('تعذّر الاتصال بالخادم.');
+      setError(t('financialAnalytics.connectionError'));
     }
     setLoading(false);
-  }, [period.days]);
+  }, [period.days, t]);
 
   useEffect(() => { load(); }, [load]); // reloads whenever the period changes
 
@@ -116,10 +123,10 @@ const FinancialAnalyticsPage: React.FC<{ embedded?: boolean }> = () => {
   }, [rows, period.gran]);
 
   const distribution = useMemo(() => (summary ? [
-    { name: 'التجار', value: summary.merchants_total, color: CAT.merchants },
-    { name: 'المناديب', value: summary.couriers_total, color: CAT.couriers },
-    { name: 'المنصّة', value: summary.platform_total, color: CAT.platform },
-  ].filter(d => d.value > 0) : []), [summary]);
+    { name: t('financialAnalytics.merchants'), value: summary.merchants_total, color: CAT.merchants },
+    { name: t('financialAnalytics.couriers'), value: summary.couriers_total, color: CAT.couriers },
+    { name: t('financialAnalytics.platform'), value: summary.platform_total, color: CAT.platform },
+  ].filter(d => d.value > 0) : []), [summary, t]);
 
   const topMerchants = useMemo(
     () => groups.filter(g => g.payee_type === 'shop').slice(0, 10).map(g => ({ name: g.payee_name, total: g.total })),
@@ -130,33 +137,33 @@ const FinancialAnalyticsPage: React.FC<{ embedded?: boolean }> = () => {
   const moneyTip = (v: any) => `${fmtMoney(Number(v))} ${currency}`;
 
   const chartCard: React.CSSProperties = { background: '#FFFFFF', border: '1.5px solid #E2E8F0', borderRadius: 12, padding: 18, boxShadow: '0 1px 4px rgba(15,43,78,0.05)' };
-  const chartTitle: React.CSSProperties = { fontSize: 16, fontWeight: 800, color: '#0F2B4E', direction: 'rtl', textAlign: 'right' };
-  const axisNote: React.CSSProperties = { fontSize: 12, color: '#64748B', direction: 'rtl', textAlign: 'right', marginTop: 4, marginBottom: 14, lineHeight: 1.6 };
+  const chartTitle: React.CSSProperties = { fontSize: 16, fontWeight: 800, color: '#0F2B4E', direction, textAlign: direction === 'rtl' ? 'right' : 'left' };
+  const axisNote: React.CSSProperties = { fontSize: 12, color: '#64748B', direction, textAlign: direction === 'rtl' ? 'right' : 'left', marginTop: 4, marginBottom: 14, lineHeight: 1.6 };
 
   // A small "what the axes mean" legend shown under each chart title.
   const AxisLegend: React.FC<{ x: string; y: string }> = ({ x, y }) => (
     <div style={axisNote}>
-      <span><b>المحور الأفقي (السيني):</b> {x}</span>
+      <span><b>{t('financialAnalytics.xAxis')}:</b> {x}</span>
       <span style={{ margin: '0 8px', color: '#CBD5E1' }}>|</span>
-      <span><b>المحور العمودي (الصادي):</b> {y}</span>
+      <span><b>{t('financialAnalytics.yAxis')}:</b> {y}</span>
     </div>
   );
 
   return (
-    <div style={{ fontFamily: "'Tajawal', sans-serif", color: '#0F2B4E', direction: 'rtl', background: '#F8FAFC', borderRadius: 8, padding: 16 }}>
+    <div style={{ fontFamily: "'Tajawal', sans-serif", color: '#0F2B4E', direction, background: '#F8FAFC', borderRadius: 8, padding: 16 }}>
       <style>{FONTS_CSS}</style>
 
       <div style={{ marginBottom: 14 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>التحليلات</h1>
-        <p style={{ fontSize: 13, color: '#64748B', marginTop: 6 }}>نظرة بصرية تحليلية. اختاري الفترة الزمنية ونوع الرسم لعرضه.</p>
+        <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>{t('financialAnalytics.title')}</h1>
+        <p style={{ fontSize: 13, color: '#64748B', marginTop: 6 }}>{t('financialAnalytics.subtitle')}</p>
       </div>
 
       {/* Chart-type selector (above the period selector) */}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
         {([
-          ['revenue', 'الإيرادات عبر الوقت'],
-          ['distribution', 'توزيع الأموال'],
-          ['topMerchants', 'أعلى التجار أرباحًا'],
+          ['revenue', t('financialAnalytics.chartType.revenue')],
+          ['distribution', t('financialAnalytics.chartType.distribution')],
+          ['topMerchants', t('financialAnalytics.chartType.topMerchants')],
         ] as const).map(([key, label]) => {
           const active = chart === key;
           return (
@@ -179,27 +186,27 @@ const FinancialAnalyticsPage: React.FC<{ embedded?: boolean }> = () => {
               style={{ fontSize: 13, fontWeight: 700, padding: '7px 16px', borderRadius: 8, cursor: 'pointer', fontFamily: "'Tajawal', sans-serif",
                 border: active ? '1.5px solid #FED7AA' : '1.5px solid #E2E8F0',
                 background: active ? '#FFF7ED' : '#FFFFFF', color: active ? '#EA580C' : '#64748B' }}>
-              {p.label}
+              {t(`financialAnalytics.period.${p.key}`)}
             </button>
           );
         })}
       </div>
 
       {loading ? (
-        <div style={{ padding: 60, textAlign: 'center', color: '#64748B' }}>...جاري تحميل التحليلات</div>
+        <div style={{ padding: 60, textAlign: 'center', color: '#64748B' }}>{t('financialAnalytics.loading')}</div>
       ) : error ? (
         <div style={{ padding: 16, color: '#B91C1C', background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 8 }}>{error}</div>
       ) : (
         <>
           {rows.length === 0 ? (
-            <div style={{ padding: 60, textAlign: 'center', color: '#94A3B8' }}>لا توجد بيانات ضمن هذه الفترة.</div>
+            <div style={{ padding: 60, textAlign: 'center', color: '#94A3B8' }}>{t('financialAnalytics.noData')}</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {/* ── 1. Revenue over time ── */}
               {chart === 'revenue' && (
               <div style={chartCard}>
-                <div style={chartTitle}>الإيرادات عبر الوقت (تجميع {GRAN_LABEL[period.gran]})</div>
-                <AxisLegend x={`الزمن — كل نقطة فترة ${GRAN_LABEL[period.gran]}`} y={`المبلغ الموزَّع (${currency}) مقسومًا على التجار/المناديب/المنصّة`} />
+                <div style={chartTitle}>{t('financialAnalytics.revenueOverTime', { gran: GRAN_LABEL[period.gran] })}</div>
+                <AxisLegend x={t('financialAnalytics.revenueXAxis', { gran: GRAN_LABEL[period.gran] })} y={t('financialAnalytics.revenueYAxis', { currency })} />
                 <div style={{ direction: 'ltr' }}>
                   <ResponsiveContainer width="100%" height={340}>
                     <AreaChart data={timeSeries} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
@@ -208,9 +215,9 @@ const FinancialAnalyticsPage: React.FC<{ embedded?: boolean }> = () => {
                       <YAxis tick={{ fontSize: 11, fill: '#64748B' }} width={60} />
                       <Tooltip formatter={moneyTip} />
                       <Legend />
-                      <Area type="monotone" dataKey="merchants" name="التجار" stackId="1" stroke={CAT.merchants} fill={CAT.merchants} fillOpacity={0.25} />
-                      <Area type="monotone" dataKey="couriers" name="المناديب" stackId="1" stroke={CAT.couriers} fill={CAT.couriers} fillOpacity={0.25} />
-                      <Area type="monotone" dataKey="platform" name="المنصّة" stackId="1" stroke={CAT.platform} fill={CAT.platform} fillOpacity={0.25} />
+                      <Area type="monotone" dataKey="merchants" name={t('financialAnalytics.merchants')} stackId="1" stroke={CAT.merchants} fill={CAT.merchants} fillOpacity={0.25} />
+                      <Area type="monotone" dataKey="couriers" name={t('financialAnalytics.couriers')} stackId="1" stroke={CAT.couriers} fill={CAT.couriers} fillOpacity={0.25} />
+                      <Area type="monotone" dataKey="platform" name={t('financialAnalytics.platform')} stackId="1" stroke={CAT.platform} fill={CAT.platform} fillOpacity={0.25} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -220,7 +227,7 @@ const FinancialAnalyticsPage: React.FC<{ embedded?: boolean }> = () => {
               {/* ── 2. Money distribution ── */}
               {chart === 'distribution' && (
               <div style={chartCard}>
-                <div style={{ ...chartTitle, marginBottom: 14 }}>توزيع الأموال بين الأطراف</div>
+                <div style={{ ...chartTitle, marginBottom: 14 }}>{t('financialAnalytics.distributionTitle')}</div>
                 <div style={{ direction: 'ltr' }}>
                   <ResponsiveContainer width="100%" height={320}>
                     <PieChart>
@@ -238,8 +245,8 @@ const FinancialAnalyticsPage: React.FC<{ embedded?: boolean }> = () => {
               {/* ── 3. Top merchants ── */}
               {chart === 'topMerchants' && (
               <div style={chartCard}>
-                <div style={chartTitle}>أعلى التجار أرباحًا (أعلى 10)</div>
-                <AxisLegend x={`إجمالي أرباح التاجر (${currency}) — كلّما طال العمود زادت الأرباح`} y="اسم التاجر" />
+                <div style={chartTitle}>{t('financialAnalytics.topMerchantsTitle')}</div>
+                <AxisLegend x={t('financialAnalytics.topMerchantsXAxis', { currency })} y={t('financialAnalytics.topMerchantsYAxis')} />
                 <div style={{ direction: 'ltr' }}>
                   <ResponsiveContainer width="100%" height={Math.max(320, topMerchants.length * 40)}>
                     <BarChart data={topMerchants} layout="vertical" margin={{ top: 5, right: 24, left: 10, bottom: 5 }}>
@@ -247,7 +254,7 @@ const FinancialAnalyticsPage: React.FC<{ embedded?: boolean }> = () => {
                       <XAxis type="number" tick={{ fontSize: 11, fill: '#64748B' }} />
                       <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11, fill: '#1E3A5F' }} />
                       <Tooltip formatter={moneyTip} />
-                      <Bar dataKey="total" name="الإجمالي" fill={CAT.merchants} radius={[0, 4, 4, 0]} />
+                      <Bar dataKey="total" name={t('financialAnalytics.total')} fill={CAT.merchants} radius={[0, 4, 4, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>

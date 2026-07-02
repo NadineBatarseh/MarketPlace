@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import supabase from '../../lib/supabase';
 import { validateIsraeliId } from '../../utils/validateIsraeliId';
 import { useFieldHint } from './useFieldHint';
@@ -21,6 +22,7 @@ interface Zone {
 }
 
 export default function MerchantApplication() {
+  const { t } = useTranslation('auth');
   const [form, setForm] = useState({
     name_of_owner: '',
     national_id: '',
@@ -65,16 +67,16 @@ export default function MerchantApplication() {
     setErr: (msg: string) => void
   ) => {
     if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
-      setErr('يُقبل فقط صور (JPG/PNG) أو PDF');
+      setErr(t('shared.invalidFileType'));
       return;
     }
     if (file.size > MAX_DOC_BYTES) {
-      setErr('الحجم الأقصى للملف 5 ميجابايت');
+      setErr(t('shared.docTooLarge'));
       return;
     }
     setFile(file);
     setPreview(file.type.startsWith('image/') ? URL.createObjectURL(file) : null);
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     supabase
@@ -122,13 +124,13 @@ export default function MerchantApplication() {
 
     const oversized = files.filter(f => f.size > MAX_FILE_BYTES);
     if (oversized.length > 0) {
-      setError(`حجم الصورة يجب أن لا يتجاوز 5 ميغابايت: ${oversized.map(f => f.name).join('، ')}`);
+      setError(t('merchantApplication.errors.imageTooLarge') + ' ' + oversized.map(f => f.name).join(', '));
       return;
     }
 
     const totalAfter = pendingFiles.length + files.length;
     if (totalAfter > MAX_IMAGES) {
-      setError(`الحد الأقصى ${MAX_IMAGES} صور`);
+      setError(t('merchantApplication.errors.maxImages', { max: MAX_IMAGES }));
       return;
     }
 
@@ -149,7 +151,7 @@ export default function MerchantApplication() {
     setError('');
 
     if (form.name_of_owner.trim().length < 2) {
-      setError('يرجى إدخال الاسم الكامل');
+      setError(t('merchantApplication.errors.enterFullName'));
       return;
     }
 
@@ -160,32 +162,32 @@ export default function MerchantApplication() {
     }
 
     if (phoneLocal.trim().length !== 8) {
-      setError('رقم الهاتف غير صحيح — أدخل 8 أرقام بعد 05');
+      setError(t('merchantApplication.errors.invalidPhone'));
       return;
     }
 
     if (!form.city) {
-      setError('يرجى اختيار المدينة');
+      setError(t('merchantApplication.errors.selectCity'));
       return;
     }
 
     if (!form.type_of_store_id) {
-      setError('يرجى اختيار نوع المتجر');
+      setError(t('merchantApplication.errors.selectStoreType'));
       return;
     }
 
     if (pendingFiles.length === 0) {
-      setError('يرجى إضافة صورة واحدة على الأقل للمتجر أو النشاط التجاري');
+      setError(t('merchantApplication.errors.addImage'));
       return;
     }
 
     if (!idFrontFile) {
-      setError('يرجى رفع الوجه الأمامي للهوية الوطنية');
+      setError(t('merchantApplication.errors.uploadIdFront'));
       return;
     }
 
     if (!idBackFile) {
-      setError('يرجى رفع الوجه الخلفي للهوية الوطنية');
+      setError(t('merchantApplication.errors.uploadIdBack'));
       return;
     }
 
@@ -210,7 +212,7 @@ export default function MerchantApplication() {
         })
       );
     } catch (err: unknown) {
-      setError('تعذّر رفع الصورة: ' + (err instanceof Error ? err.message : String(err)));
+      setError(t('merchantApplication.errors.uploadFailed') + ' ' + (err instanceof Error ? err.message : String(err)));
       setLoading(false);
       return;
     }
@@ -228,7 +230,7 @@ export default function MerchantApplication() {
       idFrontPath = result.idFrontPath;
       idBackPath = result.idBackPath;
     } catch (err: unknown) {
-      setError('تعذّر رفع مستندات الهوية: ' + (err instanceof Error ? err.message : String(err)));
+      setError(t('merchantApplication.errors.uploadDocFailed') + ' ' + (err instanceof Error ? err.message : String(err)));
       setLoading(false);
       return;
     }
@@ -256,7 +258,7 @@ export default function MerchantApplication() {
     setLoading(false);
 
     if (dbError) {
-      setError('حدث خطأ أثناء إرسال الطلب: ' + dbError.message);
+      setError(t('merchantApplication.errors.submitFailed') + ' ' + dbError.message);
       return;
     }
 
@@ -268,33 +270,38 @@ export default function MerchantApplication() {
   const selectedCategoryLabel = categories.find(c => c.id === form.type_of_store_id)?.label;
 
   const loadingLabel = (() => {
-    if (!loading) return 'إرسال الطلب';
+    if (!loading) return t('merchantApplication.submit');
     if (uploadProgress.total > 0 && uploadProgress.current < uploadProgress.total) {
-      return `جارٍ رفع الصور (${uploadProgress.current}/${uploadProgress.total})...`;
+      return t('merchantApplication.uploadingProgress', { current: uploadProgress.current, total: uploadProgress.total });
     }
-    return 'جارٍ إرسال الطلب...';
+    return t('merchantApplication.loading');
   })();
+
+  const idDocSlots = [
+    { key: 'front', label: t('merchantApplication.nationalId.frontLabel'), file: idFrontFile, preview: idFrontPreview, ref: idFrontRef, setFile: setIdFrontFile, setPreview: setIdFrontPreview },
+    { key: 'back',  label: t('merchantApplication.nationalId.backLabel'),  file: idBackFile,  preview: idBackPreview,  ref: idBackRef,  setFile: setIdBackFile,  setPreview: setIdBackPreview },
+  ] as const;
 
   if (submitted) {
     return (
-      <div className="auth-page" dir="rtl">
+      <div className="auth-page">
         <div className="auth-card auth-success-card">
           <div className="auth-success-icon">✅</div>
-          <h2 className="auth-title">تم إرسال طلبك بنجاح!</h2>
+          <h2 className="auth-title">{t('merchantApplication.success.title')}</h2>
           <p className="auth-success-msg">
-            شكراً لك <strong>{form.name_of_owner}</strong>، تم استلام طلب تسجيلك كتاجر.
+            {t('merchantApplication.success.messagePre')} <strong>{form.name_of_owner}</strong>{t('merchantApplication.success.messageMid')}
             <br /><br />
-            سيقوم فريقنا بمراجعة طلبك والتواصل معك عبر البريد الإلكتروني{' '}
-            <strong>{form.email}</strong> خلال 1–3 أيام عمل.
+            {t('merchantApplication.success.messageContact')}{' '}
+            <strong>{form.email}</strong> {t('merchantApplication.success.messageDays')}
             {submissionId && (
               <>
                 <br /><br />
-                رقم طلبك المرجعي: <strong dir="ltr">#{submissionId}</strong>
+                {t('merchantApplication.success.refNumber')} <strong dir="ltr">#{submissionId}</strong>
               </>
             )}
           </p>
           <Link to="/login" className="auth-submit" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
-            العودة إلى تسجيل الدخول
+            {t('merchantApplication.success.backToLogin')}
           </Link>
         </div>
       </div>
@@ -302,24 +309,24 @@ export default function MerchantApplication() {
   }
 
   return (
-    <div className="auth-page" dir="rtl">
+    <div className="auth-page">
       <div className="auth-card auth-wide-card">
         <img src="/logo.png" alt="سوق لينك" className="auth-logo auth-logo-img" />
-        <h1 className="auth-title">طلب تسجيل تاجر</h1>
-        <p className="auth-sub">أكمل النموذج وسيتم مراجعة طلبك من قِبل الإدارة</p>
+        <h1 className="auth-title">{t('merchantApplication.title')}</h1>
+        <p className="auth-sub">{t('merchantApplication.subtitle')}</p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
 
           <div className="auth-row">
             <div className="auth-field">
-              <label>اسم صاحب العمل <span className="auth-required-star">*</span></label>
+              <label>{t('merchantApplication.ownerNameLabel')} <span className="auth-required-star">{t('shared.required')}</span></label>
               <input
-                placeholder="الاسم الكامل"
+                placeholder={t('merchantApplication.ownerNamePlaceholder')}
                 value={form.name_of_owner}
                 minLength={2}
                 onChange={e => {
                   const raw = e.target.value;
-                  if (/[0-9]/.test(raw)) nameHint.show('لا يُسمح بالأرقام في هذا الحقل');
+                  if (/[0-9]/.test(raw)) nameHint.show(t('shared.noDigitsHint'));
                   setForm(f => ({ ...f, name_of_owner: raw.replace(/[0-9]/g, '') }));
                 }}
                 required
@@ -327,7 +334,7 @@ export default function MerchantApplication() {
               {nameHint.hint && <p className="auth-phone-hint">{nameHint.hint}</p>}
             </div>
             <div className="auth-field">
-              <label>رقم الهوية <span className="auth-required-star">*</span></label>
+              <label>{t('merchantApplication.idLabel')} <span className="auth-required-star">{t('shared.required')}</span></label>
               <input
                 placeholder="xxxxxxxxx"
                 value={form.national_id}
@@ -335,8 +342,8 @@ export default function MerchantApplication() {
                 onChange={e => {
                   const raw = e.target.value;
                   const digits = raw.replace(/\D/g, '');
-                  if (/\D/.test(raw)) idHint.show('أرقام فقط');
-                  else if (digits.length > 9) idHint.show('الحد الأقصى 9 أرقام');
+                  if (/\D/.test(raw)) idHint.show(t('shared.digitsOnly'));
+                  else if (digits.length > 9) idHint.show(t('shared.maxDigits9'));
                   else idHint.clear();
                   setForm(f => ({ ...f, national_id: digits.slice(0, 9) }));
                 }}
@@ -347,21 +354,21 @@ export default function MerchantApplication() {
           </div>
 
           <div className="auth-field">
-            <label>اسم المتجر <span className="auth-required-star">*</span></label>
-            <input placeholder="اسم المتجر أو الشركة" value={form.name_of_store} onChange={set('name_of_store')} required />
+            <label>{t('merchantApplication.storeNameLabel')} <span className="auth-required-star">{t('shared.required')}</span></label>
+            <input placeholder={t('merchantApplication.storeNamePlaceholder')} value={form.name_of_store} onChange={set('name_of_store')} required />
           </div>
 
           <div className="auth-field">
-            <label>البريد الإلكتروني <span className="auth-required-star">*</span></label>
-            <input type="email" placeholder="example@email.com" value={form.email} onChange={set('email')} required />
+            <label>{t('merchantApplication.emailLabel')} <span className="auth-required-star">{t('shared.required')}</span></label>
+            <input type="email" placeholder="example@email.com" value={form.email} onChange={set('email')} required dir="ltr" />
           </div>
 
           <div className="auth-row">
             <div className="auth-field">
-              <label>رقم الهاتف <span className="auth-required-star">*</span></label>
+              <label>{t('merchantApplication.phoneLabel')} <span className="auth-required-star">{t('shared.required')}</span></label>
               <div className="auth-phone-split" dir="ltr">
                 <select
-                  title="رمز الدولة"
+                  title="Country code"
                   value={phoneCode}
                   onChange={e => setPhoneCode(e.target.value)}
                   className="auth-phone-code"
@@ -377,8 +384,8 @@ export default function MerchantApplication() {
                   onChange={e => {
                     const raw = e.target.value;
                     const digits = raw.replace(/\D/g, '');
-                    if (/[^\d]/.test(raw)) phoneHint.show('أرقام فقط');
-                    else if (digits.length > 8) phoneHint.show('الحد الأقصى 8 أرقام');
+                    if (/[^\d]/.test(raw)) phoneHint.show(t('shared.digitsOnly'));
+                    else if (digits.length > 8) phoneHint.show(t('shared.maxDigits8'));
                     else phoneHint.clear();
                     setPhoneLocal(digits.slice(0, 8));
                   }}
@@ -391,14 +398,14 @@ export default function MerchantApplication() {
               {phoneHint.hint && <p className="auth-phone-hint">{phoneHint.hint}</p>}
             </div>
             <div className="auth-field">
-              <label>المدينة <span className="auth-required-star">*</span></label>
+              <label>{t('merchantApplication.cityLabel')} <span className="auth-required-star">{t('shared.required')}</span></label>
               <div className="auth-custom-select" ref={cityRef}>
                 <button
                   type="button"
                   className={`auth-custom-select-trigger${!form.city ? ' auth-custom-select-placeholder' : ''}`}
                   onClick={() => setCityOpen(o => !o)}
                 >
-                  {form.city || 'اختر المدينة'}
+                  {form.city || t('merchantApplication.cityPlaceholder')}
                   <span className="auth-custom-select-arrow">{cityOpen ? '▲' : '▼'}</span>
                 </button>
                 {cityOpen && (
@@ -422,14 +429,14 @@ export default function MerchantApplication() {
           </div>
 
           <div className="auth-field">
-            <label>نوع المتجر <span className="auth-required-star">*</span></label>
+            <label>{t('merchantApplication.storeTypeLabel')} <span className="auth-required-star">{t('shared.required')}</span></label>
             <div className="auth-custom-select" ref={storeTypeRef}>
               <button
                 type="button"
                 className={`auth-custom-select-trigger${!form.type_of_store_id ? ' auth-custom-select-placeholder' : ''}`}
                 onClick={() => setStoreTypeOpen(o => !o)}
               >
-                {selectedCategoryLabel || 'اختر النوع'}
+                {selectedCategoryLabel || t('merchantApplication.storeTypePlaceholder')}
                 <span className="auth-custom-select-arrow">{storeTypeOpen ? '▲' : '▼'}</span>
               </button>
               {storeTypeOpen && (
@@ -452,9 +459,9 @@ export default function MerchantApplication() {
           </div>
 
           <div className="auth-field">
-            <label>وصف النشاط التجاري <span className="auth-required-star">*</span></label>
+            <label>{t('merchantApplication.descriptionLabel')} <span className="auth-required-star">{t('shared.required')}</span></label>
             <textarea
-              placeholder="اكتب نبذة مختصرة عن نشاطك التجاري والمنتجات التي تبيعها..."
+              placeholder={t('merchantApplication.descriptionPlaceholder')}
               value={form.description}
               onChange={e => {
                 if (e.target.value.length <= DESC_MAX) set('description')(e);
@@ -469,22 +476,22 @@ export default function MerchantApplication() {
 
           <div className="auth-field">
             <label>
-              ارفع بعض صور من منتجاتك <span className="auth-required-star">*</span>
-              <span style={{ fontWeight: 400, fontSize: '0.82em', marginRight: '6px', opacity: 0.6 }}>
-                (حتى {MAX_IMAGES} صور، 5 ميغابايت لكل صورة)
+              {t('merchantApplication.imagesLabel')} <span className="auth-required-star">{t('shared.required')}</span>
+              <span style={{ fontWeight: 400, fontSize: '0.82em', marginInlineStart: '6px', opacity: 0.6 }}>
+                {t('merchantApplication.imagesHint', { max: MAX_IMAGES })}
               </span>
             </label>
             <div className="apm-imgs-row">
               {previewUrls.map((url, idx) => (
                 <div key={idx} className="apm-img-thumb">
-                  <img src={url} alt={`صورة ${idx + 1}`} />
+                  <img src={url} alt={t('merchantApplication.imageAlt', { n: idx + 1 })} />
                   <button type="button" className="apm-img-remove" onClick={() => removeImage(idx)}>✕</button>
                 </div>
               ))}
               {pendingFiles.length < MAX_IMAGES && (
                 <div className="apm-img-add" onClick={() => imgInputRef.current?.click()}>
                   <span>📷</span>
-                  <span>إضافة صورة</span>
+                  <span>{t('merchantApplication.addImage')}</span>
                 </div>
               )}
             </div>
@@ -495,19 +502,16 @@ export default function MerchantApplication() {
               multiple
               onChange={handleImageChange}
               className="mep-file-hidden"
-              aria-label="اختر صور المتجر"
+              aria-label={t('merchantApplication.imagesLabel')}
             />
           </div>
 
           <div className="auth-doc-section">
-            <div className="auth-doc-section-title">💳 الهوية الوطنية</div>
+            <div className="auth-doc-section-title">{t('merchantApplication.nationalId.title')}</div>
             <div className="auth-row">
-              {([
-                { label: 'الوجه الأمامي', file: idFrontFile, preview: idFrontPreview, ref: idFrontRef, setFile: setIdFrontFile, setPreview: setIdFrontPreview },
-                { label: 'الوجه الخلفي',  file: idBackFile,  preview: idBackPreview,  ref: idBackRef,  setFile: setIdBackFile,  setPreview: setIdBackPreview  },
-              ] as const).map(({ label, file, preview, ref, setFile, setPreview }) => (
-                <div key={label} className="auth-field">
-                  <label>{label} <span className="auth-required-star">*</span></label>
+              {idDocSlots.map(({ key, label, file, preview, ref, setFile, setPreview }) => (
+                <div key={key} className="auth-field">
+                  <label>{label} <span className="auth-required-star">{t('shared.required')}</span></label>
                   <div
                     className={`auth-doc-upload${file ? ' auth-doc-upload--filled' : ''}`}
                     onClick={() => ref.current?.click()}
@@ -521,15 +525,15 @@ export default function MerchantApplication() {
                     ) : (
                       <>
                         <span className="auth-doc-icon">📄</span>
-                        <span className="auth-doc-hint">اضغط أو اسحب الملف هنا</span>
-                        <span className="auth-doc-sub">JPG / PNG / PDF — حتى 5 ميجابايت</span>
+                        <span className="auth-doc-hint">{t('shared.uploadDragHint')}</span>
+                        <span className="auth-doc-sub">{t('shared.uploadFormatHint')}</span>
                       </>
                     )}
                   </div>
                   <input ref={ref} type="file" accept="image/*,application/pdf" style={{ display: 'none' }}
                     onChange={e => { const f = e.target.files?.[0]; if (f) handleDocFile(f, setFile, setPreview, setError); }} />
                   {file && (
-                    <button type="button" className="auth-doc-remove" onClick={() => { setFile(null); setPreview(null); }}>× إزالة</button>
+                    <button type="button" className="auth-doc-remove" onClick={() => { setFile(null); setPreview(null); }}>{t('shared.removeFile')}</button>
                   )}
                 </div>
               ))}
@@ -537,7 +541,7 @@ export default function MerchantApplication() {
           </div>
 
           <div className="auth-privacy-notice">
-            🔒 <strong>خصوصية بياناتك:</strong> يتم تخزين المستندات المرفوعة بشكل آمن، ولا يمكن الاطلاع عليها إلا من قِبل فريق الإدارة المخوّل. لن تُستخدم بياناتك لأي غرض خارج نطاق مراجعة طلبك.
+            {t('merchantApplication.privacyNotice')}
           </div>
 
           <label className="auth-privacy-check">
@@ -546,7 +550,7 @@ export default function MerchantApplication() {
               checked={privacyAccepted}
               onChange={e => setPrivacyAccepted(e.target.checked)}
             />
-            أوافق على استخدام بياناتي ومستنداتي لأغراض مراجعة طلب الانضمام فقط
+            {t('merchantApplication.privacyCheck')}
           </label>
 
           {error && <p className="auth-error">{error}</p>}
@@ -557,8 +561,8 @@ export default function MerchantApplication() {
         </form>
 
         <p className="auth-switch">
-          لديك حساب بالفعل؟{' '}
-          <Link to="/login">تسجيل الدخول</Link>
+          {t('shared.hasAccount')}{' '}
+          <Link to="/login">{t('shared.backToLoginLink')}</Link>
         </p>
       </div>
     </div>

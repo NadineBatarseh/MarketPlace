@@ -1,14 +1,7 @@
 import type { MouseEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { Product } from '../types';
 import ProductCard from './ProductCard';
-
-const SORT_OPTIONS = [
-  { label: 'الأكثر مبيعاً', value: 'best_selling' },
-  { label: 'الأحدث', value: 'newest' },
-  { label: 'السعر: من الأقل للأعلى', value: 'price_asc' },
-  { label: 'السعر: من الأعلى للأقل', value: 'price_desc' },
-  { label: 'التقييم', value: 'rating' },
-];
 
 interface Props {
   products: Product[];
@@ -31,6 +24,8 @@ function Pagination({ page, totalPages, onPageChange }: {
   totalPages: number;
   onPageChange: (p: number) => void;
 }) {
+  const { t } = useTranslation('customer');
+
   if (totalPages <= 1) return null;
 
   const pages: (number | '…')[] = [];
@@ -54,8 +49,8 @@ function Pagination({ page, totalPages, onPageChange }: {
         className="page-btn page-btn--nav"
         onClick={() => onPageChange(page - 1)}
         disabled={page === 1}
-        aria-label="الصفحة السابقة"
-        title="الصفحة السابقة"
+        aria-label={t('productsSection.pagination.prev')}
+        title={t('productsSection.pagination.prev')}
       >
         ‹
       </button>
@@ -69,7 +64,7 @@ function Pagination({ page, totalPages, onPageChange }: {
             key={p}
             className={`page-btn${p === page ? ' active' : ''}`}
             onClick={() => onPageChange(p)}
-            aria-label={`صفحة ${p}`}
+            aria-label={t('productsSection.pagination.pageAria', { n: p })}
             aria-current={p === page ? 'page' : undefined}
           >
             {p}
@@ -82,8 +77,8 @@ function Pagination({ page, totalPages, onPageChange }: {
         className="page-btn page-btn--nav"
         onClick={() => onPageChange(page + 1)}
         disabled={page === totalPages}
-        aria-label="الصفحة التالية"
-        title="الصفحة التالية"
+        aria-label={t('productsSection.pagination.next')}
+        title={t('productsSection.pagination.next')}
       >
         ›
       </button>
@@ -95,14 +90,24 @@ export default function ProductsSection({
   products, total, totalPages, page, loading, sort, viewMode, wishlist,
   onSortChange, onPageChange, onViewModeChange, onToggleWishlist, onAddToCart,
 }: Props) {
+  const { t } = useTranslation('customer');
+
+  const SORT_OPTIONS = [
+    { label: t('productsSection.sort.bestSelling'), value: 'best_selling' },
+    { label: t('productsSection.sort.newest'), value: 'newest' },
+    { label: t('productsSection.sort.priceAsc'), value: 'price_asc' },
+    { label: t('productsSection.sort.priceDesc'), value: 'price_desc' },
+    { label: t('productsSection.sort.rating'), value: 'rating' },
+  ];
+
   return (
     <main className="products-section">
       <div className="products-toolbar">
-        <div className="label">عرض {products.length} من {total} منتج</div>
+        <div className="label">{t('productsSection.toolbar.showing', { shown: products.length, total })}</div>
         <div className="toolbar-right">
           <select
-            title="ترتيب المنتجات"
-            aria-label="ترتيب المنتجات"
+            title={t('productsSection.toolbar.sortAria')}
+            aria-label={t('productsSection.toolbar.sortAria')}
             className="sort-select"
             value={sort}
             onChange={e => onSortChange(e.target.value)}
@@ -115,8 +120,8 @@ export default function ProductsSection({
             <button
               type="button"
               className={`view-btn${viewMode === 'grid' ? ' active' : ''}`}
-              title="شبكة"
-              aria-label="عرض شبكة"
+              title={t('productsSection.toolbar.gridTitle')}
+              aria-label={t('productsSection.toolbar.gridAria')}
               onClick={() => onViewModeChange('grid')}
             >
               <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
@@ -126,8 +131,8 @@ export default function ProductsSection({
             <button
               type="button"
               className={`view-btn${viewMode === 'list' ? ' active' : ''}`}
-              title="قائمة"
-              aria-label="عرض قائمة"
+              title={t('productsSection.toolbar.listTitle')}
+              aria-label={t('productsSection.toolbar.listAria')}
               onClick={() => onViewModeChange('list')}
             >
               <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
@@ -139,9 +144,9 @@ export default function ProductsSection({
       </div>
 
       {loading && products.length === 0 ? (
-        <div className="products-empty">جاري تحميل المنتجات...</div>
+        <div className="products-empty">{t('productsSection.loading')}</div>
       ) : products.length === 0 ? (
-        <div className="products-empty">لا توجد منتجات</div>
+        <div className="products-empty">{t('productsSection.empty')}</div>
       ) : (
         <div className={`products-grid${viewMode === 'list' ? ' products-grid--list' : ''}`}>
           {products.map(product => (

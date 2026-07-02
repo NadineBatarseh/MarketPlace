@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import supabase from '../../lib/supabase';
+import { useLanguage } from '../../context/LanguageContext';
 import './MetaCatalogSettingsCard.css';
 
 interface ConnectionStatus {
@@ -45,22 +47,6 @@ const DEFAULT_SYNC_FIELDS: SyncFields = {
   images: false,
 };
 
-const INBOUND_FIELD_LABELS: Record<SyncFieldKey, string> = {
-  price: 'مزامنة السعر',
-  quantity: 'مزامنة الكمية',
-  availability: 'مزامنة حالة التوفر',
-  details: 'مزامنة الاسم والوصف',
-  images: 'مزامنة الصور',
-};
-
-const OUTBOUND_FIELD_LABELS: Record<SyncFieldKey, string> = {
-  price: 'إرسال تغييرات السعر',
-  quantity: 'إرسال تغييرات الكمية',
-  availability: 'إرسال تغييرات حالة التوفر',
-  details: 'إرسال تغييرات الاسم والوصف',
-  images: 'إرسال تغييرات الصور',
-};
-
 interface SyncSettings {
   auto_import_new_products: boolean;
   auto_export_new_products: boolean;
@@ -69,15 +55,6 @@ interface SyncSettings {
   inbound_sync_fields: SyncFields;
   outbound_sync_fields: SyncFields;
   settings_updated_at: string | null;
-}
-
-function onLabel(on: boolean) { return on ? 'مفعّل' : 'متوقف'; }
-
-function summarizeDirection(newEnabled: boolean, updatesEnabled: boolean): string {
-  if (newEnabled && updatesEnabled) return 'المنتجات الجديدة والتحديثات';
-  if (newEnabled) return 'المنتجات الجديدة فقط';
-  if (updatesEnabled) return 'التحديثات فقط';
-  return 'متوقف';
 }
 
 function settingsEqual(a: SyncSettings | null, b: SyncSettings | null): boolean {
@@ -125,6 +102,34 @@ function FieldCheckboxes({
 }
 
 export default function MetaCatalogSettingsCard() {
+  const { t } = useTranslation('merchant');
+  const { direction, lang } = useLanguage();
+
+  const INBOUND_FIELD_LABELS: Record<SyncFieldKey, string> = {
+    price: t('metaCatalog.fieldSyncPrice'),
+    quantity: t('metaCatalog.fieldSyncQuantity'),
+    availability: t('metaCatalog.fieldSyncAvailability'),
+    details: t('metaCatalog.fieldSyncDetails'),
+    images: t('metaCatalog.fieldSyncImages'),
+  };
+
+  const OUTBOUND_FIELD_LABELS: Record<SyncFieldKey, string> = {
+    price: t('metaCatalog.fieldSendPrice'),
+    quantity: t('metaCatalog.fieldSendQuantity'),
+    availability: t('metaCatalog.fieldSendAvailability'),
+    details: t('metaCatalog.fieldSendDetails'),
+    images: t('metaCatalog.fieldSendImages'),
+  };
+
+  function onLabel(on: boolean) { return on ? t('metaCatalog.statusOn') : t('metaCatalog.statusOff'); }
+
+  function summarizeDirection(newEnabled: boolean, updatesEnabled: boolean): string {
+    if (newEnabled && updatesEnabled) return t('metaCatalog.summaryNewAndUpdates');
+    if (newEnabled) return t('metaCatalog.summaryNewOnly');
+    if (updatesEnabled) return t('metaCatalog.summaryUpdatesOnly');
+    return t('metaCatalog.statusOff');
+  }
+
   const [expanded, setExpanded] = useState(false);
   const [status, setStatus] = useState<PageStatus>('loading');
   const [info, setInfo] = useState<ConnectionStatus | null>(null);
@@ -302,14 +307,14 @@ export default function MetaCatalogSettingsCard() {
           fetchStatus();
           return;
         }
-        setCatalogError(data.error ?? 'فشل تحميل الكتالوجات.');
+        setCatalogError(data.error ?? t('metaCatalog.loadCatalogsFailed'));
         return;
       }
       const list: MetaCatalog[] = data.catalogs ?? [];
       setCatalogs(list);
       if (list.length === 1) setPickedCatalogId(list[0].catalog_id);
     } catch (err: any) {
-      setCatalogError(err.message ?? 'خطأ غير متوقع.');
+      setCatalogError(err.message ?? t('metaCatalog.unexpectedError'));
     } finally {
       setCatalogsLoading(false);
     }
@@ -327,13 +332,13 @@ export default function MetaCatalogSettingsCard() {
       });
       const data = await res.json();
       if (!data.ok) {
-        setCatalogError(data.error ?? 'فشل اختيار الكتالوج.');
+        setCatalogError(data.error ?? t('metaCatalog.selectCatalogFailed'));
         return;
       }
       setPickedCatalogId(null);
       fetchStatus();
     } catch (err: any) {
-      setCatalogError(err.message ?? 'خطأ غير متوقع.');
+      setCatalogError(err.message ?? t('metaCatalog.unexpectedError'));
     } finally {
       setActionLoading(false);
     }
@@ -348,12 +353,12 @@ export default function MetaCatalogSettingsCard() {
       const res = await fetch('/api/meta-catalog/products/preview', { headers });
       const data = await res.json();
       if (!data.ok) {
-        setProductsError(data.error ?? 'فشل تحميل منتجات الكتالوج.');
+        setProductsError(data.error ?? t('metaCatalog.loadProductsFailed'));
         return;
       }
       setProducts(data.products ?? []);
     } catch (err: any) {
-      setProductsError(err.message ?? 'خطأ غير متوقع.');
+      setProductsError(err.message ?? t('metaCatalog.unexpectedError'));
     } finally {
       setProductsLoading(false);
     }
@@ -378,7 +383,7 @@ export default function MetaCatalogSettingsCard() {
     setImportError(null);
     try {
       const headers = await authHeader();
-      if (!headers) { setImportStatus('error'); setImportError('انتهت جلستك. أعد تسجيل الدخول.'); return; }
+      if (!headers) { setImportStatus('error'); setImportError(t('metaCatalog.sessionExpired')); return; }
 
       const res = await fetch('/api/meta-catalog/import', {
         method: 'POST',
@@ -389,7 +394,7 @@ export default function MetaCatalogSettingsCard() {
 
       if (!res.ok || !data.ok) {
         setImportStatus('error');
-        setImportError(data.error ?? 'فشل الاستيراد.');
+        setImportError(data.error ?? t('metaCatalog.importFailed'));
         return;
       }
 
@@ -399,7 +404,7 @@ export default function MetaCatalogSettingsCard() {
       fetchPreview();
     } catch (err: any) {
       setImportStatus('error');
-      setImportError(err.message ?? 'خطأ غير متوقع.');
+      setImportError(err.message ?? t('metaCatalog.unexpectedError'));
     }
   }
 
@@ -441,7 +446,7 @@ export default function MetaCatalogSettingsCard() {
     setSettingsSaved(false);
     try {
       const headers = await authHeader();
-      if (!headers) { setSettingsError('انتهت جلستك. أعد تسجيل الدخول.'); return; }
+      if (!headers) { setSettingsError(t('metaCatalog.sessionExpired')); return; }
 
       const res = await fetch('/api/meta-catalog/settings', {
         method: 'PUT',
@@ -462,11 +467,11 @@ export default function MetaCatalogSettingsCard() {
           // was connected (e.g. disconnected elsewhere, or the row was deleted
           // directly). Resync the whole card to the real, current state instead of
           // leaving a stale "connected" settings panel up.
-          setSettingsError('تم فقد الاتصال بحساب Meta — يتم تحديث الحالة...');
+          setSettingsError(t('metaCatalog.connectionLostResync'));
           fetchStatus();
           return;
         }
-        setSettingsError(data.error ?? 'تعذّر حفظ إعدادات المزامنة.');
+        setSettingsError(data.error ?? t('metaCatalog.saveSettingsFailed'));
         return;
       }
       const saved = parseSettingsResponse(data);
@@ -474,7 +479,7 @@ export default function MetaCatalogSettingsCard() {
       setSettingsDraft(saved);
       setSettingsSaved(true);
     } catch (err: any) {
-      setSettingsError(err.message ?? 'خطأ غير متوقع.');
+      setSettingsError(err.message ?? t('metaCatalog.unexpectedError'));
     } finally {
       setSettingsSaving(false);
     }
@@ -483,7 +488,7 @@ export default function MetaCatalogSettingsCard() {
   /**
    * Pushes every published product to Meta right now, via the real sync engine
    * (server/metaCatalog/metaCatalogAPISync.ts) using this merchant's own
-   * connected catalog. This is the manual fallback for "نشر يدوي" — useful
+   * connected catalog. This is the manual fallback for "manual publish" — useful
    * regardless of whether the automatic switches above are on.
    */
   async function runManualSync() {
@@ -492,7 +497,7 @@ export default function MetaCatalogSettingsCard() {
     setManualSyncError(null);
     try {
       const headers = await authHeader();
-      if (!headers) { setManualSyncError('انتهت جلستك. أعد تسجيل الدخول.'); return; }
+      if (!headers) { setManualSyncError(t('metaCatalog.sessionExpired')); return; }
 
       const res = await fetch('/api/catalog/sync', {
         method: 'POST',
@@ -501,7 +506,7 @@ export default function MetaCatalogSettingsCard() {
       });
       const data = await res.json();
       if (!res.ok && res.status !== 207) {
-        setManualSyncError(data.error ?? 'فشلت المزامنة.');
+        setManualSyncError(data.error ?? t('metaCatalog.manualSyncFailed'));
         return;
       }
       setManualSyncResult({ synced: data.synced ?? 0, batches: data.batches ?? 0 });
@@ -509,7 +514,7 @@ export default function MetaCatalogSettingsCard() {
         setManualSyncError(data.errors.join(' | '));
       }
     } catch (err: any) {
-      setManualSyncError(err.message ?? 'خطأ غير متوقع.');
+      setManualSyncError(err.message ?? t('metaCatalog.unexpectedError'));
     } finally {
       setManualSyncing(false);
     }
@@ -527,7 +532,7 @@ export default function MetaCatalogSettingsCard() {
   const showTwoWayWarning = !!settingsDraft?.auto_sync_meta_updates_to_souqlink && !!settingsDraft?.auto_sync_souqlink_updates_to_meta;
 
   return (
-    <div className={`mcs-card${expanded ? ' mcs-card--expanded' : ''}`}>
+    <div className={`mcs-card${expanded ? ' mcs-card--expanded' : ''}`} dir={direction}>
       <button
         type="button"
         className="mcs-summary"
@@ -544,19 +549,19 @@ export default function MetaCatalogSettingsCard() {
         </div>
         <div className="mcs-summary-main">
           <div className="mcs-summary-title-row">
-            <span className="mcs-summary-title">ربط وإعدادات Meta Catalog</span>
+            <span className="mcs-summary-title">{t('metaCatalog.summaryTitle')}</span>
             {status === 'loading' ? (
-              <span className="mcs-pill mcs-pill--idle">جارٍ التحقق…</span>
+              <span className="mcs-pill mcs-pill--idle">{t('metaCatalog.checking')}</span>
             ) : isConnectedLike ? (
-              <span className="mcs-pill mcs-pill--on">متصل</span>
+              <span className="mcs-pill mcs-pill--on">{t('metaCatalog.connected')}</span>
             ) : (
-              <span className="mcs-pill mcs-pill--off">غير متصل</span>
+              <span className="mcs-pill mcs-pill--off">{t('metaCatalog.notConnected')}</span>
             )}
           </div>
           <div className="mcs-summary-meta">
-            {info?.catalog_name && <span>الكتالوج: {info.catalog_name}</span>}
-            <span>Meta → SouqLink: {summarizeDirection(!!settings?.auto_import_new_products, !!settings?.auto_sync_meta_updates_to_souqlink)}</span>
-            <span>SouqLink → Meta: {summarizeDirection(!!settings?.auto_export_new_products, !!settings?.auto_sync_souqlink_updates_to_meta)}</span>
+            {info?.catalog_name && <span>{t('metaCatalog.catalogLabel')}: {info.catalog_name}</span>}
+            <span>{t('metaCatalog.metaToSouqlinkLabel')}: {summarizeDirection(!!settings?.auto_import_new_products, !!settings?.auto_sync_meta_updates_to_souqlink)}</span>
+            <span>{t('metaCatalog.souqlinkToMetaLabel')}: {summarizeDirection(!!settings?.auto_export_new_products, !!settings?.auto_sync_souqlink_updates_to_meta)}</span>
           </div>
         </div>
         <svg className={`mcs-chevron${expanded ? ' mcs-chevron--up' : ''}`} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -573,30 +578,30 @@ export default function MetaCatalogSettingsCard() {
           {status === 'loading' && (
             <div className="mcc-state mcc-loading">
               <div className="mcc-spinner" />
-              <p>جارٍ التحقق من الاتصال…</p>
+              <p>{t('metaCatalog.checkingConnection')}</p>
             </div>
           )}
 
           {status === 'disconnected' && (
             <div className="mcc-state mcc-disconnected">
-              <div className="mcc-disconnected-badge">غير متصل</div>
+              <div className="mcc-disconnected-badge">{t('metaCatalog.notConnected')}</div>
               <div className="mcc-disconnected-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0110 0v4" />
                 </svg>
               </div>
-              <h3>لم يتم ربط أي كتالوج</h3>
-              <p>اربط حساب Meta التجاري الخاص بك حتى تتمكن من استيراد منتجاتك من كتالوج Meta إلى متجرك.</p>
+              <h3>{t('metaCatalog.noCatalogLinked')}</h3>
+              <p>{t('metaCatalog.noCatalogLinkedDesc')}</p>
               <ul className="mcc-perms">
-                <li>قراءة بيانات كتالوج منتجاتك</li>
-                <li>عرض قائمة الكتالوجات المتاحة لحسابك التجاري</li>
-                <li>استيراد المنتجات التي تختارها فقط</li>
+                <li>{t('metaCatalog.permReadCatalog')}</li>
+                <li>{t('metaCatalog.permListCatalogs')}</li>
+                <li>{t('metaCatalog.permImportSelected')}</li>
               </ul>
               <button type="button" className="mcc-btn-connect" onClick={startOAuth} disabled={actionLoading}>
                 {actionLoading ? (
-                  <><div className="mcc-btn-spinner" /> جارٍ التوجيه…</>
+                  <><div className="mcc-btn-spinner" /> {t('metaCatalog.redirecting')}</>
                 ) : (
-                  'ربط حساب Meta الآن'
+                  t('metaCatalog.connectMetaNow')
                 )}
               </button>
             </div>
@@ -608,16 +613,16 @@ export default function MetaCatalogSettingsCard() {
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
-                متصل
+                {t('metaCatalog.connected')}
               </div>
               {info?.business_name && (
                 <div className="mcc-account-info">
-                  <span className="mcc-account-label">الحساب التجاري</span>
+                  <span className="mcc-account-label">{t('metaCatalog.businessAccount')}</span>
                   <span className="mcc-account-name">{info.business_name}</span>
                 </div>
               )}
-              <h3>اختر الكتالوج</h3>
-              <p>اختر الكتالوج الذي تريد ربطه بمتجرك واستيراد منتجاته. تُتاح إعدادات المزامنة بعد اختيار الكتالوج.</p>
+              <h3>{t('metaCatalog.chooseCatalog')}</h3>
+              <p>{t('metaCatalog.chooseCatalogDesc')}</p>
 
               {catalogsLoading && <div className="mcc-spinner" />}
 
@@ -626,7 +631,7 @@ export default function MetaCatalogSettingsCard() {
               )}
 
               {!catalogsLoading && !catalogError && catalogs.length === 0 && (
-                <div className="mcc-inline-error">لم يتم العثور على أي كتالوج لحسابك التجاري.</div>
+                <div className="mcc-inline-error">{t('metaCatalog.noCatalogsFound')}</div>
               )}
 
               {!catalogsLoading && catalogs.length > 0 && (
@@ -659,10 +664,10 @@ export default function MetaCatalogSettingsCard() {
                     if (c) selectCatalog(c);
                   }}
                 >
-                  {actionLoading ? 'جارٍ التأكيد…' : 'تأكيد الكتالوج'}
+                  {actionLoading ? t('metaCatalog.confirming') : t('metaCatalog.confirmCatalog')}
                 </button>
                 <button type="button" className="mcc-btn-danger" onClick={() => setShowDisconnectConfirm(true)} disabled={actionLoading}>
-                  قطع الاتصال
+                  {t('metaCatalog.disconnect')}
                 </button>
               </div>
             </div>
@@ -674,46 +679,46 @@ export default function MetaCatalogSettingsCard() {
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
-                متصل
+                {t('metaCatalog.connected')}
               </div>
               <div className="mcc-account-info">
-                <span className="mcc-account-label">الكتالوج</span>
+                <span className="mcc-account-label">{t('metaCatalog.catalogLabel')}</span>
                 <span className="mcc-account-name">{info.catalog_name}</span>
               </div>
               {info.catalog_id && (
                 <div className="mcc-account-info">
-                  <span className="mcc-account-label">معرّف الكتالوج</span>
+                  <span className="mcc-account-label">{t('metaCatalog.catalogId')}</span>
                   <span className="mcc-account-name" dir="ltr">{info.catalog_id}</span>
                 </div>
               )}
               {info.business_name && (
                 <div className="mcc-account-info">
-                  <span className="mcc-account-label">الحساب التجاري</span>
+                  <span className="mcc-account-label">{t('metaCatalog.businessAccount')}</span>
                   <span className="mcc-account-name">{info.business_name}</span>
                 </div>
               )}
               <div className="mcc-actions">
                 <button type="button" className="mcc-btn-primary" onClick={() => setShowChangeCatalogConfirm(true)} disabled={actionLoading}>
-                  تغيير الكتالوج
+                  {t('metaCatalog.changeCatalog')}
                 </button>
                 <button type="button" className="mcc-btn-primary" onClick={startOAuth} disabled={actionLoading}>
-                  إعادة الربط
+                  {t('metaCatalog.reconnect')}
                 </button>
                 <button type="button" className="mcc-btn-danger" onClick={() => setShowDisconnectConfirm(true)} disabled={actionLoading}>
-                  قطع الاتصال
+                  {t('metaCatalog.disconnect')}
                 </button>
               </div>
 
               {/* ── Import section ── */}
               <div className="mcc-import-section">
                 <div className="mcc-import-header">
-                  <span>معاينة المنتجات واستيرادها</span>
+                  <span>{t('metaCatalog.previewImportTitle')}</span>
                 </div>
 
                 {productsLoading && (
                   <div className="mcc-state mcc-loading">
                     <div className="mcc-spinner" />
-                    <p>جارٍ تحميل المنتجات من Meta…</p>
+                    <p>{t('metaCatalog.loadingProducts')}</p>
                   </div>
                 )}
 
@@ -722,16 +727,16 @@ export default function MetaCatalogSettingsCard() {
                 )}
 
                 {!productsLoading && !productsError && products.length === 0 && (
-                  <div className="mcc-inline-error">لا توجد منتجات في هذا الكتالوج.</div>
+                  <div className="mcc-inline-error">{t('metaCatalog.noProductsInCatalog')}</div>
                 )}
 
                 {!productsLoading && products.length > 0 && (
                   <>
                     <div className="mcc-import-toolbar">
                       <button type="button" className="mcc-link-btn" onClick={selectAllAvailable}>
-                        تحديد كل المنتجات الجديدة
+                        {t('metaCatalog.selectAllNew')}
                       </button>
-                      <span className="mcc-selected-count">{selected.size} محدد</span>
+                      <span className="mcc-selected-count">{t('metaCatalog.selectedCount', { count: selected.size })}</span>
                     </div>
 
                     <div className="mcc-product-grid">
@@ -756,7 +761,7 @@ export default function MetaCatalogSettingsCard() {
                             <div className="mcc-product-price">{p.price} {p.currency ?? ''}</div>
                           )}
                           {p.already_imported && (
-                            <span className="mcc-product-imported-tag">تم استيراده مسبقاً</span>
+                            <span className="mcc-product-imported-tag">{t('metaCatalog.alreadyImported')}</span>
                           )}
                         </label>
                       ))}
@@ -769,14 +774,14 @@ export default function MetaCatalogSettingsCard() {
                         onClick={startImport}
                         disabled={selected.size === 0}
                       >
-                        استيراد المحدد ({selected.size})
+                        {t('metaCatalog.importSelected', { count: selected.size })}
                       </button>
                     )}
 
                     {importStatus === 'importing' && (
                       <div className="mcc-import-loading">
                         <div className="mcc-import-spinner" />
-                        <p>جارٍ استيراد المنتجات…</p>
+                        <p>{t('metaCatalog.importingProducts')}</p>
                       </div>
                     )}
 
@@ -789,7 +794,7 @@ export default function MetaCatalogSettingsCard() {
                           <p className="mcc-import-result-title">{importResult.message}</p>
                         </div>
                         <button type="button" className="mcc-import-retry" onClick={() => setImportStatus('idle')}>
-                          إغلاق
+                          {t('metaCatalog.close')}
                         </button>
                       </div>
                     )}
@@ -800,11 +805,11 @@ export default function MetaCatalogSettingsCard() {
                           <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
                         </svg>
                         <div>
-                          <p className="mcc-import-result-title">فشل الاستيراد</p>
+                          <p className="mcc-import-result-title">{t('metaCatalog.importFailed')}</p>
                           <p className="mcc-import-result-msg">{importError}</p>
                         </div>
                         <button type="button" className="mcc-import-retry" onClick={() => setImportStatus('idle')}>
-                          إعادة المحاولة
+                          {t('metaCatalog.retry')}
                         </button>
                       </div>
                     )}
@@ -814,12 +819,12 @@ export default function MetaCatalogSettingsCard() {
 
               {/* ── Sync settings section ── */}
               <div className="mcs-settings-section">
-                <h3 className="mcs-settings-title">إعدادات المزامنة</h3>
+                <h3 className="mcs-settings-title">{t('metaCatalog.syncSettingsTitle')}</h3>
 
                 {settingsLoading && !settingsDraft && (
                   <div className="mcc-state mcc-loading">
                     <div className="mcc-spinner" />
-                    <p>جارٍ تحميل إعدادات المزامنة…</p>
+                    <p>{t('metaCatalog.loadingSyncSettings')}</p>
                   </div>
                 )}
 
@@ -827,36 +832,36 @@ export default function MetaCatalogSettingsCard() {
                   <>
                     {/* ── Status summary ── */}
                     <div className="mcs-status-summary">
-                      <h4>حالة المزامنة</h4>
+                      <h4>{t('metaCatalog.syncStatusTitle')}</h4>
                       <ul>
                         <li>
-                          <span>المنتجات الجديدة من Meta إلى SouqLink</span>
+                          <span>{t('metaCatalog.statusNewMetaToSouqlink')}</span>
                           <span className={`mcs-status-pill${settings.auto_import_new_products ? ' mcs-status-pill--on' : ''}`}>{onLabel(settings.auto_import_new_products)}</span>
                         </li>
                         <li>
-                          <span>تعديلات Meta إلى SouqLink</span>
+                          <span>{t('metaCatalog.statusUpdatesMetaToSouqlink')}</span>
                           <span className={`mcs-status-pill${settings.auto_sync_meta_updates_to_souqlink ? ' mcs-status-pill--on' : ''}`}>{onLabel(settings.auto_sync_meta_updates_to_souqlink)}</span>
                         </li>
                         <li>
-                          <span>المنتجات الجديدة من SouqLink إلى Meta</span>
+                          <span>{t('metaCatalog.statusNewSouqlinkToMeta')}</span>
                           <span className={`mcs-status-pill${settings.auto_export_new_products ? ' mcs-status-pill--on' : ''}`}>{onLabel(settings.auto_export_new_products)}</span>
                         </li>
                         <li>
-                          <span>تعديلات SouqLink إلى Meta</span>
+                          <span>{t('metaCatalog.statusUpdatesSouqlinkToMeta')}</span>
                           <span className={`mcs-status-pill${settings.auto_sync_souqlink_updates_to_meta ? ' mcs-status-pill--on' : ''}`}>{onLabel(settings.auto_sync_souqlink_updates_to_meta)}</span>
                         </li>
                       </ul>
-                      {settingsDirty && <p className="mcs-status-dirty-note">لديك تغييرات لم تُحفظ بعد.</p>}
+                      {settingsDirty && <p className="mcs-status-dirty-note">{t('metaCatalog.unsavedChanges')}</p>}
                     </div>
 
                     {/* ── Meta Catalog → SouqLink ── */}
                     <div className="mcs-settings-group">
-                      <h4>من Meta Catalog إلى SouqLink</h4>
+                      <h4>{t('metaCatalog.groupMetaToSouqlinkTitle')}</h4>
 
                       <label className="mcs-toggle-row">
                         <span className="mcs-toggle-text">
-                          جلب المنتجات الجديدة من Meta Catalog تلقائيًا
-                          <span className="mcs-toggle-desc">عند إضافة منتج جديد إلى الكتالوج، سيتم استيراده إلى SouqLink تلقائيًا كمسودة.</span>
+                          {t('metaCatalog.toggleAutoImportNew')}
+                          <span className="mcs-toggle-desc">{t('metaCatalog.toggleAutoImportNewDesc')}</span>
                         </span>
                         <span className="mcs-switch">
                           <input
@@ -870,8 +875,8 @@ export default function MetaCatalogSettingsCard() {
 
                       <label className="mcs-toggle-row">
                         <span className="mcs-toggle-text">
-                          تحديث منتجات SouqLink عند تعديلها في Meta
-                          <span className="mcs-toggle-desc">عند تعديل منتج مرتبط داخل Meta Catalog، يتم تطبيق التغييرات على المنتج المقابل داخل SouqLink. مثال: إذا تم تغيير سعر المنتج أو كميته في Meta Catalog، سيتم تحديث المنتج المقابل داخل SouqLink.</span>
+                          {t('metaCatalog.toggleUpdateFromMeta')}
+                          <span className="mcs-toggle-desc">{t('metaCatalog.toggleUpdateFromMetaDesc')}</span>
                         </span>
                         <span className="mcs-switch">
                           <input
@@ -890,22 +895,22 @@ export default function MetaCatalogSettingsCard() {
                           onToggle={updateInboundField}
                         />
                       ) : (
-                        <p className="mcs-manual-note">يمكنك جلب التحديثات يدويًا من صفحة المنتج.</p>
+                        <p className="mcs-manual-note">{t('metaCatalog.manualFetchNote')}</p>
                       )}
 
                       <div className="mcs-future-note">
-                        ⏳ لا يوجد بعد محرك يسحب التحديثات من Meta تلقائيًا — استيراد المنتجات الجديدة والتحديثات في هذا الاتجاه تُحفظ كتفضيلات فقط، وستعمل فعلياً في مرحلة لاحقة من التطوير.
+                        {t('metaCatalog.inboundFutureNote')}
                       </div>
                     </div>
 
                     {/* ── SouqLink → Meta Catalog ── */}
                     <div className="mcs-settings-group">
-                      <h4>من SouqLink إلى Meta Catalog</h4>
+                      <h4>{t('metaCatalog.groupSouqlinkToMetaTitle')}</h4>
 
                       <label className="mcs-toggle-row">
                         <span className="mcs-toggle-text">
-                          نشر المنتجات الجديدة من SouqLink على Meta Catalog تلقائيًا
-                          <span className="mcs-toggle-desc">عند إضافة منتج جديد ونشره داخل SouqLink، سيتم إنشاؤه أيضًا داخل Meta Catalog.</span>
+                          {t('metaCatalog.toggleAutoExportNew')}
+                          <span className="mcs-toggle-desc">{t('metaCatalog.toggleAutoExportNewDesc')}</span>
                         </span>
                         <span className="mcs-switch">
                           <input
@@ -917,13 +922,13 @@ export default function MetaCatalogSettingsCard() {
                         </span>
                       </label>
                       {settingsDraft.auto_export_new_products && (
-                        <p className="mcs-rule-note">⚠️ لن يتم نشر المسودات تلقائيًا أبداً — يُنشر المنتج تلقائياً فقط بعد أن يصبح فعّالاً/منشوراً داخل SouqLink.</p>
+                        <p className="mcs-rule-note">{t('metaCatalog.exportDraftsRuleNote')}</p>
                       )}
 
                       <label className="mcs-toggle-row">
                         <span className="mcs-toggle-text">
-                          تحديث منتجات Meta عند تعديلها في SouqLink
-                          <span className="mcs-toggle-desc">عند تعديل منتج مرتبط داخل SouqLink، يتم إرسال التغييرات إلى المنتج المقابل داخل Meta Catalog. مثال: إذا تم تغيير سعر المنتج أو كميته في SouqLink، سيتم تحديث المنتج المقابل داخل Meta Catalog.</span>
+                          {t('metaCatalog.toggleUpdateFromSouqlink')}
+                          <span className="mcs-toggle-desc">{t('metaCatalog.toggleUpdateFromSouqlinkDesc')}</span>
                         </span>
                         <span className="mcs-switch">
                           <input
@@ -942,20 +947,20 @@ export default function MetaCatalogSettingsCard() {
                           onToggle={updateOutboundField}
                         />
                       ) : (
-                        <p className="mcs-manual-note">يمكنك نشر المنتج أو إرسال تحديثاته يدويًا من صفحة المنتج.</p>
+                        <p className="mcs-manual-note">{t('metaCatalog.manualPublishNote')}</p>
                       )}
 
                       <p className="mcs-manual-note">
-                        ✓ هذا الاتجاه يعمل فعلياً عبر الموقع — عند حفظ منتج منشور يتم إرساله تلقائياً إلى Meta حسب الخيارات أعلاه. يمكنك أيضاً مزامنة كل منتجاتك المنشورة الآن يدوياً:
+                        {t('metaCatalog.outboundWorksNote')}
                       </p>
                       <div className="mcs-settings-actions">
                         <button type="button" className="mcc-btn-primary" onClick={runManualSync} disabled={manualSyncing}>
-                          {manualSyncing ? 'جارٍ المزامنة…' : 'مزامنة جميع المنتجات الآن'}
+                          {manualSyncing ? t('metaCatalog.syncing') : t('metaCatalog.syncAllNow')}
                         </button>
                       </div>
                       {manualSyncResult && (
                         <div className="mcs-settings-saved">
-                          ✓ تمت مزامنة {manualSyncResult.synced} منتج في {manualSyncResult.batches} دفعة.
+                          {t('metaCatalog.manualSyncResult', { synced: manualSyncResult.synced, batches: manualSyncResult.batches })}
                         </div>
                       )}
                       {manualSyncError && <div className="mcc-inline-error">{manualSyncError}</div>}
@@ -963,29 +968,29 @@ export default function MetaCatalogSettingsCard() {
 
                     {showTwoWayWarning && (
                       <div className="mcs-warning-note">
-                        ⚠️ تفعيل التحديث التلقائي في الاتجاهين قد يؤدي إلى تعارض إذا تم تعديل المنتج في Meta وSouqLink في الوقت نفسه.
+                        {t('metaCatalog.twoWayWarning')}
                       </div>
                     )}
 
                     {settingsError && <div className="mcc-inline-error">{settingsError}</div>}
                     {settingsSaved && (
                       <div className="mcs-settings-saved">
-                        ✓ تم حفظ إعدادات المزامنة بنجاح
-                        {settings.settings_updated_at && ` — آخر تحديث: ${new Date(settings.settings_updated_at).toLocaleString('ar-EG')}`}
+                        {t('metaCatalog.settingsSavedSuccess')}
+                        {settings.settings_updated_at && ` — ${t('metaCatalog.lastUpdated')}: ${new Date(settings.settings_updated_at).toLocaleString(lang === 'ar' ? 'ar-EG' : 'en-US')}`}
                       </div>
                     )}
                     {settingsSaved && inboundAutomaticEnabled && (
                       <div className="mcs-future-note">
-                        تم حفظ إعدادات الاتجاه الوارد (Meta → SouqLink)، لكن محرك المزامنة التلقائية لهذا الاتجاه سيتم تنفيذه في المرحلة التالية. اتجاه SouqLink → Meta يعمل فعلياً بالفعل.
+                        {t('metaCatalog.inboundSavedFutureNote')}
                       </div>
                     )}
 
                     <div className="mcs-settings-actions">
                       <button type="button" className="mcc-btn-primary mcs-settings-save-btn" onClick={saveSettings} disabled={settingsSaving || !settingsDirty}>
-                        {settingsSaving ? 'جارٍ الحفظ…' : 'حفظ إعدادات المزامنة'}
+                        {settingsSaving ? t('metaCatalog.saving') : t('metaCatalog.saveSyncSettings')}
                       </button>
                       <button type="button" className="mcc-btn-danger" onClick={cancelSettingsDraft} disabled={settingsSaving || !settingsDirty}>
-                        إلغاء التغييرات
+                        {t('metaCatalog.discardChanges')}
                       </button>
                     </div>
                   </>
@@ -996,8 +1001,8 @@ export default function MetaCatalogSettingsCard() {
 
           {status === 'error' && (
             <div className="mcc-state mcc-error">
-              <p>حدث خطأ في التحقق. تأكد من تسجيل الدخول وأعد المحاولة.</p>
-              <button type="button" className="mcc-btn-primary" onClick={fetchStatus}>إعادة المحاولة</button>
+              <p>{t('metaCatalog.errorCheckingConnection')}</p>
+              <button type="button" className="mcc-btn-primary" onClick={fetchStatus}>{t('metaCatalog.retry')}</button>
             </div>
           )}
         </div>
@@ -1006,14 +1011,14 @@ export default function MetaCatalogSettingsCard() {
       {showDisconnectConfirm && (
         <div className="mcs-confirm-overlay" onClick={() => setShowDisconnectConfirm(false)}>
           <div className="mcs-confirm-box" onClick={(e) => e.stopPropagation()}>
-            <h3>تأكيد قطع الاتصال</h3>
-            <p>سيتم قطع اتصال حساب Meta عن متجرك. لن يتم حذف المنتجات التي تم استيرادها مسبقاً، ولن تتم إزالة شارة "مستورد من Meta" الخاصة بها، ولن يتم حذف أي شيء من كتالوج Meta نفسه.</p>
+            <h3>{t('metaCatalog.confirmDisconnectTitle')}</h3>
+            <p>{t('metaCatalog.confirmDisconnectDesc')}</p>
             <div className="mcs-confirm-actions">
               <button type="button" className="mcc-btn-danger" onClick={() => { setShowDisconnectConfirm(false); disconnect(); }}>
-                تأكيد قطع الاتصال
+                {t('metaCatalog.confirmDisconnectBtn')}
               </button>
               <button type="button" className="mcc-btn-primary" onClick={() => setShowDisconnectConfirm(false)}>
-                إلغاء
+                {t('metaCatalog.cancel')}
               </button>
             </div>
           </div>
@@ -1023,14 +1028,14 @@ export default function MetaCatalogSettingsCard() {
       {showChangeCatalogConfirm && (
         <div className="mcs-confirm-overlay" onClick={() => setShowChangeCatalogConfirm(false)}>
           <div className="mcs-confirm-box" onClick={(e) => e.stopPropagation()}>
-            <h3>تغيير الكتالوج</h3>
-            <p>تغيير الكتالوج لن يحذف أو ينقل تلقائياً المنتجات التي تم استيرادها مسبقاً من الكتالوج الحالي. هل تريد المتابعة؟</p>
+            <h3>{t('metaCatalog.changeCatalogTitle')}</h3>
+            <p>{t('metaCatalog.changeCatalogDesc')}</p>
             <div className="mcs-confirm-actions">
               <button type="button" className="mcc-btn-danger" onClick={confirmChangeCatalog}>
-                متابعة وتغيير الكتالوج
+                {t('metaCatalog.changeCatalogConfirmBtn')}
               </button>
               <button type="button" className="mcc-btn-primary" onClick={() => setShowChangeCatalogConfirm(false)}>
-                إلغاء
+                {t('metaCatalog.cancel')}
               </button>
             </div>
           </div>

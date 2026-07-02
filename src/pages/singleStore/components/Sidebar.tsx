@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { FilterDef } from '../hooks/useSidebarData';
 
 export interface GeneralFilters {
@@ -44,7 +45,7 @@ export default function Sidebar({
   onGeneralFiltersChange,
   loadingFilters,
 }: Props) {
-
+  const { t } = useTranslation('customer');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [showAll, setShowAll]     = useState<Record<string, boolean>>({});
 
@@ -77,8 +78,8 @@ export default function Sidebar({
     const label = generalFilters.priceMin && generalFilters.priceMax
       ? `${generalFilters.priceMin}–${generalFilters.priceMax} ₪`
       : generalFilters.priceMin
-        ? `من ${generalFilters.priceMin} ₪`
-        : `حتى ${generalFilters.priceMax} ₪`;
+        ? t('sidebar.priceChip.minOnly', { min: generalFilters.priceMin })
+        : t('sidebar.priceChip.maxOnly', { max: generalFilters.priceMax });
     activeChips.push({
       key: 'price',
       label,
@@ -89,7 +90,7 @@ export default function Sidebar({
   if (generalFilters.inStockOnly) {
     activeChips.push({
       key: 'instock',
-      label: 'متاح فقط',
+      label: t('sidebar.inStockChip'),
       onRemove: () => onGeneralFiltersChange({ ...generalFilters, inStockOnly: false }),
     });
   }
@@ -108,10 +109,10 @@ export default function Sidebar({
           <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
             <line x1="4" y1="6" x2="20" y2="6" /><line x1="8" y1="12" x2="16" y2="12" /><line x1="11" y1="18" x2="13" y2="18" />
           </svg>
-          الفلاتر
+          {t('sidebar.filters')}
         </span>
         {activeChips.length > 0 && (
-          <button type="button" className="sp-clear-all" onClick={clearAll}>مسح الكل</button>
+          <button type="button" className="sp-clear-all" onClick={clearAll}>{t('sidebar.clearAll')}</button>
         )}
       </div>
 
@@ -130,7 +131,7 @@ export default function Sidebar({
       {/* ── Price ── */}
       <div className="sp-section">
         <button type="button" className="sp-section-header" onClick={() => toggleCollapse('__price')}>
-          <span className="sp-section-title">نطاق السعر</span>
+          <span className="sp-section-title">{t('sidebar.priceRange')}</span>
           <span className="sp-collapse-icon">{collapsed['__price'] ? '+' : '−'}</span>
         </button>
         {!collapsed['__price'] && (
@@ -138,11 +139,11 @@ export default function Sidebar({
             <div className="sp-price-box">
               <span className="sp-price-cur">₪</span>
               <input
-                type="number" min={0} placeholder="من"
+                type="number" min={0} placeholder={t('sidebar.priceFrom')}
                 className="sp-price-input"
                 value={generalFilters.priceMin}
-                aria-label="الحد الأدنى للسعر"
-                title="الحد الأدنى للسعر"
+                aria-label={t('sidebar.minPriceAria')}
+                title={t('sidebar.minPriceAria')}
                 onChange={e => onGeneralFiltersChange({ ...generalFilters, priceMin: e.target.value })}
               />
             </div>
@@ -150,11 +151,11 @@ export default function Sidebar({
             <div className="sp-price-box">
               <span className="sp-price-cur">₪</span>
               <input
-                type="number" min={0} placeholder="إلى"
+                type="number" min={0} placeholder={t('sidebar.priceTo')}
                 className="sp-price-input"
                 value={generalFilters.priceMax}
-                aria-label="الحد الأعلى للسعر"
-                title="الحد الأعلى للسعر"
+                aria-label={t('sidebar.maxPriceAria')}
+                title={t('sidebar.maxPriceAria')}
                 onChange={e => onGeneralFiltersChange({ ...generalFilters, priceMax: e.target.value })}
               />
             </div>
@@ -165,16 +166,16 @@ export default function Sidebar({
       {/* ── Availability ── */}
       <div className="sp-section">
         <button type="button" className="sp-section-header" onClick={() => toggleCollapse('__avail')}>
-          <span className="sp-section-title">التوفر</span>
+          <span className="sp-section-title">{t('sidebar.availability')}</span>
           <span className="sp-collapse-icon">{collapsed['__avail'] ? '+' : '−'}</span>
         </button>
         {!collapsed['__avail'] && (
           <label className="sp-toggle-row">
-            <span className="sp-toggle-label">متاح في المخزون فقط</span>
+            <span className="sp-toggle-label">{t('sidebar.inStockOnly')}</span>
             <span className={`sp-toggle${generalFilters.inStockOnly ? ' sp-toggle--on' : ''}`}
               onClick={() => onGeneralFiltersChange({ ...generalFilters, inStockOnly: !generalFilters.inStockOnly })}
               {...{ role: 'switch', 'aria-checked': generalFilters.inStockOnly ? 'true' : 'false' }}
-              title="متاح في المخزون فقط"
+              title={t('sidebar.inStockOnly')}
               tabIndex={0}
               onKeyDown={e => e.key === ' ' && onGeneralFiltersChange({ ...generalFilters, inStockOnly: !generalFilters.inStockOnly })}
             >
@@ -185,7 +186,7 @@ export default function Sidebar({
       </div>
 
       {/* ── Dynamic filters ── */}
-      {loadingFilters && <div className="sp-loading">جاري تحميل الفلاتر...</div>}
+      {loadingFilters && <div className="sp-loading">{t('sidebar.loadingFilters')}</div>}
 
       {!loadingFilters && filterDefs.map(f => {
         const isCollapsed = collapsed[f.id] ?? false;
@@ -240,8 +241,8 @@ export default function Sidebar({
                           onClick={() => setShowAll(prev => ({ ...prev, [f.id]: !isShowAll }))}
                         >
                           {isShowAll
-                            ? '− عرض أقل'
-                            : `+ عرض المزيد (${f.options!.length - VISIBLE_LIMIT})`}
+                            ? t('sidebar.viewLess')
+                            : t('sidebar.viewMore', { count: f.options!.length - VISIBLE_LIMIT })}
                         </button>
                       )}
                     </div>
@@ -278,7 +279,7 @@ export default function Sidebar({
 
                 {f.filter_type === 'boolean' && (
                   <label className="sp-toggle-row">
-                    <span className="sp-toggle-label">نعم</span>
+                    <span className="sp-toggle-label">{t('sidebar.yes')}</span>
                     <span
                       className={`sp-toggle${(filterValues[f.id] ?? [])[0] === 'true' ? ' sp-toggle--on' : ''}`}
                       onClick={() => setVal(f.id, [(filterValues[f.id]?.[0] === 'true' ? 'false' : 'true')])}

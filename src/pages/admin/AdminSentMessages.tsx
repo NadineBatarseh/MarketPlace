@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import supabase from '../../lib/supabase';
+import { useLanguage } from '../../context/LanguageContext';
 import AdminMessageModal from '../../components/AdminMessageModal';
 
 interface Msg {
@@ -40,6 +42,9 @@ function mergeMsg(prev: Msg[], next: Msg): Msg[] {
 }
 
 export default function AdminSentMessages() {
+  const { t } = useTranslation('admin');
+  const { direction, lang } = useLanguage();
+  const numLocale = lang === 'ar' ? 'ar-EG' : 'en-US';
   const [messages, setMessages]   = useState<Msg[]>([]);
   const [adminId, setAdminId]     = useState<string | null>(null);
   const [loading, setLoading]     = useState(true);
@@ -96,7 +101,7 @@ export default function AdminSentMessages() {
         .order('created_at', { ascending: true }),
     ]);
 
-    if (e1 || e2) { setError('تعذّر تحميل الرسائل'); setLoading(false); return; }
+    if (e1 || e2) { setError(t('sentMessages.loadError')); setLoading(false); return; }
 
     const all = [...(sent ?? []), ...(recv ?? [])];
     const unique = Array.from(new Map(all.map((m: Msg) => [m.id, m])).values()) as Msg[];
@@ -127,7 +132,7 @@ export default function AdminSentMessages() {
 
     const convs: Conversation[] = Array.from(convMap.entries()).map(([key, msgs]) => {
       const [otherPartyId] = key.split('|');
-      const otherPartyName = nameLookup[otherPartyId] ?? 'مستخدم';
+      const otherPartyName = nameLookup[otherPartyId] ?? t('sentMessages.defaultUser');
       const root           = getRootSubject(msgs[0].subject);
       const unreadCount    = msgs.filter(m => m.recipient_id === adminId && !m.read_at).length;
       const latest         = msgs[msgs.length - 1];
@@ -144,7 +149,7 @@ export default function AdminSentMessages() {
     }).sort((a, b) => +new Date(b.latestAt) - +new Date(a.latestAt));
 
     return { conversations: convs };
-  }, [messages, adminId]);
+  }, [messages, adminId, t]);
 
   const filteredConversations = useMemo(() =>
     search.trim()
@@ -185,7 +190,7 @@ export default function AdminSentMessages() {
       body:           replyBody.trim(),
     });
     if (err) {
-      setReplyError('تعذّر إرسال الرد');
+      setReplyError(t('sentMessages.replyError'));
       setReplySending(false);
       return;
     }
@@ -215,7 +220,7 @@ export default function AdminSentMessages() {
   );
 
   return (
-    <div dir="rtl" style={{ fontFamily: "'Tajawal', sans-serif" }} className="text-[#0F2B4E]">
+    <div dir={direction} style={{ fontFamily: "'Tajawal', sans-serif" }} className="text-[#0F2B4E]">
 
       {/* Compose modal */}
       {selectedRecipient && (
@@ -229,10 +234,10 @@ export default function AdminSentMessages() {
       {/* ── Header ── */}
       <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
         <div className="flex items-center gap-2.5">
-          <h2 className="text-lg font-extrabold m-0">الرسائل</h2>
+          <h2 className="text-lg font-extrabold m-0">{t('sentMessages.title')}</h2>
           {totalUnread > 0 && (
             <span className="bg-red-500 text-white rounded-full px-2.5 py-0.5 text-xs font-bold">
-              {totalUnread} جديد
+              {t('sentMessages.newCount', { count: totalUnread })}
             </span>
           )}
         </div>
@@ -242,7 +247,7 @@ export default function AdminSentMessages() {
             disabled={loading}
             className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-[#0F2B4E] text-xs font-medium hover:bg-slate-50 transition-colors disabled:opacity-50 cursor-pointer"
           >
-            ↻ تحديث
+            ↻ {t('sentMessages.refresh')}
           </button>
           <button
             onClick={() => {
@@ -258,7 +263,7 @@ export default function AdminSentMessages() {
             <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
               <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
-            إنشاء رسالة جديدة
+            {t('sentMessages.newMessage')}
           </button>
         </div>
       </div>
@@ -267,7 +272,7 @@ export default function AdminSentMessages() {
       {showCompose && !selectedRecipient && (
         <div className="bg-white border border-slate-200 rounded-xl p-5 mb-5 shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold m-0">اختر المستلم</h3>
+            <h3 className="text-sm font-bold m-0">{t('sentMessages.chooseRecipient')}</h3>
             <button
               onClick={() => setShowCompose(false)}
               className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 text-lg leading-none transition-all"
@@ -281,7 +286,7 @@ export default function AdminSentMessages() {
               onChange={e => { setRecipientSearch(e.target.value); setShowDropdown(true); }}
               onFocus={() => setShowDropdown(true)}
               onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
-              placeholder="ابحث عن مندوب أو متجر..."
+              placeholder={t('sentMessages.recipientSearchPlaceholder')}
               autoFocus
               className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-[#0F2B4E] placeholder:text-slate-400 focus:outline-none focus:border-[#136540] focus:ring-2 focus:ring-[#136540]/10 transition-all"
               style={{ fontFamily: 'inherit' }}
@@ -289,9 +294,9 @@ export default function AdminSentMessages() {
             {showDropdown && (
               <div className="absolute top-full right-0 left-0 z-50 bg-white border border-slate-200 rounded-xl mt-1.5 max-h-56 overflow-y-auto shadow-lg shadow-slate-900/10">
                 {recipientsLoading ? (
-                  <div className="px-4 py-3 text-slate-400 text-sm">جاري التحميل...</div>
+                  <div className="px-4 py-3 text-slate-400 text-sm">{t('sentMessages.loading')}</div>
                 ) : filteredRecipients.length === 0 ? (
-                  <div className="px-4 py-3 text-slate-400 text-sm">لا توجد نتائج</div>
+                  <div className="px-4 py-3 text-slate-400 text-sm">{t('sentMessages.noResults')}</div>
                 ) : filteredRecipients.map((r, i) => (
                   <div
                     key={r.id}
@@ -309,7 +314,7 @@ export default function AdminSentMessages() {
                     </div>
                     <div>
                       <div className="text-sm font-semibold text-[#0F2B4E]">{r.name}</div>
-                      <div className="text-xs text-slate-400">{r.type === 'courier' ? 'مندوب توصيل' : 'تاجر / متجر'}</div>
+                      <div className="text-xs text-slate-400">{r.type === 'courier' ? t('sentMessages.courierType') : t('sentMessages.shopType')}</div>
                     </div>
                   </div>
                 ))}
@@ -326,14 +331,14 @@ export default function AdminSentMessages() {
       )}
 
       {loading ? (
-        <div className="text-center py-12 text-slate-400 text-sm">جاري التحميل...</div>
+        <div className="text-center py-12 text-slate-400 text-sm">{t('sentMessages.loading')}</div>
       ) : conversations.length === 0 ? (
         <div className="text-center py-16 text-slate-400">
           <svg width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="#CBD5E1" strokeWidth="1.5" className="mx-auto mb-3 block">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
           </svg>
-          <p className="text-sm font-semibold m-0">لا توجد محادثات بعد</p>
-          <p className="text-xs text-slate-300 mt-1.5 m-0">اضغط "إنشاء رسالة جديدة" لبدء محادثة</p>
+          <p className="text-sm font-semibold m-0">{t('sentMessages.noConversations')}</p>
+          <p className="text-xs text-slate-300 mt-1.5 m-0">{t('sentMessages.noConversationsHint')}</p>
         </div>
       ) : (
         <div className={`flex flex-col gap-4 ${activeConv ? 'md:grid md:grid-cols-[290px_1fr]' : ''}`}>
@@ -345,14 +350,14 @@ export default function AdminSentMessages() {
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="بحث في المحادثات..."
+                placeholder={t('sentMessages.conversationSearchPlaceholder')}
                 className="w-full px-4 py-3.5 rounded-xl border border-slate-200 text-sm text-[#0F2B4E] placeholder:text-slate-400 focus:outline-none focus:border-[#136540] focus:ring-2 focus:ring-[#136540]/10 transition-all"
                 style={{ fontFamily: 'inherit' }}
               />
             </div>
 
             {filteredConversations.length === 0 ? (
-              <div className="px-4 py-6 text-center text-slate-400 text-xs">لا توجد نتائج</div>
+              <div className="px-4 py-6 text-center text-slate-400 text-xs">{t('sentMessages.noResults')}</div>
             ) : filteredConversations.map((c, i) => (
               <div
                 key={c.key}
@@ -384,7 +389,7 @@ export default function AdminSentMessages() {
                           </span>
                         )}
                         <span className="text-[10px] text-slate-300">
-                          {new Date(c.latestAt).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' })}
+                          {new Date(c.latestAt).toLocaleDateString(numLocale, { month: 'short', day: 'numeric' })}
                         </span>
                       </div>
                     </div>
@@ -407,7 +412,7 @@ export default function AdminSentMessages() {
                   <button
                     onClick={() => setActiveConv(null)}
                     className="md:hidden w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:bg-slate-100 transition-colors ml-1"
-                    aria-label="رجوع"
+                    aria-label={t('sentMessages.back')}
                   >
                     <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
                       <path d="M9 18l6-6-6-6"/>
@@ -446,7 +451,7 @@ export default function AdminSentMessages() {
                         'w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center font-extrabold text-[11px] text-white',
                         isMine ? 'bg-[#0F2B4E]' : 'bg-slate-500',
                       ].join(' ')}>
-                        {isMine ? 'أ' : conv.otherPartyName.charAt(0)}
+                        {isMine ? t('sentMessages.adminInitial') : conv.otherPartyName.charAt(0)}
                       </div>
                       <div className="max-w-[68%]">
                         <div
@@ -458,11 +463,11 @@ export default function AdminSentMessages() {
                           ].join(' ')}
                           style={{ borderRadius: isMine ? '0.25rem 1rem 1rem 1rem' : '1rem 0.25rem 1rem 1rem' }}
                         >
-                          {msg.body ?? <em className="opacity-60">لا يوجد نص</em>}
+                          {msg.body ?? <em className="opacity-60">{t('sentMessages.noText')}</em>}
                         </div>
                         <div className={`flex items-center gap-1 mt-2 ${isMine ? 'justify-start' : 'justify-end'}`}>
                           <span className="text-[10px] text-slate-400">
-                            {new Date(msg.created_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                            {new Date(msg.created_at).toLocaleTimeString(numLocale, { hour: '2-digit', minute: '2-digit' })}
                           </span>
                           {isMine && msg.read_at && (
                             <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="#136540" strokeWidth="2.5">
@@ -488,7 +493,7 @@ export default function AdminSentMessages() {
                     value={replyBody}
                     onChange={e => setReplyBody(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(); } }}
-                    placeholder="اكتب ردّك... (Enter للإرسال، Shift+Enter لسطر جديد)"
+                    placeholder={t('sentMessages.replyPlaceholder')}
                     rows={2}
                     disabled={replySending}
                     className="flex-1 px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-[#0F2B4E] placeholder:text-slate-400 focus:outline-none focus:border-[#136540] focus:ring-2 focus:ring-[#136540]/10 resize-none transition-all disabled:opacity-60 bg-slate-50/60"

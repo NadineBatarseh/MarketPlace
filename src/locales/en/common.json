@@ -1,0 +1,129 @@
+{
+  "nav": {
+    "home": "Home",
+    "stores": "Stores",
+    "categories": "Categories",
+    "offers": "Offers",
+    "orders": "Orders",
+    "cart": "Cart",
+    "favorites": "Favorites"
+  },
+  "account": {
+    "title": "Account",
+    "login": "Log In",
+    "signup": "Create Account",
+    "logout": "Log Out",
+    "changePassword": "Change Password",
+    "profile": "Profile Settings",
+    "dashboard": "Dashboard",
+    "merchantApply": "Apply as Merchant",
+    "deliveryApply": "Apply as Delivery Agent",
+    "adminLogin": "Admin Login"
+  },
+  "roles": {
+    "merchant": "Merchant",
+    "admin": "Admin",
+    "delivery": "Delivery Agent",
+    "customer": "Customer"
+  },
+  "actions": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "search": "Search",
+    "back": "Back",
+    "close": "Close",
+    "submit": "Submit",
+    "loading": "Loading...",
+    "executing": "Processing...",
+    "retry": "Retry",
+    "viewAll": "View All",
+    "seeMore": "See More",
+    "ok": "OK",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "search": {
+    "placeholder": "Search for a product or store...",
+    "label": "Search"
+  },
+  "logo": {
+    "ar": "سوق لينك",
+    "en": "SOUQ LINK"
+  },
+  "missingShop": "Store ID is missing",
+  "language": {
+    "ar": "العربية",
+    "en": "English",
+    "switch": "العربية"
+  },
+  "footer": {
+    "quickLinks": "Quick Links",
+    "customerService": "Customer Service",
+    "help": "Help",
+    "paymentMethods": "Payment Methods",
+    "copyright": "All Rights Reserved © 2026 Souq Link",
+    "aboutLine1": "A platform connecting the best trusted local stores.",
+    "aboutLine2": "A distinctive and secure shopping experience.",
+    "toggleLabel": "Toggle footer",
+    "quickNav": {
+      "home": "Home",
+      "stores": "Stores",
+      "categories": "Categories",
+      "offers": "Offers"
+    },
+    "serviceLinks": ["Contact Us", "FAQ", "Return Policy", "Shipping Policy", "Track Order"],
+    "helpLinks": ["About Souq Link", "Terms & Conditions", "Privacy Policy"]
+  },
+  "changePassword": {
+    "title": "Change Password",
+    "googleUserMessage": "Your account is linked to Google — you cannot change your password here.",
+    "verify": {
+      "subtitle": "Enter your current password to verify your identity",
+      "currentLabel": "Current Password",
+      "currentPlaceholder": "Enter your current password",
+      "verifying": "Verifying...",
+      "submit": "Verify & Continue"
+    },
+    "change": {
+      "title": "New Password",
+      "subtitle": "Enter a new password and confirm it",
+      "newLabel": "New Password",
+      "newPlaceholder": "At least 6 characters",
+      "confirmLabel": "Confirm Password",
+      "confirmPlaceholder": "Re-enter your password",
+      "saving": "Saving...",
+      "submit": "Change Password"
+    },
+    "success": {
+      "title": "Password Changed",
+      "message": "Your password has been changed successfully"
+    },
+    "strength": {
+      "veryWeak": "Very weak",
+      "weak": "Weak",
+      "medium": "Medium",
+      "strong": "Strong"
+    },
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "errors": {
+      "enterCurrent": "Enter your current password",
+      "wrongCurrent": "Current password is incorrect",
+      "tooShort": "Password must be at least 6 characters",
+      "mismatch": "Passwords do not match",
+      "failed": "An error occurred while changing the password, please try again"
+    }
+  },
+  "confirmDialog": {
+    "defaultTitle": "Confirm Action",
+    "defaultConfirm": "Confirm",
+    "defaultCancel": "Cancel",
+    "executing": "Processing...",
+    "irreversible": "This action cannot be undone.",
+    "reversible": "This action can be undone later."
+  }
+}

@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMerchantAuth, MerchantShop } from '../context/MerchantAuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import supabase from '../../lib/supabase';
 import { usePublishReadiness } from '../hooks/usePublishReadiness';
 import MetaCatalogSettingsCard from '../components/MetaCatalogSettingsCard';
@@ -17,6 +19,8 @@ interface Props {
 type SettingsTab = 'basic' | 'social' | 'connected' | 'integrations';
 
 export default function MerchantShopSettings({ onNavigate, highlightIncomplete = false }: Props) {
+  const { t } = useTranslation('merchant');
+  const { direction } = useLanguage();
   const { merchant, updateShopLocally } = useMerchantAuth();
   const shop = merchant!.shop;
   const isCreate = shop === null;
@@ -94,7 +98,7 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
     setPublishError('');
 
     if (!navigator.geolocation) {
-      setPublishError('متصفحك لا يدعم تحديد الموقع — يرجى استخدام متصفح حديث');
+      setPublishError(t('shopSettings.errors.geoNotSupported'));
       setPublishing(false);
       return;
     }
@@ -108,7 +112,7 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
       publishLat = pos.coords.latitude;
       publishLng = pos.coords.longitude;
     } catch {
-      setPublishError('تعذّر الوصول إلى موقعك — يرجى السماح بالوصول للموقع لنشر المتجر');
+      setPublishError(t('shopSettings.errors.geoDenied'));
       setPublishing(false);
       return;
     }
@@ -119,7 +123,7 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
       .eq('shop_id', shop.shop_id);
 
     if (error) {
-      setPublishError('تعذّر نشر المتجر: ' + error.message);
+      setPublishError(t('shopSettings.errors.publishFailed', { message: error.message }));
     } else {
       updateShopLocally({ ...shop, status: 'published', latitude: publishLat, longitude: publishLng });
       setPublishSuccess(true);
@@ -137,7 +141,7 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
 
   const handleSave = async () => {
     if (!name.trim()) {
-      setSaveError('يرجى ملء اسم المتجر');
+      setSaveError(t('shopSettings.errors.fillName'));
       return;
     }
     setSaving(true);
@@ -163,7 +167,7 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
         .from('merchants').select('id').eq('user_id', merchant!.id).single();
 
       if (mErr || !merchantRow) {
-        setSaveError('تعذر العثور على سجل التاجر');
+        setSaveError(t('shopSettings.errors.merchantNotFound'));
         setSaving(false);
         return;
       }
@@ -174,7 +178,7 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
         .select().single();
 
       if (insertErr || !data) {
-        setSaveError('تعذّر إنشاء المتجر: ' + (insertErr?.message ?? 'خطأ غير معروف'));
+        setSaveError(t('shopSettings.errors.createFailed', { message: insertErr?.message ?? t('shopSettings.errors.unknownError') }));
         setSaving(false);
         return;
       }
@@ -210,14 +214,14 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
       .select();
 
     if (updateErr) {
-      setSaveError('تعذّر الحفظ: ' + updateErr.message);
+      setSaveError(t('shopSettings.errors.saveFailed', { message: updateErr.message }));
       setSaving(false);
       return;
     }
 
     const savedRow = rows?.[0];
     if (!savedRow) {
-      setSaveError('تعذّر الحفظ: لا توجد صلاحية لتعديل هذا المتجر — تحقق من إعدادات RLS في Supabase');
+      setSaveError(t('shopSettings.errors.noPermission'));
       setSaving(false);
       return;
     }
@@ -243,9 +247,9 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
   };
 
   return (
-    <div className="mep-root">
+    <div className="mep-root" dir={direction}>
       <div className="mep-top-row">
-        <h1 className="mep-title">{isCreate ? 'إنشاء متجرك' : 'إعدادات المتجر'}</h1>
+        <h1 className="mep-title">{isCreate ? t('shopSettings.title.create') : t('shopSettings.title.edit')}</h1>
 
         {!isCreate && (
           shop?.status === 'published' ? (
@@ -253,7 +257,7 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
               <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
-              منشور
+              {t('shopSettings.publishedBadge')}
             </div>
           ) : (
             <div className="mep-publish-top-wrap">
@@ -264,18 +268,18 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
                 onClick={handlePublish}
                 disabled={publishing}
               >
-                {publishing ? 'جاري النشر...' : 'انشر المتجر'}
+                {publishing ? t('shopSettings.publishTop.publishing') : t('shopSettings.publishTop.publish')}
               </button>
             </div>
           )
         )}
       </div>
 
-      {publishSuccess && <div className="mep-save-success">🎉 تم نشر متجرك بنجاح!</div>}
+      {publishSuccess && <div className="mep-save-success">{t('shopSettings.publishSuccess')}</div>}
 
       {highlightIncomplete && (
         <div className="mep-incomplete-banner">
-          أكمل الحقول المميزة بالبرتقالي لتتمكن من نشر متجرك
+          {t('shopSettings.incompleteBanner')}
         </div>
       )}
 
@@ -289,7 +293,7 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
           onClick={() => setActiveTab('basic')}
         >
           {highlightIncomplete && basicIncomplete && <span className="mep-tab-dot" />}
-          📋 المعلومات الأساسية
+          {t('shopSettings.tabs.basic')}
         </button>
         <button
           type="button"
@@ -297,7 +301,7 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
           onClick={() => setActiveTab('social')}
         >
           {highlightIncomplete && socialMissing && <span className="mep-tab-dot" />}
-          🔗 روابط التواصل الاجتماعي
+          {t('shopSettings.tabs.social')}
         </button>
         {!isCreate && (
           <button
@@ -305,7 +309,7 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
             className={`mep-tab-vertical${activeTab === 'connected' ? ' mep-tab-vertical--active' : ''}`}
             onClick={() => setActiveTab('connected')}
           >
-            🔌 الحسابات المرتبطة
+            {t('shopSettings.tabs.connected')}
           </button>
         )}
         {!isCreate && (
@@ -314,7 +318,7 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
             className={`mep-tab-vertical${activeTab === 'integrations' ? ' mep-tab-vertical--active' : ''}`}
             onClick={() => setActiveTab('integrations')}
           >
-            🧩 التكاملات
+            {t('shopSettings.tabs.integrations')}
           </button>
         )}
       </div>
@@ -324,25 +328,25 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
       {/* ── Basic info (logo + name + location + description) ── */}
       {activeTab === 'basic' && (
         <div className="mep-section">
-          <h2 className="mep-section-title">🖼️ شعار المتجر <Req /></h2>
+          <h2 className="mep-section-title">{t('shopSettings.basic.logoSectionTitle')} <Req /></h2>
           <div className={`mep-logo-area${inc(logoMissing)}`}>
             <div
               className="mep-logo-preview"
               onClick={() => logoInputRef.current?.click()}
-              title="انقر لتغيير الشعار"
+              title={t('shopSettings.basic.logoPreviewTitle')}
             >
               {logoUrl
-                ? <img src={logoUrl} alt="شعار المتجر" />
+                ? <img src={logoUrl} alt={t('shopSettings.basic.logoAlt')} />
                 : <span className="mep-logo-placeholder">🏪</span>
               }
             </div>
             <div>
               <div className="mep-logo-info">
-                اختر صورة بجودة عالية لتمثيل متجرك<br />
-                الصيغ المدعومة: JPG، PNG، WEBP
+                {t('shopSettings.basic.logoInfoLine1')}<br />
+                {t('shopSettings.basic.logoInfoLine2')}
               </div>
               <button type="button" className="mep-logo-btn" onClick={() => logoInputRef.current?.click()}>
-                📁 اختر صورة
+                {t('shopSettings.basic.logoChooseBtn')}
               </button>
             </div>
             <input
@@ -351,27 +355,27 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
               accept="image/*"
               onChange={handleLogoChange}
               className="mep-file-hidden"
-              aria-label="اختر شعار المتجر"
+              aria-label={t('shopSettings.basic.logoInputAriaLabel')}
             />
           </div>
 
-          <h2 className="mep-section-title" style={{ marginTop: '1.75rem' }}>📝 معلومات المتجر</h2>
+          <h2 className="mep-section-title" style={{ marginTop: '1.75rem' }}>{t('shopSettings.basic.infoSectionTitle')}</h2>
           <div className="mep-fields">
 
             <div className={`mep-field${inc(nameMissing)}`}>
-              <label>اسم المتجر <Req /></label>
+              <label>{t('shopSettings.basic.nameLabel')} <Req /></label>
               <input
                 type="text"
                 value={name}
                 onChange={e => setName(e.target.value)}
-                placeholder="أدخل اسم متجرك"
+                placeholder={t('shopSettings.basic.namePlaceholder')}
               />
             </div>
 
             <div className={`mep-field${inc(locationMissing)}`}>
-              <label>المنطقة / المدينة <Req /></label>
+              <label>{t('shopSettings.basic.locationLabel')} <Req /></label>
               <select
-                title="المنطقة / المدينة"
+                title={t('shopSettings.basic.locationSelectTitle')}
                 value={zoneId}
                 onChange={e => {
                   const selected = zones.find(z => z.id === e.target.value);
@@ -380,7 +384,7 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
                 }}
                 className="mep-location-select"
               >
-                <option value="">اختر المنطقة</option>
+                <option value="">{t('shopSettings.basic.locationPlaceholder')}</option>
                 {zones.map(z => (
                   <option key={z.id} value={z.id}>{z.name}</option>
                 ))}
@@ -389,14 +393,14 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
 
             <div className={`mep-field${inc(descMissing)}`}>
               <label>
-                وصف المتجر <Req />
-                <span className="mep-label-hint">(20 حرف على الأقل)</span>
+                {t('shopSettings.basic.descLabel')} <Req />
+                <span className="mep-label-hint">{t('shopSettings.basic.descHint')}</span>
               </label>
               <input
                 type="text"
                 value={description}
                 onChange={e => setDescription(e.target.value)}
-                placeholder="وصف مختصر عن متجرك ومنتجاتك"
+                placeholder={t('shopSettings.basic.descPlaceholder')}
               />
             </div>
 
@@ -408,18 +412,18 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
       {activeTab === 'social' && (
         <div className="mep-section">
           <h2 className="mep-section-title">
-            🔗 روابط التواصل الاجتماعي
+            {t('shopSettings.social.sectionTitle')}
             {highlightIncomplete && socialMissing && (
-              <span className="mep-section-req-note">مطلوب واحد على الأقل</span>
+              <span className="mep-section-req-note">{t('shopSettings.social.requiredNote')}</span>
             )}
           </h2>
           <div className="mep-fields">
 
             <div className="mep-field">
-              <label>واتساب</label>
+              <label>{t('shopSettings.social.whatsappLabel')}</label>
               <div className="mep-whatsapp-split" dir="ltr">
                 <select
-                  title="رمز الدولة"
+                  title={t('shopSettings.social.countryCodeTitle')}
                   value={whatsappCode}
                   onChange={e => setWhatsappCode(e.target.value)}
                   className="mep-whatsapp-code"
@@ -432,7 +436,7 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
                   type="text"
                   value={whatsappLocal}
                   onChange={e => setWhatsappLocal(e.target.value.replace(/\D/g, '').slice(0, 8))}
-                  placeholder="XXXXXXXX"
+                  placeholder={t('shopSettings.social.whatsappPlaceholder')}
                   maxLength={8}
                   className="mep-whatsapp-local"
                   dir="ltr"
@@ -441,23 +445,23 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
             </div>
 
             <div className="mep-field">
-              <label>فيسبوك</label>
+              <label>{t('shopSettings.social.facebookLabel')}</label>
               <input
                 type="text"
                 value={facebook}
                 onChange={e => setFacebook(e.target.value)}
-                placeholder="رابط صفحة الفيسبوك"
+                placeholder={t('shopSettings.social.facebookPlaceholder')}
                 dir="ltr"
               />
             </div>
 
             <div className="mep-field">
-              <label>إنستجرام</label>
+              <label>{t('shopSettings.social.instagramLabel')}</label>
               <input
                 type="text"
                 value={instagram}
                 onChange={e => setInstagram(e.target.value)}
-                placeholder="@username أو رابط الحساب"
+                placeholder={t('shopSettings.social.instagramPlaceholder')}
                 dir="ltr"
               />
             </div>
@@ -469,7 +473,7 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
       {/* ── Connected Accounts ── */}
       {!isCreate && activeTab === 'connected' && (
         <div className="mep-section">
-          <h2 className="mep-section-title">🔌 الحسابات المرتبطة</h2>
+          <h2 className="mep-section-title">{t('shopSettings.connected.sectionTitle')}</h2>
           <div className="ca-grid">
 
             <div className="ca-card">
@@ -482,20 +486,20 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
                   </svg>
                 </div>
                 <div>
-                  <div className="ca-card-title">Instagram Business</div>
+                  <div className="ca-card-title">{t('shopSettings.connected.instagramBusiness')}</div>
                   {instagram.trim()
-                    ? <div className="ca-badge ca-badge-connected">● مرتبط</div>
-                    : <div className="ca-badge ca-badge-disconnected">○ غير مرتبط</div>
+                    ? <div className="ca-badge ca-badge-connected">{t('shopSettings.connected.connected')}</div>
+                    : <div className="ca-badge ca-badge-disconnected">{t('shopSettings.connected.disconnected')}</div>
                   }
                 </div>
               </div>
               {instagram.trim()
-                ? <p className="ca-card-desc">الحساب: <strong dir="ltr">{instagram}</strong></p>
-                : <p className="ca-card-desc">أضف حساب إنستجرام في قسم روابط التواصل الاجتماعي أعلاه لتفعيل استيراد المنتجات.</p>
+                ? <p className="ca-card-desc">{t('shopSettings.connected.accountLabel')} <strong dir="ltr">{instagram}</strong></p>
+                : <p className="ca-card-desc">{t('shopSettings.connected.addAccountHint')}</p>
               }
               <div className="ca-card-actions">
                 <button type="button" className="ca-btn ca-btn-secondary" onClick={() => onNavigate?.('drafts')}>
-                  عرض المنتجات المسودة
+                  {t('shopSettings.connected.viewDraftProducts')}
                 </button>
               </div>
             </div>
@@ -507,20 +511,20 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
       {/* ── Integrations ── */}
       {!isCreate && activeTab === 'integrations' && (
         <div className="mep-section">
-          <h2 className="mep-section-title">🧩 التكاملات</h2>
+          <h2 className="mep-section-title">{t('shopSettings.integrations.sectionTitle')}</h2>
           <MetaCatalogSettingsCard />
         </div>
       )}
 
       {saveSuccess && (
         <div className="mep-save-success">
-          {isCreate ? '🚀 تم إنشاء متجرك بنجاح!' : '✅ تم حفظ إعدادات المتجر بنجاح!'}
+          {isCreate ? t('shopSettings.save.successCreate') : t('shopSettings.save.successUpdate')}
         </div>
       )}
       {saveError && <div className="md-page-error">{saveError}</div>}
 
       <button type="button" className="mep-save-btn" onClick={handleSave} disabled={saving}>
-        {saving ? 'جاري الحفظ...' : isCreate ? '🚀 إنشاء المتجر' : '💾 حفظ الإعدادات'}
+        {saving ? t('shopSettings.save.saving') : isCreate ? t('shopSettings.save.btnCreate') : t('shopSettings.save.btnUpdate')}
       </button>
 
       </div>
@@ -529,7 +533,7 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
       {showMissingAlert && (
         <div className="mep-alert-overlay" onClick={() => setShowMissingAlert(false)}>
           <div className="mep-alert-box" onClick={e => e.stopPropagation()}>
-            <h3 className="mep-alert-title">أكمل هذه الخطوات لنشر متجرك</h3>
+            <h3 className="mep-alert-title">{t('shopSettings.alert.title')}</h3>
             <ul className="mep-alert-list">
               {checks.filter(c => !c.passed).map(c => (
                 <li key={c.id}>
@@ -537,9 +541,9 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
                 </li>
               ))}
             </ul>
-            <p className="mep-alert-hint">احفظ الإعدادات أولاً ثم اضغط «انشر المتجر»</p>
+            <p className="mep-alert-hint">{t('shopSettings.alert.hint')}</p>
             <button type="button" className="mep-alert-close-btn" onClick={() => setShowMissingAlert(false)}>
-              حسناً، سأكملها
+              {t('shopSettings.alert.closeBtn')}
             </button>
           </div>
         </div>

@@ -1,0 +1,12 @@
+{
+  "generic": "Something went wrong, please try again",
+  "network": "Network connection error",
+  "unauthorized": "You are not authorized to access this",
+  "notFound": "Page not found",
+  "serverError": "Server error",
+  "requiredField": "This field is required",
+  "invalidEmail": "Invalid email address",
+  "passwordMismatch": "Passwords do not match",
+  "tooShort": "Value is too short",
+  "tooLong": "Value is too long"
+}

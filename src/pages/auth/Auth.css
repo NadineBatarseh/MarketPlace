@@ -102,7 +102,7 @@
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--auth-text);
-  text-align: right;
+  text-align: start;
   transition: all 0.2s;
   width: 100%;
 }
@@ -144,7 +144,7 @@
 
 .auth-required-star {
   color: #dc2626;
-  margin-right: 3px;
+  margin-inline-end: 3px;
   font-size: 0.9rem;
   line-height: 1;
 }
@@ -158,7 +158,6 @@
   font-size: 0.9rem;
   background: #fafaf9;
   color: var(--auth-text);
-  direction: rtl;
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
   font-family: inherit;
@@ -194,10 +193,9 @@
   font-size: 0.9rem;
   background: #fafaf9;
   color: var(--auth-text);
-  direction: rtl;
   cursor: pointer;
   font-family: inherit;
-  text-align: right;
+  text-align: start;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
@@ -215,15 +213,14 @@
 .auth-custom-select-arrow {
   font-size: 0.65rem;
   color: var(--auth-muted);
-  margin-right: 8px;
+  margin-inline-end: 8px;
   flex-shrink: 0;
 }
 
 .auth-custom-select-list {
   position: absolute;
   top: calc(100% + 4px);
-  right: 0;
-  left: 0;
+  inset-inline: 0;
   background: var(--auth-white);
   border: 1.5px solid var(--auth-border);
   border-radius: 10px;
@@ -234,7 +231,6 @@
   list-style: none;
   margin: 0;
   padding: 4px 0;
-  direction: rtl;
 }
 
 .auth-custom-select-option {
@@ -271,12 +267,12 @@
 
 .auth-input-wrap input {
   width: 100%;
-  padding-left: 40px;
+  padding-inline-end: 40px;
 }
 
 .auth-eye {
   position: absolute;
-  left: 12px;
+  inset-inline-end: 12px;
   background: none;
   border: none;
   cursor: pointer;
@@ -408,7 +404,7 @@
 .psb-label {
   font-size: 0.78rem;
   font-weight: 700;
-  text-align: right;
+  text-align: end;
 }
 
 .psb-hint {

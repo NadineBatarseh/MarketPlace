@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMerchantAuth } from '../context/MerchantAuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import supabase from '../../lib/supabase';
 
 interface Stats {
@@ -16,15 +18,17 @@ interface RecentOrder {
   createdAt: string;
 }
 
-const STATUS_LABEL: Record<string, { label: string; color: string }> = {
-  pending:    { label: 'تحضير',     color: '#f59e0b' },
-  delivering: { label: 'الشحن',     color: '#0ea5e9' },
-  completed:  { label: 'تم التسليم', color: '#16a34a' },
+const STATUS_COLOR: Record<string, string> = {
+  pending: '#f59e0b',
+  delivering: '#0ea5e9',
+  completed: '#16a34a',
 };
 
 const fmt = (id: number) => `ORD-${String(id).padStart(3, '0')}`;
 
 export default function MerchantHome({ onNavigate }: { onNavigate?: (page: string, highlight?: boolean) => void }) {
+  const { t } = useTranslation('merchant');
+  const { lang, direction } = useLanguage();
   const { merchant } = useMerchantAuth();
   const [stats, setStats] = useState<Stats>({ unpaidTotal: 0, accountBalance: 0, visitors: 0, newOrders: 0 });
   const [orders, setOrders] = useState<RecentOrder[]>([]);
@@ -89,7 +93,7 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
 
       setStats({ unpaidTotal, accountBalance, visitors: visitorCount ?? 0, newOrders });
     } catch (err) {
-      setError('تعذّر تحميل البيانات — تحقق من الاتصال');
+      setError(t('home.loadError'));
       console.error(err);
     }
     setLoading(false);
@@ -102,13 +106,14 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
   });
 
   if (loading) {
-    return <div className="mh-root"><div className="md-page-loading">جاري تحميل البيانات...</div></div>;
+    return <div className="mh-root" dir={direction}><div className="md-page-loading">{t('home.loadingData')}</div></div>;
   }
 
   const isPending = !merchant?.shop?.status || merchant.shop.status === 'pending';
+  const numLocale = lang === 'ar' ? 'ar-EG' : 'en-US';
 
   return (
-    <div className="mh-root">
+    <div className="mh-root" dir={direction}>
       {error && <div className="md-page-error md-page-error--spaced">{error}</div>}
 
       {/* ── Activation banner ── */}
@@ -116,15 +121,15 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
         <div className="mh-activation-banner">
           <div className="mh-activation-icon">🚀</div>
           <div className="mh-activation-text">
-            <strong>متجرك غير منشور بعد</strong>
-            <span>أكمل إعداد ملفك واضغط "انشر المتجر" لتظهر للعملاء</span>
+            <strong>{t('home.activationBannerTitle')}</strong>
+            <span>{t('home.activationBannerText')}</span>
           </div>
           <button
             type="button"
             className="mh-activation-btn"
             onClick={() => onNavigate?.('shopSettings', true)}
           >
-            إكمال الإعداد
+            {t('home.completeSetup')}
             <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
               <polyline points="15 18 9 12 15 6" />
             </svg>
@@ -136,7 +141,7 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
       <div className="mh-stats">
         <div className="mh-stat-card mh-card-green">
           <div className="mh-card-top">
-            <span className="mh-card-label">زوار المنصة</span>
+            <span className="mh-card-label">{t('home.statVisitors')}</span>
             <div className="mh-card-icon">
               <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -145,13 +150,13 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
               </svg>
             </div>
           </div>
-          <div className="mh-card-value">{stats.visitors.toLocaleString('ar-EG')}</div>
-          <div className="mh-card-sub">اليوم</div>
+          <div className="mh-card-value">{stats.visitors.toLocaleString(numLocale)}</div>
+          <div className="mh-card-sub">{t('home.today')}</div>
         </div>
 
         <div className="mh-stat-card mh-card-blue">
           <div className="mh-card-top">
-            <span className="mh-card-label">طلبات جديدة</span>
+            <span className="mh-card-label">{t('home.statNewOrders')}</span>
             <div className="mh-card-icon">
               <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                 <path d="M9 17H5a2 2 0 0 0-2 2v0a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v0a2 2 0 0 0-2-2h-4" />
@@ -159,13 +164,13 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
               </svg>
             </div>
           </div>
-          <div className="mh-card-value">{stats.newOrders.toLocaleString('ar-EG')}</div>
-          <div className="mh-card-sub">اليوم</div>
+          <div className="mh-card-value">{stats.newOrders.toLocaleString(numLocale)}</div>
+          <div className="mh-card-sub">{t('home.today')}</div>
         </div>
 
         <div className="mh-stat-card mh-card-amber">
           <div className="mh-card-top">
-            <span className="mh-card-label">رصيد الحساب</span>
+            <span className="mh-card-label">{t('home.statAccountBalance')}</span>
             <div className="mh-card-icon">
               <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                 <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
@@ -174,13 +179,13 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
               </svg>
             </div>
           </div>
-          <div className="mh-card-value">{stats.accountBalance.toLocaleString('ar-EG')}</div>
+          <div className="mh-card-value">{stats.accountBalance.toLocaleString(numLocale)}</div>
           <div className="mh-card-sub">₪</div>
         </div>
 
         <div className="mh-stat-card mh-card-pink">
           <div className="mh-card-top">
-            <span className="mh-card-label">الفواتير غير المدفوعة</span>
+            <span className="mh-card-label">{t('home.statUnpaidInvoices')}</span>
             <div className="mh-card-icon">
               <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -189,8 +194,8 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
               </svg>
             </div>
           </div>
-          <div className="mh-card-value">{stats.unpaidTotal.toLocaleString('ar-EG')}</div>
-          <div className="mh-card-sub">إجمالي المبلغ</div>
+          <div className="mh-card-value">{stats.unpaidTotal.toLocaleString(numLocale)}</div>
+          <div className="mh-card-sub">{t('home.totalAmount')}</div>
         </div>
       </div>
 
@@ -201,15 +206,15 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
             className="mh-status-select"
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
-            title="تصفية حسب الحالة"
+            title={t('home.filterByStatus')}
           >
-            <option value="all">كل الحالات</option>
-            <option value="pending">تحضير</option>
-            <option value="delivering">الشحن</option>
-            <option value="completed">تم التسليم</option>
-            <option value="cancelled">ملغي</option>
+            <option value="all">{t('home.allStatuses')}</option>
+            <option value="pending">{t('orderStatus.pending')}</option>
+            <option value="delivering">{t('orderStatus.delivering')}</option>
+            <option value="completed">{t('orderStatus.completed')}</option>
+            <option value="cancelled">{t('orderStatus.cancelled')}</option>
           </select>
-          <h2 className="mh-orders-title">الطلبات النشطة</h2>
+          <h2 className="mh-orders-title">{t('home.activeOrdersTitle')}</h2>
         </div>
 
         <div className="mh-search-wrap">
@@ -218,7 +223,7 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
           </svg>
           <input
             type="text"
-            placeholder="بحث برقم الطلب..."
+            placeholder={t('home.searchByOrderNumber')}
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="mh-search-input"
@@ -226,28 +231,29 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
         </div>
 
         {filtered.length === 0 ? (
-          <div className="mh-orders-empty">لا توجد طلبات</div>
+          <div className="mh-orders-empty">{t('home.noOrders')}</div>
         ) : (
           <div className="mh-table-wrap">
             <table className="mh-table">
               <thead>
                 <tr>
-                  <th>رقم الطلب</th>
-                  <th>الحالة</th>
-                  <th>الإجمالي</th>
-                  <th>التاريخ</th>
+                  <th>{t('home.colOrderNumber')}</th>
+                  <th>{t('home.colStatus')}</th>
+                  <th>{t('home.colTotal')}</th>
+                  <th>{t('home.colDate')}</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map(order => {
-                  const s = STATUS_LABEL[order.status] ?? { label: order.status, color: '#6b7280' };
-                  const date = new Date(order.createdAt).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' });
+                  const color = STATUS_COLOR[order.status] ?? '#6b7280';
+                  const label = STATUS_COLOR[order.status] ? t(`orderStatus.${order.status}`) : order.status;
+                  const date = new Date(order.createdAt).toLocaleDateString(numLocale, { month: 'short', day: 'numeric' });
                   return (
                     <tr key={order.id}>
                       <td className="mh-td-id">{fmt(order.id)}</td>
                       <td>
-                        <span className="mh-badge" style={{ background: `${s.color}18`, color: s.color, borderColor: `${s.color}30` }}>
-                          {s.label}
+                        <span className="mh-badge" style={{ background: `${color}18`, color: color, borderColor: `${color}30` }}>
+                          {label}
                         </span>
                       </td>
                       <td className="mh-td-total">₪{order.total.toLocaleString()}</td>

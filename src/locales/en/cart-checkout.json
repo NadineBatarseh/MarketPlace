@@ -1,0 +1,246 @@
+{
+  "cart": {
+    "title": "Shopping Cart",
+    "empty": {
+      "title": "Your cart is empty",
+      "subtitle": "You haven't added any products yet",
+      "browse": "Browse Products"
+    },
+    "columns": {
+      "product": "Product",
+      "price": "Price",
+      "qty": "Qty",
+      "total": "Total"
+    },
+    "summary": {
+      "title": "Order Summary",
+      "itemCount": "Items",
+      "itemUnit": "item(s)",
+      "subtotal": "Subtotal",
+      "shipping": "Shipping",
+      "tax": "Tax (10%)",
+      "couponDiscount": "Coupon ({{code}})",
+      "total": "Total",
+      "checkout": "Proceed to Checkout →"
+    },
+    "coupon": {
+      "placeholder": "Enter discount code...",
+      "apply": "Apply",
+      "invalid": "Invalid coupon code",
+      "success": "✓ Coupon applied successfully"
+    },
+    "actions": {
+      "clear": "Clear Cart"
+    },
+    "item": {
+      "deleted": "This product was removed by the merchant — it cannot be purchased"
+    },
+    "confirm": {
+      "removeItem": "Are you sure you want to remove \"{{name}}\" from your cart?",
+      "clearCart": "Are you sure you want to remove all items from your cart?",
+      "delete": "Remove",
+      "clearAll": "Clear All",
+      "cancel": "Cancel"
+    }
+  },
+  "favorites": {
+    "title": "Favorites",
+    "empty": {
+      "title": "Your favorites list is empty",
+      "subtitle": "You haven't added any products to your favorites yet",
+      "browse": "Browse Products"
+    },
+    "columns": {
+      "product": "Product",
+      "price": "Price",
+      "dateAdded": "Date Added",
+      "stock": "Stock",
+      "action": "Action"
+    },
+    "stock": {
+      "inStock": "In Stock",
+      "outOfStock": "Out of Stock"
+    },
+    "actions": {
+      "addAllToCart": "Add All to Cart",
+      "clear": "Clear Favorites",
+      "addToCart": "Add to Cart",
+      "added": "✓ Added to Cart"
+    },
+    "confirm": {
+      "removeItem": "Are you sure you want to remove \"{{name}}\" from your favorites?",
+      "clearAll": "Are you sure you want to clear all items from your favorites?",
+      "delete": "Remove",
+      "clearAllBtn": "Clear All",
+      "cancel": "Cancel"
+    }
+  },
+  "checkout": {
+    "title": "Checkout",
+    "breadcrumb": {
+      "home": "Home",
+      "cart": "Cart",
+      "current": "Checkout"
+    },
+    "contact": {
+      "title": "Contact Information",
+      "firstName": "First Name",
+      "firstNamePlaceholder": "Enter first name",
+      "lastName": "Last Name",
+      "lastNamePlaceholder": "Enter last name",
+      "email": "Email Address",
+      "phone": "Phone Number",
+      "countryCode": "Country code"
+    },
+    "delivery": {
+      "title": "Delivery Address",
+      "savedAddress": "Saved Address",
+      "changeAddress": "Change Address",
+      "useSavedAddress": "Use Saved Address",
+      "zone": "Zone",
+      "zoneSelect": "Select zone",
+      "mapLocation": "Location on Map",
+      "outsideZone": "The selected location is outside the chosen zone. Please change the zone or move the pin inside it.",
+      "instructions": "Delivery Instructions",
+      "instructionsPlaceholder": "Street name, building number, or any description to help the courier find you easily",
+      "saveNote": "This information will be saved to your profile for future orders"
+    },
+    "payment": {
+      "title": "Payment",
+      "paytabsLabel": "PayTabs Test Payment",
+      "paytabsNote": "سيتم تحويلك إلى صفحة الدفع الآمنة الخاصة بـ PayTabs لإتمام عملية الدفع (وضع الاختبار).",
+      "paytabsNoteEn": "You will be redirected to the secure PayTabs page to complete your payment (test mode)."
+    },
+    "summary": {
+      "title": "Order Summary",
+      "empty": "Cart is empty",
+      "deletedWarning": "Some items in your cart are no longer available and will be excluded from your order",
+      "deletedByMerchant": "This product was removed by the merchant",
+      "removeItem": "Remove",
+      "decrement": "Decrease",
+      "increment": "Increase",
+      "subtotal": "Subtotal",
+      "delivery": "Delivery Cost",
+      "discount": "Discount",
+      "total": "Total"
+    },
+    "actions": {
+      "pay": "Pay Now",
+      "paying": "Processing…",
+      "secure": "Secure & encrypted payment — your data is protected"
+    },
+    "errors": {
+      "selectPayment": "Please select a payment method",
+      "noItems": "No available products to purchase in your cart",
+      "nameRequired": "Please enter your first and last name",
+      "emailInvalid": "Please enter a valid email address (e.g. example@email.com)",
+      "phoneInvalid": "Invalid phone number — enter 8 digits after 05",
+      "locationRequired": "Please select a delivery zone and pin your location on the map",
+      "pinOutsideZone": "The selected location is outside the chosen zone. Please change the zone or adjust your location.",
+      "instructionsRequired": "Please add delivery instructions to help the courier find you",
+      "orderFailed": "Failed to create order",
+      "paymentFailed": "Could not start PayTabs payment",
+      "genericError": "An error occurred while processing your payment",
+      "noNumbers": "Numbers are not allowed in this field",
+      "noArabic": "Arabic characters are not allowed in the email field",
+      "emailFormat": "Invalid email — example: example@email.com",
+      "digitsOnly": "Digits only",
+      "maxDigits": "Maximum 8 digits"
+    }
+  },
+  "paytabs": {
+    "loading": {
+      "title": "Verifying payment status…",
+      "subtitle": "Please wait a moment."
+    },
+    "paid": {
+      "title": "Payment Successful 🎉",
+      "subtitle": "Your order has been confirmed and we'll start preparing it.",
+      "trackOrder": "Track Order",
+      "continueShopping": "Continue Shopping"
+    },
+    "failed": {
+      "title": "Payment Incomplete",
+      "defaultMsg": "Payment was not completed. You can try again from your cart.",
+      "viewOrder": "View Order",
+      "backToCart": "Back to Cart"
+    },
+    "error": {
+      "title": "Could Not Verify Payment",
+      "myOrders": "My Orders",
+      "noOrderId": "Could not identify the order. Please check your orders page.",
+      "verifyFailed": "Could not verify payment status.",
+      "pending": "Payment not confirmed yet. If your card was charged, the order will appear as paid shortly.",
+      "generic": "An error occurred while verifying the payment."
+    }
+  },
+  "profile": {
+    "title": "Settings",
+    "loading": "Loading your data…",
+    "tabs": {
+      "account": "Account",
+      "accountHint": "Name & contact info",
+      "address": "Address Book",
+      "addressHint": "Delivery address & location",
+      "security": "Security",
+      "securityHint": "Password & login",
+      "preferences": "Preferences",
+      "preferencesHint": "Notifications & links",
+      "orders": "My Orders",
+      "favorites": "Favorites"
+    },
+    "account": {
+      "sectionTitle": "Basic Information",
+      "sectionDesc": "Your personal details and contact method.",
+      "firstName": "First Name",
+      "firstNamePlaceholder": "Enter first name",
+      "lastName": "Last Name",
+      "lastNamePlaceholder": "Enter last name",
+      "email": "Email Address",
+      "emailNote": "Linked to your account and cannot be changed here",
+      "phone": "Phone Number",
+      "countryCode": "Country code"
+    },
+    "address": {
+      "sectionTitle": "Delivery Address",
+      "sectionDesc": "Select your zone and pin your precise location on the map, then add instructions to help the courier reach you.",
+      "zone": "Zone",
+      "zoneSelect": "Select zone",
+      "mapTitle": "📍 Location on Map",
+      "removePin": "Remove Location",
+      "instructions": "Additional Delivery Instructions",
+      "instructionsPlaceholder": "Street name, building number, floor, apartment number, nearest landmark, or any instructions for the courier."
+    },
+    "security": {
+      "sectionTitle": "Account & Security",
+      "sectionDesc": "Keep your account secure.",
+      "password": "Password",
+      "passwordSub": "It is recommended to change it periodically",
+      "changePassword": "🔑 Change Password"
+    },
+    "preferences": {
+      "sectionTitle": "Account Preferences",
+      "sectionDesc": "Manage notification and communication settings",
+      "orderUpdates": "Order Updates",
+      "orderUpdatesSub": "Receive order status notifications via the app and email",
+      "promos": "Offers & Discounts",
+      "promosSub": "Receive promotional offers from local stores"
+    },
+    "savebar": {
+      "unsaved": "You have unsaved changes",
+      "discard": "Discard",
+      "save": "Save Changes",
+      "saving": "Saving…",
+      "success": "✓ Changes saved successfully",
+      "ariaLabel": "Save changes"
+    },
+    "errors": {
+      "phoneInvalid": "Invalid phone number — enter 8 digits after 05",
+      "loadError": "Error loading data",
+      "saveError": "An error occurred while saving",
+      "noNumbers": "Numbers are not allowed in this field",
+      "digitsOnly": "Digits only",
+      "maxDigits": "Maximum 8 digits"
+    }
+  }
+}

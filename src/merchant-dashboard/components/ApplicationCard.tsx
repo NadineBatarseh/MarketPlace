@@ -1,13 +1,15 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../../context/LanguageContext';
 import supabase from '../../lib/supabase';
 
 export type AppStatus = 'pending' | 'approved' | 'rejected';
 export type AppKind = 'merchant' | 'delivery';
 
-const STATUS_TONES: Record<AppStatus, { bg: string; text: string; border: string; dot: string; label: string }> = {
-  pending:  { bg: '#FEF3C7', text: '#92400E', border: '#FCD34D', dot: '#F59E0B', label: 'قيد المراجعة' },
-  approved: { bg: '#DCFCE7', text: '#166534', border: '#86EFAC', dot: '#16A34A', label: 'موافق عليها' },
-  rejected: { bg: '#FEE2E2', text: '#991B1B', border: '#FCA5A5', dot: '#DC2626', label: 'مرفوضة' },
+const STATUS_TONES: Record<AppStatus, { bg: string; text: string; border: string; dot: string }> = {
+  pending:  { bg: '#FEF3C7', text: '#92400E', border: '#FCD34D', dot: '#F59E0B' },
+  approved: { bg: '#DCFCE7', text: '#166534', border: '#86EFAC', dot: '#16A34A' },
+  rejected: { bg: '#FEE2E2', text: '#991B1B', border: '#FCA5A5', dot: '#DC2626' },
 };
 
 function getInitials(name: string): string {
@@ -162,6 +164,7 @@ export const AppIcons = {
    Status pill
    ──────────────────────────────────────────────── */
 export function StatusPill({ status }: { status: AppStatus }) {
+  const { t } = useTranslation('merchant');
   const cfg = STATUS_TONES[status];
   return (
     <span
@@ -169,7 +172,7 @@ export function StatusPill({ status }: { status: AppStatus }) {
       style={{ background: cfg.bg, color: cfg.text, borderColor: cfg.border }}
     >
       <span className="ad-app-status-dot" style={{ background: cfg.dot }} />
-      {cfg.label}
+      {t(`applicationCard.status.${status}`)}
     </span>
   );
 }
@@ -193,6 +196,7 @@ interface MediaPreviewProps extends MediaSpec {
 }
 
 export function MediaPreview({ url, bucket, path, label, variant = 'doc', onLightbox }: MediaPreviewProps) {
+  const { t } = useTranslation('merchant');
   const [resolved, setResolved] = useState<string | null>(url ?? null);
   const [failed, setFailed] = useState(false);
   const target = path ?? url ?? '';
@@ -234,7 +238,7 @@ export function MediaPreview({ url, bucket, path, label, variant = 'doc', onLigh
               <line x1="12" y1="8" x2="12" y2="12" />
               <line x1="12" y1="16" x2="12.01" y2="16" />
             </svg>
-            <span>تعذّر التحميل</span>
+            <span>{t('applicationCard.mediaLoadFailed')}</span>
           </div>
         ) : isPdf && resolved ? (
           <div className="ad-app-media-pdf">
@@ -337,6 +341,8 @@ export interface ApplicationCardProps {
 }
 
 export default function ApplicationCard(props: ApplicationCardProps) {
+  const { t } = useTranslation('merchant');
+  const { lang } = useLanguage();
   const {
     applicantName, ownerName, typeChip, appKind, status,
     location, phone, email,
@@ -348,10 +354,11 @@ export default function ApplicationCard(props: ApplicationCardProps) {
   const [expanded, setExpanded] = useState(false);
   const toggle = () => setExpanded(v => !v);
 
-  const formattedDate = new Date(createdAt).toLocaleDateString('ar-EG', {
+  const dateLocale = lang === 'ar' ? 'ar-EG' : 'en-US';
+  const formattedDate = new Date(createdAt).toLocaleDateString(dateLocale, {
     year: 'numeric', month: 'long', day: 'numeric',
   });
-  const formattedTime = new Date(createdAt).toLocaleTimeString('ar-EG', {
+  const formattedTime = new Date(createdAt).toLocaleTimeString(dateLocale, {
     hour: '2-digit', minute: '2-digit',
   });
 
@@ -381,49 +388,49 @@ export default function ApplicationCard(props: ApplicationCardProps) {
         </div>
 
         {/* Type / category */}
-        <div className="ad-row-cell ad-row-cell--type" data-label="النوع">
+        <div className="ad-row-cell ad-row-cell--type" data-label={t('applicationCard.typeLabel')}>
           {typeChip
             ? <span className="ad-row-chip">{appKind === 'merchant' ? AppIcons.store : AppIcons.car}{typeChip}</span>
             : <span className="ad-row-empty">—</span>}
         </div>
 
         {/* Location */}
-        <div className="ad-row-cell ad-row-cell--location" data-label="الموقع">
+        <div className="ad-row-cell ad-row-cell--location" data-label={t('applicationCard.locationLabel')}>
           {location
             ? <><span className="ad-row-cell-icon">{AppIcons.pin}</span><span>{location}</span></>
             : <span className="ad-row-empty">—</span>}
         </div>
 
         {/* Contact */}
-        <div className="ad-row-cell ad-row-cell--contact" data-label="التواصل">
+        <div className="ad-row-cell ad-row-cell--contact" data-label={t('applicationCard.contactLabel')}>
           {phone && <span className="ad-row-contact-line"><span className="ad-row-cell-icon">{AppIcons.phone}</span>{phone}</span>}
           {email && <span className="ad-row-contact-line ad-row-contact-muted"><span className="ad-row-cell-icon">{AppIcons.mail}</span>{email}</span>}
           {!phone && !email && <span className="ad-row-empty">—</span>}
         </div>
 
         {/* Documents */}
-        <div className="ad-row-cell ad-row-cell--docs" data-label="المستندات">
-          <span className="ad-row-doc-badge" title={`${docCount} مستند`}>
+        <div className="ad-row-cell ad-row-cell--docs" data-label={t('applicationCard.documentsLabel')}>
+          <span className="ad-row-doc-badge" title={`${docCount} ${t('applicationCard.documentTitle')}`}>
             <span className="ad-row-cell-icon">{AppIcons.paperclip}</span>
             {docCount}
           </span>
         </div>
 
         {/* Status */}
-        <div className="ad-row-cell ad-row-cell--status" data-label="الحالة">
+        <div className="ad-row-cell ad-row-cell--status" data-label={t('applicationCard.statusLabel')}>
           <StatusPill status={status} />
         </div>
 
         {/* Actions */}
         <div className="ad-row-cell ad-row-cell--actions" onClick={(e) => e.stopPropagation()}>
           <button type="button" className="ad-row-details-btn" onClick={toggle}>
-            عرض التفاصيل
+            {t('applicationCard.viewDetails')}
           </button>
           <button
             type="button"
             className={`ad-row-expand${expanded ? ' ad-row-expand--open' : ''}`}
             onClick={toggle}
-            aria-label={expanded ? 'طي التفاصيل' : 'عرض التفاصيل'}
+            aria-label={expanded ? t('applicationCard.collapseDetails') : t('applicationCard.viewDetails')}
             aria-expanded={expanded}
           >
             {AppIcons.chevron}
@@ -435,21 +442,21 @@ export default function ApplicationCard(props: ApplicationCardProps) {
       {expanded && (
         <div className="ad-row-detail">
           <div className="ad-row-detail-grid">
-            <Section title="معلومات التواصل" icon={AppIcons.contact}>
+            <Section title={t('applicationCard.contactInfoTitle')} icon={AppIcons.contact}>
               <InfoGrid items={contactItems} />
             </Section>
 
-            <Section title="تفاصيل الطلب" icon={AppIcons.details}>
+            <Section title={t('applicationCard.orderDetailsTitle')} icon={AppIcons.details}>
               {detailItems && detailItems.length > 0 && <InfoGrid items={detailItems} />}
               <InfoGrid items={[{
                 icon: AppIcons.clock,
-                label: 'تاريخ الطلب',
+                label: t('applicationCard.orderDateLabel'),
                 value: `${formattedDate} — ${formattedTime}`,
               }]} />
               {description && <p className="ad-app-description">{description}</p>}
             </Section>
 
-            <Section title="المستندات والصور" icon={AppIcons.paperclip}>
+            <Section title={t('applicationCard.documentsTitle')} icon={AppIcons.paperclip}>
               {hasDocuments ? (
                 <>
                   <div className="ad-app-media-row">
@@ -457,10 +464,10 @@ export default function ApplicationCard(props: ApplicationCardProps) {
                       <MediaPreview key={i} {...doc} onLightbox={onLightbox} />
                     ))}
                   </div>
-                  <div className="ad-row-doc-count">عرض جميع المستندات ({docCount})</div>
+                  <div className="ad-row-doc-count">{t('applicationCard.viewAllDocuments', { count: docCount })}</div>
                 </>
               ) : (
-                <p className="ad-app-info-empty">لا توجد مستندات مرفقة</p>
+                <p className="ad-app-info-empty">{t('applicationCard.noDocuments')}</p>
               )}
             </Section>
           </div>
@@ -470,31 +477,31 @@ export default function ApplicationCard(props: ApplicationCardProps) {
             {isArchived ? (
               <button type="button" className="ad-app-btn ad-app-btn--approve" disabled={loading} onClick={onRestore}>
                 {AppIcons.restore}
-                {loading ? '...' : 'استعادة'}
+                {loading ? '...' : t('applicationCard.restore')}
               </button>
             ) : (
               <>
                 {status !== 'approved' && (
                   <button type="button" className="ad-app-btn ad-app-btn--approve" disabled={loading} onClick={onApprove}>
                     {AppIcons.check}
-                    موافقة
+                    {t('applicationCard.approve')}
                   </button>
                 )}
                 {status === 'approved' && (
                   <button type="button" className="ad-app-btn ad-app-btn--withdraw" disabled={loading} onClick={onWithdraw}>
                     {AppIcons.undo}
-                    {loading ? '...' : 'سحب الموافقة'}
+                    {loading ? '...' : t('applicationCard.withdraw')}
                   </button>
                 )}
                 {status !== 'rejected' && (
                   <button type="button" className="ad-app-btn ad-app-btn--reject" disabled={loading} onClick={onReject}>
                     {AppIcons.cross}
-                    رفض
+                    {t('applicationCard.reject')}
                   </button>
                 )}
                 <button type="button" className="ad-app-btn ad-app-btn--delete-outline" disabled={loading} onClick={onArchive}>
                   {AppIcons.trash}
-                  حذف
+                  {t('applicationCard.delete')}
                 </button>
               </>
             )}

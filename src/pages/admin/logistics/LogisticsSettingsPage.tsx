@@ -1,13 +1,16 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
-  SETTINGS_DEFINITIONS,
-  CATEGORIES,
-  WEIGHT_GROUPS,
+  getSettingsDefinitions,
+  getCategories,
+  getWeightGroups,
   getDefaultValues,
   isWeightGroupValid,
   SettingsValues,
+  SettingDef,
 } from './settingsData';
 import SettingsSection from './components/SettingsSection';
+import { useLanguage } from '../../../context/LanguageContext';
 import { supabase } from '../../../lib/supabase';
 
 const FONTS_CSS = `
@@ -21,19 +24,24 @@ const FONTS_CSS = `
   input[type=number]::-webkit-outer-spin-button { opacity: 0.5; }
 `;
 
-function validate(values: SettingsValues): Record<string, string> {
+function validate(
+  values: SettingsValues,
+  definitions: SettingDef[],
+  weightGroups: Record<string, { label: string; keys: string[] }>,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): Record<string, string> {
   const errs: Record<string, string> = {};
-  for (const def of SETTINGS_DEFINITIONS) {
+  for (const def of definitions) {
     if (def.type === 'boolean' || def.type === 'select') continue;
     const v = Number(values[def.key]);
-    if (isNaN(v)) { errs[def.key] = 'يجب أن يكون رقماً'; continue; }
-    if (def.min !== undefined && v < def.min) errs[def.key] = `الحد الأدنى ${def.min}`;
-    else if (def.max !== undefined && v > def.max) errs[def.key] = `الحد الأقصى ${def.max}`;
+    if (isNaN(v)) { errs[def.key] = t('logisticsSettings.errors.mustBeNumber'); continue; }
+    if (def.min !== undefined && v < def.min) errs[def.key] = t('logisticsSettings.errors.min', { min: def.min });
+    else if (def.max !== undefined && v > def.max) errs[def.key] = t('logisticsSettings.errors.max', { max: def.max });
   }
-  for (const [gKey] of Object.entries(WEIGHT_GROUPS)) {
-    if (!isWeightGroupValid(gKey, values)) {
-      const keys = WEIGHT_GROUPS[gKey].keys;
-      keys.forEach(k => { if (!errs[k]) errs[k] = 'يجب أن تساوي الأوزان 1'; });
+  for (const [gKey] of Object.entries(weightGroups)) {
+    if (!isWeightGroupValid(gKey, values, weightGroups)) {
+      const keys = weightGroups[gKey].keys;
+      keys.forEach(k => { if (!errs[k]) errs[k] = t('logisticsSettings.errors.weightsMustEqualOne'); });
     }
   }
   return errs;
@@ -66,8 +74,13 @@ function settingToDbCol(key: string): string {
 }
 
 const LogisticsSettingsPage: React.FC<LogisticsSettingsPageProps> = ({ embedded = false }) => {
-  const [values, setValues] = useState<SettingsValues>(getDefaultValues);
-  const [savedValues, setSavedValues] = useState<SettingsValues>(getDefaultValues);
+  const { t } = useTranslation('admin');
+  const { direction } = useLanguage();
+  const SETTINGS_DEFINITIONS = useMemo(() => getSettingsDefinitions(t), [t]);
+  const CATEGORIES = useMemo(() => getCategories(t), [t]);
+  const WEIGHT_GROUPS = useMemo(() => getWeightGroups(t), [t]);
+  const [values, setValues] = useState<SettingsValues>(() => getDefaultValues(SETTINGS_DEFINITIONS));
+  const [savedValues, setSavedValues] = useState<SettingsValues>(() => getDefaultValues(SETTINGS_DEFINITIONS));
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [saveState, setSaveState] = useState<SaveState>('idle');
@@ -100,8 +113,8 @@ const LogisticsSettingsPage: React.FC<LogisticsSettingsPageProps> = ({ embedded 
   );
 
   const invalidWeightGroups = useMemo(
-    () => Object.keys(WEIGHT_GROUPS).filter(g => !isWeightGroupValid(g, values)),
-    [values]
+    () => Object.keys(WEIGHT_GROUPS).filter(g => !isWeightGroupValid(g, values, WEIGHT_GROUPS)),
+    [values, WEIGHT_GROUPS]
   );
 
   const handleChange = useCallback((key: string, val: number | boolean | string) => {
@@ -111,7 +124,7 @@ const LogisticsSettingsPage: React.FC<LogisticsSettingsPageProps> = ({ embedded 
   }, [saveState]);
 
   const handleSave = async () => {
-    const errs = validate(values);
+    const errs = validate(values, SETTINGS_DEFINITIONS, WEIGHT_GROUPS, t);
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     setSaveState('saving');
     setSaveMessage(null);
@@ -127,13 +140,13 @@ const LogisticsSettingsPage: React.FC<LogisticsSettingsPageProps> = ({ embedded 
       if (error) throw error;
       setSavedValues(values);
       setSaveState('saved');
-      setSaveMessage({ type: 'success', text: 'تم حفظ الإعدادات بنجاح في قاعدة البيانات.' });
+      setSaveMessage({ type: 'success', text: t('logisticsSettings.saveSuccess') });
       setTimeout(() => { setSaveState('idle'); setSaveMessage(null); }, 4000);
     } catch (err: unknown) {
       setSaveState('error');
       const msg = err instanceof Error ? err.message
         : (err as { message?: string })?.message ?? String(err);
-      setSaveMessage({ type: 'error', text: `فشل الحفظ: ${msg}` });
+      setSaveMessage({ type: 'error', text: t('logisticsSettings.saveFailed', { error: msg }) });
       setTimeout(() => { setSaveState('idle'); setSaveMessage(null); }, 8000);
     }
   };
@@ -162,7 +175,7 @@ const LogisticsSettingsPage: React.FC<LogisticsSettingsPageProps> = ({ embedded 
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px',
       borderRadius: 8, fontSize: 13, fontFamily: "'Tajawal', sans-serif",
-      direction: 'rtl', lineHeight: 1.5,
+      direction, lineHeight: 1.5,
       background: saveMessage.type === 'success' ? '#F0FDF4' : '#FEF2F2',
       border: `1.5px solid ${saveMessage.type === 'success' ? '#86EFAC' : '#FCA5A5'}`,
       color: saveMessage.type === 'success' ? '#15803D' : '#B91C1C',
@@ -202,22 +215,22 @@ const LogisticsSettingsPage: React.FC<LogisticsSettingsPageProps> = ({ embedded 
         whiteSpace: 'nowrap',
       }}
     >
-      {saveState === 'saving' ? '...جاري الحفظ' : saveState === 'saved' ? '✓ تم الحفظ' : saveState === 'error' ? '✗ فشل الحفظ' : 'حفظ التغييرات'}
+      {saveState === 'saving' ? t('logisticsSettings.saving') : saveState === 'saved' ? `✓ ${t('logisticsSettings.saved')}` : saveState === 'error' ? `✗ ${t('logisticsSettings.saveFailedShort')}` : t('logisticsSettings.saveChanges')}
     </button>
   );
 
   // ── Toolbar ───────────────────────────────────────────────────────────────
   const toolbar = (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', direction: 'rtl' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', direction }}>
       {/* Search */}
       <div style={{ position: 'relative', flex: '1 1 160px', maxWidth: 280 }}>
         <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: '#94A3B8', fontSize: 14, pointerEvents: 'none' }}>⌕</span>
         <input
           type="text"
-          placeholder="...البحث في الإعدادات"
+          placeholder={t('logisticsSettings.searchPlaceholder')}
           value={search}
           onChange={e => setSearch(e.target.value)}
-          dir="rtl"
+          dir={direction}
           style={{ width: '100%', background: '#FFFFFF', border: '1.5px solid #E2E8F0', borderRadius: 7, color: '#0F2B4E', fontSize: 13, padding: '7px 34px 7px 10px', outline: 'none', fontFamily: "'Tajawal', sans-serif", transition: 'border-color 0.15s' }}
           onFocus={e => (e.currentTarget.style.borderColor = '#F97316')}
           onBlur={e => (e.currentTarget.style.borderColor = '#E2E8F0')}
@@ -232,7 +245,7 @@ const LogisticsSettingsPage: React.FC<LogisticsSettingsPageProps> = ({ embedded 
         <select
           value={activeCategory}
           onChange={e => setActiveCategory(e.target.value)}
-          dir="rtl"
+          dir={direction}
           style={{
             appearance: 'none',
             WebkitAppearance: 'none',
@@ -252,7 +265,7 @@ const LogisticsSettingsPage: React.FC<LogisticsSettingsPageProps> = ({ embedded 
           onFocus={e => (e.currentTarget.style.borderColor = '#F97316')}
           onBlur={e => (e.currentTarget.style.borderColor = '#E2E8F0')}
         >
-          <option value="all">جميع الفئات</option>
+          <option value="all">{t('logisticsSettings.allCategories')}</option>
           {CATEGORIES.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
         </select>
         {/* Custom arrow */}
@@ -264,17 +277,17 @@ const LogisticsSettingsPage: React.FC<LogisticsSettingsPageProps> = ({ embedded 
         {isDirty && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: '#F97316', fontFamily: "'Tajawal', sans-serif" }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#F97316', display: 'inline-block', boxShadow: '0 0 6px rgba(249,115,22,0.5)' }} />
-            غير محفوظ
+            {t('logisticsSettings.unsaved')}
           </div>
         )}
         {totalErrors > 0 && (
           <div style={{ fontSize: 12, color: '#DC2626', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 5, padding: '3px 10px', fontFamily: "'Tajawal', sans-serif" }}>
-            {totalErrors} خطأ
+            {t('logisticsSettings.errorCount', { count: totalErrors })}
           </div>
         )}
         {invalidWeightGroups.length > 0 && (
           <div style={{ fontSize: 12, color: '#DC2626', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 5, padding: '3px 10px', fontFamily: "'Tajawal', sans-serif" }}>
-            {invalidWeightGroups.length} خطأ في الأوزان
+            {t('logisticsSettings.weightErrorCount', { count: invalidWeightGroups.length })}
           </div>
         )}
         {isDirty && (
@@ -282,7 +295,7 @@ const LogisticsSettingsPage: React.FC<LogisticsSettingsPageProps> = ({ embedded 
             style={{ background: '#FFFFFF', border: '1.5px solid #E2E8F0', borderRadius: 7, color: '#64748B', fontSize: 13, padding: '7px 14px', cursor: 'pointer', fontFamily: "'Tajawal', sans-serif", transition: 'all 0.15s' }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = '#CBD5E1'; e.currentTarget.style.color = '#0F2B4E'; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = '#E2E8F0'; e.currentTarget.style.color = '#64748B'; }}>
-            استعادة
+            {t('logisticsSettings.restore')}
           </button>
         )}
         {saveBtn}
@@ -293,8 +306,8 @@ const LogisticsSettingsPage: React.FC<LogisticsSettingsPageProps> = ({ embedded 
   // ── Sidenav ───────────────────────────────────────────────────────────────
   const sidenav = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }} className="ls-sidenav">
-      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#94A3B8', marginBottom: 6, paddingRight: 8, direction: 'rtl', textTransform: 'uppercase' }}>
-        الفئات
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#94A3B8', marginBottom: 6, paddingRight: 8, direction, textTransform: 'uppercase' }}>
+        {t('logisticsSettings.categoriesLabel')}
       </div>
       {CATEGORIES.map(cat => {
         const catSettings = SETTINGS_DEFINITIONS.filter(s => s.category === cat.key);
@@ -303,7 +316,7 @@ const LogisticsSettingsPage: React.FC<LogisticsSettingsPageProps> = ({ embedded 
         return (
           <button key={cat.key}
             onClick={() => { setActiveCategory('all'); setSearch(''); setTimeout(() => scrollToSection(cat.key), 50); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 7, border: 'none', background: isActive ? '#FFF7ED' : 'transparent', cursor: 'pointer', textAlign: 'right', width: '100%', direction: 'rtl', transition: 'background 0.15s' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 7, border: 'none', background: isActive ? '#FFF7ED' : 'transparent', cursor: 'pointer', textAlign: direction === 'rtl' ? 'right' : 'left', width: '100%', direction, transition: 'background 0.15s' }}
             onMouseEnter={e => (e.currentTarget.style.background = isActive ? '#FFF7ED' : '#F8FAFC')}
             onMouseLeave={e => (e.currentTarget.style.background = isActive ? '#FFF7ED' : 'transparent')}
           >
@@ -316,15 +329,15 @@ const LogisticsSettingsPage: React.FC<LogisticsSettingsPageProps> = ({ embedded 
 
       {/* Stats */}
       <div style={{ marginTop: 16, padding: 12, background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: 8 }}>
-        <div style={{ fontSize: 10, color: '#94A3B8', marginBottom: 8, letterSpacing: '0.06em', textTransform: 'uppercase', textAlign: 'right', direction: 'rtl' }}>ملخص</div>
+        <div style={{ fontSize: 10, color: '#94A3B8', marginBottom: 8, letterSpacing: '0.06em', textTransform: 'uppercase', textAlign: direction === 'rtl' ? 'right' : 'left', direction }}>{t('logisticsSettings.summary')}</div>
         {[
-          ['إجمالي الإعدادات', SETTINGS_DEFINITIONS.length],
-          ['الفئات', CATEGORIES.length],
-          ['الأخطاء', totalErrors],
-        ].map(([label, value]) => (
-          <div key={String(label)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5, direction: 'rtl' }}>
+          ['totalSettings', t('logisticsSettings.totalSettings'), SETTINGS_DEFINITIONS.length],
+          ['categories', t('logisticsSettings.categoriesLabel'), CATEGORIES.length],
+          ['errors', t('logisticsSettings.errorsLabel'), totalErrors],
+        ].map(([statKey, label, value]) => (
+          <div key={String(statKey)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5, direction }}>
             <span style={{ fontSize: 12, color: '#64748B', fontFamily: "'Tajawal', sans-serif" }}>{label}</span>
-            <span style={{ fontSize: 12, fontFamily: 'monospace', color: label === 'الأخطاء' && Number(value) > 0 ? '#DC2626' : '#0F2B4E', fontWeight: 600 }}>{value}</span>
+            <span style={{ fontSize: 12, fontFamily: 'monospace', color: statKey === 'errors' && Number(value) > 0 ? '#DC2626' : '#0F2B4E', fontWeight: 600 }}>{value}</span>
           </div>
         ))}
       </div>
@@ -338,11 +351,11 @@ const LogisticsSettingsPage: React.FC<LogisticsSettingsPageProps> = ({ embedded 
         <div style={{ textAlign: 'center', padding: '60px 20px', color: '#94A3B8' }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>◎</div>
           <div style={{ fontSize: 14, fontFamily: "'Tajawal', sans-serif", color: '#64748B' }}>
-            لا توجد إعدادات تطابق "{search}"
+            {t('logisticsSettings.noMatchingSettings', { query: search })}
           </div>
           <button onClick={() => setSearch('')}
             style={{ marginTop: 12, background: '#FFFFFF', border: '1.5px solid #E2E8F0', borderRadius: 6, color: '#64748B', fontSize: 13, padding: '7px 16px', cursor: 'pointer', fontFamily: "'Tajawal', sans-serif" }}>
-            مسح البحث
+            {t('logisticsSettings.clearSearch')}
           </button>
         </div>
       )}
@@ -355,6 +368,7 @@ const LogisticsSettingsPage: React.FC<LogisticsSettingsPageProps> = ({ embedded 
           errors={errors}
           onChange={handleChange}
           searchQuery={search}
+          weightGroups={WEIGHT_GROUPS}
         />
       ))}
       <div style={{ height: 40 }} />
@@ -390,14 +404,14 @@ const LogisticsSettingsPage: React.FC<LogisticsSettingsPageProps> = ({ embedded 
 
       {/* Sticky header */}
       <div style={{ position: 'sticky', top: 0, zIndex: 100, background: 'rgba(248,250,252,0.95)', backdropFilter: 'blur(10px)', borderBottom: '1.5px solid #E2E8F0', padding: '0 24px' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', height: 64, display: 'flex', alignItems: 'center', gap: 16, direction: 'rtl' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto', height: 64, display: 'flex', alignItems: 'center', gap: 16, direction }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
             <div style={{ width: 34, height: 34, borderRadius: 8, background: 'linear-gradient(135deg,#F97316,#EA580C)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(249,115,22,0.35)' }}>
               <span style={{ fontSize: 16 }}>⚙</span>
             </div>
             <div>
-              <div style={{ fontSize: 15, fontWeight: 800, color: '#0F2B4E', lineHeight: 1.1 }}>إعدادات الخوارزمية</div>
-              <div style={{ fontSize: 11, color: '#94A3B8', lineHeight: 1.1 }}>ضبط خوارزمية التجميع اللوجستي</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: '#0F2B4E', lineHeight: 1.1 }}>{t('logisticsSettings.title')}</div>
+              <div style={{ fontSize: 11, color: '#94A3B8', lineHeight: 1.1 }}>{t('logisticsSettings.subtitle')}</div>
             </div>
           </div>
           <div style={{ flex: 1 }}>{toolbar}</div>

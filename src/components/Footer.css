@@ -66,7 +66,7 @@
   color: rgba(255,255,255,.5);
   font-family: var(--font-main);
   cursor: pointer;
-  text-align: right;
+  text-align: start;
   transition: color .15s;
   display: block; width: fit-content;
 }

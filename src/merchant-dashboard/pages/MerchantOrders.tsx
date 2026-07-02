@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMerchantAuth } from '../context/MerchantAuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import supabase from '../../lib/supabase';
 import { type PayoutStatus, PayoutStatusPill, fmtMoney } from '../lib/payoutDisplay';
 
@@ -41,15 +43,17 @@ const PROCESSED_STATUSES = ['delivering', 'completed'];
 
 const fmt = (id: number) => `ORD-${String(id).padStart(3, '0')}`;
 
-const STATUS_LABEL: Record<string, { label: string; color: string }> = {
-  pending:    { label: 'في انتظار المعالجة', color: '#f59e0b' },
-  delivering: { label: 'تمت المعالجة',        color: '#0ea5e9' },
-  completed:  { label: 'تمت المعالجة',        color: '#22c55e' },
+const STATUS_COLOR: Record<string, string> = {
+  pending: '#f59e0b',
+  delivering: '#0ea5e9',
+  completed: '#22c55e',
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function MerchantOrders() {
+  const { t } = useTranslation('merchant');
+  const { lang, direction } = useLanguage();
   const { merchant } = useMerchantAuth();
   const [orders, setOrders]     = useState<MerchantOrder[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -113,7 +117,7 @@ export default function MerchantOrders() {
         itemsByOrder.get(d.order_id)!.push({
           id:            d.id,
           product_id:    d.product_id,
-          product_title: prod?.title ?? 'منتج محذوف',
+          product_title: prod?.title ?? t('orders.deletedProduct'),
           product_image: prod?.image ?? null,
           qty:           d.qty ?? 1,
           unit_price:    Number(d.unit_price) || 0,
@@ -169,7 +173,7 @@ export default function MerchantOrders() {
 
       setOrders(result);
     } catch (err: any) {
-      setError('تعذّر تحميل الطلبات');
+      setError(t('orders.loadFailed'));
       console.error(err);
     }
     setLoading(false);
@@ -206,7 +210,7 @@ export default function MerchantOrders() {
         )
       );
     } catch (err: any) {
-      setError(err?.message === 'no-session' ? 'انتهت الجلسة، يرجى تسجيل الدخول من جديد' : 'فشل تحديث حالة الطلب');
+      setError(err?.message === 'no-session' ? t('orders.sessionExpired') : t('orders.updateFailed'));
     } finally {
       setMarking(null);
     }
@@ -222,15 +226,17 @@ export default function MerchantOrders() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
-  if (loading) return <div className="mo-center">جاري تحميل الطلبات...</div>;
+  if (loading) return <div className="mo-center" dir={direction}>{t('orders.loadingOrders')}</div>;
 
-  if (!shopId) return <div className="mo-center">لم تقم بإنشاء متجرك بعد.</div>;
+  if (!shopId) return <div className="mo-center" dir={direction}>{t('orders.noShopYet')}</div>;
+
+  const numLocale = lang === 'ar' ? 'ar-EG' : 'en-US';
 
   return (
-    <div className="mo-root">
+    <div className="mo-root" dir={direction}>
       <div className="mo-header">
-        <h1 className="mo-title">طلباتي</h1>
-        <button className="mo-refresh-btn" onClick={() => load(shopId)}>↻ تحديث</button>
+        <h1 className="mo-title">{t('orders.title')}</h1>
+        <button className="mo-refresh-btn" onClick={() => load(shopId)}>↻ {t('orders.refresh')}</button>
       </div>
 
       {error && <div className="mo-error">{error}</div>}
@@ -238,9 +244,9 @@ export default function MerchantOrders() {
       {/* Filter tabs */}
       <div className="mo-filters">
         {([
-          { key: 'all',       label: 'الكل' },
-          { key: 'pending',   label: 'في انتظار المعالجة' },
-          { key: 'processed', label: 'تمت المعالجة' },
+          { key: 'all',       label: t('orders.filterAll') },
+          { key: 'pending',   label: t('orders.statusPending') },
+          { key: 'processed', label: t('orders.statusProcessed') },
         ] as { key: FilterKey; label: string }[]).map(f => (
           <button
             key={f.key}
@@ -266,12 +272,13 @@ export default function MerchantOrders() {
         return visible.length === 0 ? (
           <div className="mo-empty">
             <div className="mo-empty-icon">📭</div>
-            <p>لا توجد طلبات في هذه الفئة</p>
+            <p>{t('orders.emptyCategory')}</p>
           </div>
         ) : (
           <div className="mo-list">
             {visible.map(order => {
-            const statusCfg = STATUS_LABEL[order.status] ?? { label: order.status, color: '#6b7280' };
+            const statusColor = STATUS_COLOR[order.status] ?? '#6b7280';
+            const statusLabel = order.status === 'pending' ? t('orders.statusPending') : STATUS_COLOR[order.status] ? t('orders.statusProcessed') : order.status;
             const isOpen    = expanded.has(order.id);
             const canMark   = order.status === 'pending' && !order.ready_time;
             const isMarked  = !!order.ready_time;
@@ -284,12 +291,12 @@ export default function MerchantOrders() {
                     <span className="mo-order-id">{fmt(order.id)}</span>
                     <span
                       className="mo-status-badge"
-                      style={{ background: statusCfg.color + '22', color: statusCfg.color, borderColor: statusCfg.color + '55' }}
+                      style={{ background: statusColor + '22', color: statusColor, borderColor: statusColor + '55' }}
                     >
-                      {statusCfg.label}
+                      {statusLabel}
                     </span>
                     {isMarked && (
-                      <span className="mo-ready-badge">✔ جاهز للاستلام</span>
+                      <span className="mo-ready-badge">✔ {t('orders.readyBadge')}</span>
                     )}
                     {order.earning && (
                       <span
@@ -297,18 +304,18 @@ export default function MerchantOrders() {
                           display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
                           fontSize: '0.8rem', fontWeight: 700, color: '#16b981',
                         }}
-                        title="حصّتك من هذا الطلب بعد خصم عمولة المنصّة"
+                        title={t('orders.earningsTooltip')}
                       >
-                        أرباحك: {fmtMoney(order.earning.amount, order.earning.currency)}
+                        {t('orders.earningsLabel')} {fmtMoney(order.earning.amount, order.earning.currency)}
                         <PayoutStatusPill status={order.earning.status} />
                       </span>
                     )}
                   </div>
 
                   <div className="mo-card-right">
-                    <span className="mo-price">{order.total_price.toLocaleString('ar-EG')} ₪</span>
+                    <span className="mo-price">{order.total_price.toLocaleString(numLocale)} ₪</span>
                     <span className="mo-date">
-                      {new Date(order.created_at).toLocaleDateString('ar-EG', {
+                      {new Date(order.created_at).toLocaleDateString(numLocale, {
                         day: 'numeric', month: 'short', year: 'numeric',
                       })}
                     </span>
@@ -331,11 +338,11 @@ export default function MerchantOrders() {
                           <div className="mo-item-info">
                             <span className="mo-item-title">{item.product_title}</span>
                             <span className="mo-item-meta">
-                              الكمية: {item.qty} × {item.unit_price.toLocaleString('ar-EG')} ₪
+                              {t('orders.quantityLabel')} {item.qty} × {item.unit_price.toLocaleString(numLocale)} ₪
                             </span>
                           </div>
                           <span className="mo-item-subtotal">
-                            {(item.qty * item.unit_price).toLocaleString('ar-EG')} ₪
+                            {(item.qty * item.unit_price).toLocaleString(numLocale)} ₪
                           </span>
                         </div>
                       ))}
@@ -344,8 +351,8 @@ export default function MerchantOrders() {
                     {/* Ready time info */}
                     {order.ready_time && (
                       <div className="mo-ready-info">
-                        ✅ تم التجهيز في:{' '}
-                        {new Date(order.ready_time).toLocaleString('ar-EG', {
+                        ✅ {t('orders.readyAtLabel')}{' '}
+                        {new Date(order.ready_time).toLocaleString(numLocale, {
                           day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
                         })}
                       </div>
@@ -358,7 +365,7 @@ export default function MerchantOrders() {
                         disabled={marking === order.id}
                         onClick={() => markReady(order.id)}
                       >
-                        {marking === order.id ? '...' : '✔ تم تجهيز الطرد — جاهز للاستلام'}
+                        {marking === order.id ? '...' : `✔ ${t('orders.markReadyBtn')}`}
                       </button>
                     )}
                   </div>

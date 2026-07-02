@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import supabase from '../../lib/supabase';
 import { useSharedAuth } from '../../context/AuthContext';
 
@@ -74,7 +75,7 @@ async function fetchMerchantShop(userId: string): Promise<MerchantShop | null> {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function buildMerchant(user: any, shop: MerchantShop | null): Merchant {
+function buildMerchant(user: any, shop: MerchantShop | null, defaultDisplayName: string): Merchant {
   return {
     id: user.id,
     email: user.email ?? '',
@@ -82,12 +83,13 @@ function buildMerchant(user: any, shop: MerchantShop | null): Merchant {
       user.user_metadata?.full_name ??
       user.user_metadata?.name ??
       (user.email as string | undefined)?.split('@')[0] ??
-      'تاجر',
+      defaultDisplayName,
     shop,
   };
 }
 
 export function MerchantAuthProvider({ children }: { children: React.ReactNode }) {
+  const { t } = useTranslation('merchant');
   const { rawUser, role, status, isLoading: authLoading } = useSharedAuth();
   const [shop, setShop] = useState<MerchantShop | null>(null);
   const [shopLoading, setShopLoading] = useState(false);
@@ -108,7 +110,7 @@ export function MerchantAuthProvider({ children }: { children: React.ReactNode }
   }, [rawUser?.id, role, status]);
 
   const merchant: Merchant | null = isMerchantApproved
-    ? buildMerchant(rawUser, shop)
+    ? buildMerchant(rawUser, shop, t('auth.defaultDisplayName'))
     : null;
 
   const isLoading = authLoading || shopLoading;
@@ -119,8 +121,8 @@ export function MerchantAuthProvider({ children }: { children: React.ReactNode }
     if (error || !data.user) {
       const msg =
         error?.message === 'Invalid login credentials'
-          ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة'
-          : (error?.message ?? 'حدث خطأ غير متوقع');
+          ? t('auth.invalidCredentials')
+          : (error?.message ?? t('auth.unexpectedError'));
       return { success: false, error: msg };
     }
 
@@ -133,12 +135,12 @@ export function MerchantAuthProvider({ children }: { children: React.ReactNode }
 
     if (userData?.role?.trim() !== 'merchant') {
       await supabase.auth.signOut();
-      return { success: false, error: 'هذا الحساب ليس حساب تاجر — يرجى التواصل مع الإدارة' };
+      return { success: false, error: t('auth.notMerchantAccount') };
     }
 
     if (userData?.status?.trim() !== 'approved') {
       await supabase.auth.signOut();
-      return { success: false, error: 'طلبك قيد المراجعة من الإدارة. سيتم التواصل معك بعد الموافقة.' };
+      return { success: false, error: t('auth.pendingApproval') };
     }
 
     return { success: true };

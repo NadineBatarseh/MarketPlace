@@ -1,25 +1,23 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import supabase from '../../lib/supabase';
 import { validateIsraeliId } from '../../utils/validateIsraeliId';
 import { useFieldHint } from './useFieldHint';
 import './Auth.css';
 
-const MAX_DOC_BYTES = 5 * 1024 * 1024; // 5 MB
+const MAX_DOC_BYTES = 5 * 1024 * 1024;
 
-const VEHICLE_OPTIONS = [
-  { value: 'motorcycle', label: 'دراجة نارية' },
-  { value: 'car', label: 'سيارة' },
-  { value: 'van', label: 'فان' },
-  { value: 'bicycle', label: 'دراجة هوائية' },
-];
+const VEHICLE_VALUES = ['motorcycle', 'car', 'van', 'bicycle'] as const;
+type VehicleValue = typeof VEHICLE_VALUES[number];
 
 export default function DeliveryApplication() {
+  const { t } = useTranslation('auth');
   const [form, setForm] = useState({
     fullName: '',
     email: '',
     nationalId: '',
-    vehicleType: '',
+    vehicleType: '' as VehicleValue | '',
   });
   const [phoneCode, setPhoneCode] = useState('970');
   const [phoneLocal, setPhoneLocal] = useState('');
@@ -53,21 +51,20 @@ export default function DeliveryApplication() {
     setErr: (msg: string) => void
   ) => {
     if (!file.type.startsWith('image/') && file.type !== 'application/pdf') {
-      setErr('يُقبل فقط صور (JPG/PNG) أو PDF');
+      setErr(t('shared.invalidFileType'));
       return;
     }
     if (file.size > MAX_DOC_BYTES) {
-      setErr('الحجم الأقصى للملف 5 ميجابايت');
+      setErr(t('shared.docTooLarge'));
       return;
     }
     setFile(file);
     if (file.type.startsWith('image/')) {
-      const url = URL.createObjectURL(file);
-      setPreview(url);
+      setPreview(URL.createObjectURL(file));
     } else {
       setPreview(null);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!vehicleOpen) return;
@@ -88,7 +85,7 @@ export default function DeliveryApplication() {
     setError('');
 
     if (form.fullName.trim().length < 2) {
-      setError('يرجى إدخال الاسم الكامل');
+      setError(t('deliveryApplication.errors.enterFullName'));
       return;
     }
 
@@ -99,34 +96,34 @@ export default function DeliveryApplication() {
     }
 
     if (phoneLocal.trim().length !== 8) {
-      setError('رقم الهاتف غير صحيح — أدخل 8 أرقام بعد 05');
+      setError(t('deliveryApplication.errors.invalidPhone'));
       return;
     }
 
     if (!form.vehicleType) {
-      setError('يرجى اختيار نوع المركبة');
+      setError(t('deliveryApplication.errors.selectVehicleType'));
       return;
     }
 
     if (!idFrontFile) {
-      setError('يرجى رفع الوجه الأمامي للهوية الوطنية');
+      setError(t('deliveryApplication.errors.uploadIdFront'));
       return;
     }
     if (!idBackFile) {
-      setError('يرجى رفع الوجه الخلفي للهوية الوطنية');
+      setError(t('deliveryApplication.errors.uploadIdBack'));
       return;
     }
     if (!licenseFrontFile) {
-      setError('يرجى رفع الوجه الأمامي لرخصة القيادة');
+      setError(t('deliveryApplication.errors.uploadLicenseFront'));
       return;
     }
     if (!licenseBackFile) {
-      setError('يرجى رفع الوجه الخلفي لرخصة القيادة');
+      setError(t('deliveryApplication.errors.uploadLicenseBack'));
       return;
     }
 
     if (!privacyAccepted) {
-      setError('يرجى الموافقة على سياسة الخصوصية للمتابعة');
+      setError(t('deliveryApplication.errors.acceptPrivacy'));
       return;
     }
 
@@ -151,7 +148,7 @@ export default function DeliveryApplication() {
       licenseFrontPath = result.licenseFrontPath;
       licenseBackPath = result.licenseBackPath;
     } catch (err: unknown) {
-      setError('تعذّر رفع المستندات: ' + (err instanceof Error ? err.message : String(err)));
+      setError(t('deliveryApplication.errors.uploadDocsFailed') + ' ' + (err instanceof Error ? err.message : String(err)));
       setLoading(false);
       return;
     }
@@ -176,7 +173,7 @@ export default function DeliveryApplication() {
     setLoading(false);
 
     if (dbError) {
-      setError('حدث خطأ أثناء إرسال الطلب: ' + dbError.message);
+      setError(t('deliveryApplication.errors.submitFailed') + ' ' + dbError.message);
       return;
     }
 
@@ -184,26 +181,36 @@ export default function DeliveryApplication() {
     setSubmitted(true);
   };
 
+  const idDocSlots = [
+    { key: 'front', label: t('merchantApplication.nationalId.frontLabel'), file: idFrontFile, preview: idFrontPreview, ref: idFrontRef, setFile: setIdFrontFile, setPreview: setIdFrontPreview },
+    { key: 'back',  label: t('merchantApplication.nationalId.backLabel'),  file: idBackFile,  preview: idBackPreview,  ref: idBackRef,  setFile: setIdBackFile,  setPreview: setIdBackPreview },
+  ] as const;
+
+  const licenseSlots = [
+    { key: 'front', label: t('deliveryApplication.drivingLicense.frontLabel'), file: licenseFrontFile, preview: licenseFrontPreview, ref: licenseFrontRef, setFile: setLicenseFrontFile, setPreview: setLicenseFrontPreview },
+    { key: 'back',  label: t('deliveryApplication.drivingLicense.backLabel'),  file: licenseBackFile,  preview: licenseBackPreview,  ref: licenseBackRef,  setFile: setLicenseBackFile,  setPreview: setLicenseBackPreview },
+  ] as const;
+
   if (submitted) {
     return (
-      <div className="auth-page" dir="rtl">
+      <div className="auth-page">
         <div className="auth-card auth-success-card">
           <div className="auth-success-icon">✅</div>
-          <h2 className="auth-title">تم إرسال طلبك بنجاح!</h2>
+          <h2 className="auth-title">{t('deliveryApplication.success.title')}</h2>
           <p className="auth-success-msg">
-            شكراً لك <strong>{form.fullName}</strong>، تم استلام طلب انضمامك كمندوب توصيل.
+            {t('deliveryApplication.success.messagePre')} <strong>{form.fullName}</strong>{t('deliveryApplication.success.messageMid')}
             <br /><br />
-            سيقوم فريقنا بمراجعة طلبك والتواصل معك عبر البريد الإلكتروني{' '}
-            <strong>{form.email}</strong> خلال 1–3 أيام عمل.
+            {t('deliveryApplication.success.messageContact')}{' '}
+            <strong>{form.email}</strong> {t('deliveryApplication.success.messageDays')}
             {submissionId && (
               <>
                 <br /><br />
-                رقم طلبك المرجعي: <strong dir="ltr">#{submissionId}</strong>
+                {t('deliveryApplication.success.refNumber')} <strong dir="ltr">#{submissionId}</strong>
               </>
             )}
           </p>
           <Link to="/login" className="auth-submit" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
-            العودة إلى تسجيل الدخول
+            {t('deliveryApplication.success.backToLogin')}
           </Link>
         </div>
       </div>
@@ -211,23 +218,23 @@ export default function DeliveryApplication() {
   }
 
   return (
-    <div className="auth-page" dir="rtl">
+    <div className="auth-page">
       <div className="auth-card auth-wide-card">
         <img src="/logo.png" alt="سوق لينك" className="auth-logo auth-logo-img" />
-        <h1 className="auth-title">طلب الانضمام كمندوب توصيل</h1>
-        <p className="auth-sub">أكمل النموذج وسيتم مراجعة طلبك من قِبل الإدارة</p>
+        <h1 className="auth-title">{t('deliveryApplication.title')}</h1>
+        <p className="auth-sub">{t('merchantApplication.subtitle')}</p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="auth-row">
             <div className="auth-field">
-              <label>الاسم الكامل <span className="auth-required-star">*</span></label>
+              <label>{t('signup.nameLabel')} <span className="auth-required-star">{t('shared.required')}</span></label>
               <input
-                placeholder="الاسم الكامل"
+                placeholder={t('merchantApplication.ownerNamePlaceholder')}
                 value={form.fullName}
                 minLength={2}
                 onChange={e => {
                   const raw = e.target.value;
-                  if (/[0-9]/.test(raw)) nameHint.show('لا يُسمح بالأرقام في هذا الحقل');
+                  if (/[0-9]/.test(raw)) nameHint.show(t('shared.noDigitsHint'));
                   setForm(f => ({ ...f, fullName: raw.replace(/[0-9]/g, '') }));
                 }}
                 required
@@ -235,7 +242,7 @@ export default function DeliveryApplication() {
               {nameHint.hint && <p className="auth-phone-hint">{nameHint.hint}</p>}
             </div>
             <div className="auth-field">
-              <label>رقم الهوية الوطنية <span className="auth-required-star">*</span></label>
+              <label>{t('deliveryApplication.nationalIdLabel')} <span className="auth-required-star">{t('shared.required')}</span></label>
               <input
                 placeholder="xxxxxxxxx"
                 value={form.nationalId}
@@ -243,8 +250,8 @@ export default function DeliveryApplication() {
                 onChange={e => {
                   const raw = e.target.value;
                   const digits = raw.replace(/\D/g, '');
-                  if (/\D/.test(raw)) idHint.show('أرقام فقط');
-                  else if (digits.length > 9) idHint.show('الحد الأقصى 9 أرقام');
+                  if (/\D/.test(raw)) idHint.show(t('shared.digitsOnly'));
+                  else if (digits.length > 9) idHint.show(t('shared.maxDigits9'));
                   else idHint.clear();
                   setForm(f => ({ ...f, nationalId: digits.slice(0, 9) }));
                 }}
@@ -255,15 +262,15 @@ export default function DeliveryApplication() {
           </div>
 
           <div className="auth-field">
-            <label>البريد الإلكتروني <span className="auth-required-star">*</span></label>
-            <input type="email" placeholder="example@email.com" value={form.email} onChange={set('email')} required />
+            <label>{t('merchantApplication.emailLabel')} <span className="auth-required-star">{t('shared.required')}</span></label>
+            <input type="email" placeholder="example@email.com" value={form.email} onChange={set('email')} required dir="ltr" />
           </div>
 
           <div className="auth-field">
-            <label>رقم الهاتف <span className="auth-required-star">*</span></label>
+            <label>{t('merchantApplication.phoneLabel')} <span className="auth-required-star">{t('shared.required')}</span></label>
             <div className="auth-phone-split" dir="ltr">
               <select
-                title="رمز الدولة"
+                title="Country code"
                 value={phoneCode}
                 onChange={e => setPhoneCode(e.target.value)}
                 className="auth-phone-code"
@@ -279,8 +286,8 @@ export default function DeliveryApplication() {
                 onChange={e => {
                   const raw = e.target.value;
                   const digits = raw.replace(/\D/g, '');
-                  if (/[^\d]/.test(raw)) phoneHint.show('أرقام فقط');
-                  else if (digits.length > 8) phoneHint.show('الحد الأقصى 8 أرقام');
+                  if (/[^\d]/.test(raw)) phoneHint.show(t('shared.digitsOnly'));
+                  else if (digits.length > 8) phoneHint.show(t('shared.maxDigits8'));
                   else phoneHint.clear();
                   setPhoneLocal(digits.slice(0, 8));
                 }}
@@ -294,28 +301,30 @@ export default function DeliveryApplication() {
           </div>
 
           <div className="auth-field">
-            <label>نوع المركبة <span className="auth-required-star">*</span></label>
+            <label>{t('deliveryApplication.vehicleTypeLabel')} <span className="auth-required-star">{t('shared.required')}</span></label>
             <div className="auth-custom-select" ref={vehicleRef}>
               <button
                 type="button"
                 className={`auth-custom-select-trigger${!form.vehicleType ? ' auth-custom-select-placeholder' : ''}`}
                 onClick={() => setVehicleOpen(o => !o)}
               >
-                {VEHICLE_OPTIONS.find(v => v.value === form.vehicleType)?.label || 'اختر النوع'}
+                {form.vehicleType
+                  ? t(`deliveryApplication.vehicleOptions.${form.vehicleType}`)
+                  : t('deliveryApplication.vehicleTypePlaceholder')}
                 <span className="auth-custom-select-arrow">{vehicleOpen ? '▲' : '▼'}</span>
               </button>
               {vehicleOpen && (
                 <ul className="auth-custom-select-list">
-                  {VEHICLE_OPTIONS.map(opt => (
+                  {VEHICLE_VALUES.map(value => (
                     <li
-                      key={opt.value}
-                      className={`auth-custom-select-option${form.vehicleType === opt.value ? ' selected' : ''}`}
+                      key={value}
+                      className={`auth-custom-select-option${form.vehicleType === value ? ' selected' : ''}`}
                       onMouseDown={() => {
-                        setForm(f => ({ ...f, vehicleType: opt.value }));
+                        setForm(f => ({ ...f, vehicleType: value }));
                         setVehicleOpen(false);
                       }}
                     >
-                      {opt.label}
+                      {t(`deliveryApplication.vehicleOptions.${value}`)}
                     </li>
                   ))}
                 </ul>
@@ -324,14 +333,11 @@ export default function DeliveryApplication() {
           </div>
 
           <div className="auth-doc-section">
-            <div className="auth-doc-section-title">💳 الهوية الوطنية</div>
+            <div className="auth-doc-section-title">{t('merchantApplication.nationalId.title')}</div>
             <div className="auth-row">
-              {([
-                { label: 'الوجه الأمامي', file: idFrontFile, preview: idFrontPreview, ref: idFrontRef, setFile: setIdFrontFile, setPreview: setIdFrontPreview },
-                { label: 'الوجه الخلفي',  file: idBackFile,  preview: idBackPreview,  ref: idBackRef,  setFile: setIdBackFile,  setPreview: setIdBackPreview  },
-              ] as const).map(({ label, file, preview, ref, setFile, setPreview }) => (
-                <div key={label} className="auth-field">
-                  <label>{label} <span className="auth-required-star">*</span></label>
+              {idDocSlots.map(({ key, label, file, preview, ref, setFile, setPreview }) => (
+                <div key={key} className="auth-field">
+                  <label>{label} <span className="auth-required-star">{t('shared.required')}</span></label>
                   <div
                     className={`auth-doc-upload${file ? ' auth-doc-upload--filled' : ''}`}
                     onClick={() => ref.current?.click()}
@@ -345,15 +351,15 @@ export default function DeliveryApplication() {
                     ) : (
                       <>
                         <span className="auth-doc-icon">📄</span>
-                        <span className="auth-doc-hint">اضغط أو اسحب الملف هنا</span>
-                        <span className="auth-doc-sub">JPG / PNG / PDF — حتى 5 ميجابايت</span>
+                        <span className="auth-doc-hint">{t('shared.uploadDragHint')}</span>
+                        <span className="auth-doc-sub">{t('shared.uploadFormatHint')}</span>
                       </>
                     )}
                   </div>
                   <input ref={ref} type="file" accept="image/*,application/pdf" style={{ display: 'none' }}
                     onChange={e => { const f = e.target.files?.[0]; if (f) handleDocFile(f, setFile, setPreview, setError); }} />
                   {file && (
-                    <button type="button" className="auth-doc-remove" onClick={() => { setFile(null); setPreview(null); }}>× إزالة</button>
+                    <button type="button" className="auth-doc-remove" onClick={() => { setFile(null); setPreview(null); }}>{t('shared.removeFile')}</button>
                   )}
                 </div>
               ))}
@@ -361,14 +367,11 @@ export default function DeliveryApplication() {
           </div>
 
           <div className="auth-doc-section">
-            <div className="auth-doc-section-title">🚗 رخصة القيادة</div>
+            <div className="auth-doc-section-title">{t('deliveryApplication.drivingLicense.title')}</div>
             <div className="auth-row">
-              {([
-                { label: 'الوجه الأمامي', file: licenseFrontFile, preview: licenseFrontPreview, ref: licenseFrontRef, setFile: setLicenseFrontFile, setPreview: setLicenseFrontPreview },
-                { label: 'الوجه الخلفي',  file: licenseBackFile,  preview: licenseBackPreview,  ref: licenseBackRef,  setFile: setLicenseBackFile,  setPreview: setLicenseBackPreview  },
-              ] as const).map(({ label, file, preview, ref, setFile, setPreview }) => (
-                <div key={label} className="auth-field">
-                  <label>{label} <span className="auth-required-star">*</span></label>
+              {licenseSlots.map(({ key, label, file, preview, ref, setFile, setPreview }) => (
+                <div key={key} className="auth-field">
+                  <label>{label} <span className="auth-required-star">{t('shared.required')}</span></label>
                   <div
                     className={`auth-doc-upload${file ? ' auth-doc-upload--filled' : ''}`}
                     onClick={() => ref.current?.click()}
@@ -382,15 +385,15 @@ export default function DeliveryApplication() {
                     ) : (
                       <>
                         <span className="auth-doc-icon">📄</span>
-                        <span className="auth-doc-hint">اضغط أو اسحب الملف هنا</span>
-                        <span className="auth-doc-sub">JPG / PNG / PDF — حتى 5 ميجابايت</span>
+                        <span className="auth-doc-hint">{t('shared.uploadDragHint')}</span>
+                        <span className="auth-doc-sub">{t('shared.uploadFormatHint')}</span>
                       </>
                     )}
                   </div>
                   <input ref={ref} type="file" accept="image/*,application/pdf" style={{ display: 'none' }}
                     onChange={e => { const f = e.target.files?.[0]; if (f) handleDocFile(f, setFile, setPreview, setError); }} />
                   {file && (
-                    <button type="button" className="auth-doc-remove" onClick={() => { setFile(null); setPreview(null); }}>× إزالة</button>
+                    <button type="button" className="auth-doc-remove" onClick={() => { setFile(null); setPreview(null); }}>{t('shared.removeFile')}</button>
                   )}
                 </div>
               ))}
@@ -398,7 +401,7 @@ export default function DeliveryApplication() {
           </div>
 
           <div className="auth-privacy-notice">
-            🔒 <strong>خصوصية بياناتك:</strong> يتم تخزين المستندات المرفوعة بشكل آمن، ولا يمكن الاطلاع عليها إلا من قِبل فريق الإدارة المخوّل. لن تُستخدم بياناتك لأي غرض خارج نطاق مراجعة طلبك.
+            {t('merchantApplication.privacyNotice')}
           </div>
 
           <label className="auth-privacy-check">
@@ -407,19 +410,19 @@ export default function DeliveryApplication() {
               checked={privacyAccepted}
               onChange={e => setPrivacyAccepted(e.target.checked)}
             />
-            أوافق على استخدام بياناتي ومستنداتي لأغراض مراجعة طلب الانضمام فقط
+            {t('merchantApplication.privacyCheck')}
           </label>
 
           {error && <p className="auth-error">{error}</p>}
 
           <button type="submit" className="auth-submit" disabled={loading || !privacyAccepted}>
-            {loading ? 'جارٍ إرسال الطلب...' : 'إرسال الطلب'}
+            {loading ? t('deliveryApplication.loading') : t('deliveryApplication.submit')}
           </button>
         </form>
 
         <p className="auth-switch">
-          لديك حساب بالفعل؟{' '}
-          <Link to="/login">تسجيل الدخول</Link>
+          {t('shared.hasAccount')}{' '}
+          <Link to="/login">{t('shared.backToLoginLink')}</Link>
         </p>
       </div>
     </div>

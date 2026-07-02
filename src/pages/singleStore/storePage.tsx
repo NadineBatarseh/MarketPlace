@@ -1,5 +1,6 @@
 import type { MouseEvent } from 'react';
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import './storePage.css';
 
 import { useStore } from './hooks/useStore';
@@ -25,6 +26,7 @@ interface Props {
 }
 
 export default function StorePage({ shopId }: Props) {
+  const { t } = useTranslation('customer');
   const { store, loading: storeLoading, error: storeError } = useStore(shopId);
   const { products, total, totalPages, page, loading: productsLoading, sort, setPage, handleSortChange } = useProducts(shopId);
   const { toast, toastVisible, showToast } = useToast();
@@ -187,19 +189,19 @@ export default function StorePage({ shopId }: Props) {
   // ── Cart & wishlist ───────────────────────────────────────────
   function toggleWishlist(e: MouseEvent, id: string) {
     e.stopPropagation();
-    if (!rawUser) { showToast('يجب تسجيل الدخول أو إنشاء حساب أولاً'); return; }
-    if (role !== 'customer') { showToast('متاح للعملاء فقط'); return; }
+    if (!rawUser) { showToast(t('toast.loginRequired')); return; }
+    if (role !== 'customer') { showToast(t('toast.customersOnly')); return; }
     const product = displayedProducts.find(p => p.id === id);
     if (!product) return;
     const price = typeof product.price === 'number' ? product.price : parseFloat(String(product.price ?? '0')) || 0;
     toggleFavorite({ id: product.id, name: product.title, image: product.image_urls?.[0] ?? '', price, inStock: true });
-    showToast(isFavorited(id) ? 'تمت الإزالة من المفضلة' : '❤ تمت الإضافة للمفضلة');
+    showToast(isFavorited(id) ? t('toast.removedFav') : t('toast.addedFav'));
   }
 
   function addToCart(e: MouseEvent, product: Product) {
     e.stopPropagation();
-    if (!rawUser) { showToast('يجب تسجيل الدخول أو إنشاء حساب أولاً'); return; }
-    if (role !== 'customer') { showToast('متاح للعملاء فقط'); return; }
+    if (!rawUser) { showToast(t('toast.loginRequired')); return; }
+    if (role !== 'customer') { showToast(t('toast.customersOnly')); return; }
     if (isInCart(product.id)) { setConfirmProduct(product); return; }
     addToCartCtx({
       id: product.id,
@@ -207,7 +209,7 @@ export default function StorePage({ shopId }: Props) {
       image: product.image_urls?.[0] ?? '',
       price: typeof product.price === 'number' ? product.price : parseFloat(String(product.price ?? '0')) || 0,
     });
-    showToast('✓ تمت الإضافة إلى السلة');
+    showToast(t('toast.addedToCart'));
   }
 
   return (
@@ -255,7 +257,7 @@ export default function StorePage({ shopId }: Props) {
               image: confirmProduct.image_urls?.[0] ?? '',
               price: typeof confirmProduct.price === 'number' ? confirmProduct.price : parseFloat(String(confirmProduct.price ?? '0')) || 0,
             });
-            showToast('✓ تمت إضافة قطعة أخرى إلى السلة');
+            showToast(t('toast.addedAnotherToCart'));
             setConfirmProduct(null);
           }}
           onCancel={() => setConfirmProduct(null)}

@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMerchantAuth } from '../context/MerchantAuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import './MerchantLoginModal.css';
 
 interface Props {
@@ -8,6 +10,8 @@ interface Props {
 }
 
 export default function MerchantLoginModal({ onClose, onSuccess }: Props) {
+  const { t } = useTranslation('merchant');
+  const { direction } = useLanguage();
   const { login, isLoading } = useMerchantAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -24,14 +28,14 @@ export default function MerchantLoginModal({ onClose, onSuccess }: Props) {
     e.preventDefault();
     setError('');
     if (!email.trim() || !password.trim()) {
-      setError('يرجى إدخال البريد الإلكتروني وكلمة المرور');
+      setError(t('loginModal.missingFields'));
       return;
     }
     const result = await login(email.trim(), password.trim());
     if (result.success) {
       onSuccess();
     } else {
-      setError(result.error ?? 'حدث خطأ غير متوقع');
+      setError(result.error ?? t('loginModal.unexpectedError'));
     }
   };
 
@@ -39,20 +43,21 @@ export default function MerchantLoginModal({ onClose, onSuccess }: Props) {
     <div
       className="mlm-overlay"
       ref={overlayRef}
+      dir={direction}
       onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
     >
       <div className="mlm-modal">
-        <button className="mlm-close" onClick={onClose} aria-label="إغلاق">✕</button>
+        <button className="mlm-close" onClick={onClose} aria-label={t('loginModal.close')}>✕</button>
 
         <div className="mlm-header">
           <span className="mlm-icon">🏪</span>
-          <h2>تسجيل دخول التاجر</h2>
-          <p>أدخل بيانات حسابك للوصول إلى لوحة التحكم</p>
+          <h2>{t('loginModal.title')}</h2>
+          <p>{t('loginModal.subtitle')}</p>
         </div>
 
         <form className="mlm-form" onSubmit={handleSubmit}>
           <div className="mlm-field">
-            <label htmlFor="mlm-email">البريد الإلكتروني</label>
+            <label htmlFor="mlm-email">{t('loginModal.email')}</label>
             <input
               id="mlm-email"
               type="email"
@@ -67,13 +72,13 @@ export default function MerchantLoginModal({ onClose, onSuccess }: Props) {
           </div>
 
           <div className="mlm-field">
-            <label htmlFor="mlm-password">كلمة المرور</label>
+            <label htmlFor="mlm-password">{t('loginModal.password')}</label>
             <input
               id="mlm-password"
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="أدخل كلمة المرور"
+              placeholder={t('loginModal.passwordPlaceholder')}
               disabled={isLoading}
               autoComplete="current-password"
             />
@@ -82,7 +87,7 @@ export default function MerchantLoginModal({ onClose, onSuccess }: Props) {
           {error && <div className="mlm-error" role="alert">{error}</div>}
 
           <button type="submit" className="mlm-submit" disabled={isLoading}>
-            {isLoading ? 'جاري تسجيل الدخول...' : 'تسجيل الدخول'}
+            {isLoading ? t('loginModal.submitting') : t('loginModal.submit')}
           </button>
         </form>
       </div>

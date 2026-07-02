@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import ConfirmDialog from '../../../components/ConfirmDialog';
+import { useLanguage } from '../../../context/LanguageContext';
 import {
   BATCH_ADMIN_REASON_CODES,
   fetchEligibleDestinations,
@@ -14,23 +16,17 @@ import {
   type BreakdownCase,
 } from '../../../lib/adminBatches';
 
-const BLOCKED_REASON_LABELS: Record<string, string> = {
-  different_zone: 'لا يوجد مسار مطابق لمنطقة استلام/تسليم الشحنات المختارة في هذه التجميعة',
-  max_stops_exceeded: 'سيتجاوز الحد الأقصى لعدد المحطات',
-  insufficient_capacity: 'سعة غير كافية',
-  active_breakdown: 'يوجد عطل نشط في هذه التجميعة',
-};
-
 function ModalShell({ title, icon, onClose, children, width = 480 }: {
   title: string; icon?: string; onClose: () => void; children: React.ReactNode; width?: number;
 }) {
+  const { direction } = useLanguage();
   return (
     <div
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, background: 'rgba(15,43,78,0.45)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999,
-        fontFamily: "'Tajawal', sans-serif", direction: 'rtl', padding: 16,
+        fontFamily: "'Tajawal', sans-serif", direction, padding: 16,
       }}
     >
       <div
@@ -50,9 +46,10 @@ function ModalShell({ title, icon, onClose, children, width = 480 }: {
   );
 }
 
+// direction is inherited from ModalShell's root, which sets it dynamically per language.
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '8px 10px', borderRadius: 8, border: '1.5px solid #E2E8F0',
-  fontFamily: 'inherit', fontSize: 13, direction: 'rtl', boxSizing: 'border-box', color: '#0F2B4E',
+  fontFamily: 'inherit', fontSize: 13, boxSizing: 'border-box', color: '#0F2B4E',
 };
 
 const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: '#64748B', marginBottom: 5, display: 'block' };
@@ -62,21 +59,22 @@ function ReasonFields({ reasonCode, setReasonCode, reason, setReason, notes, set
   reason: string; setReason: (v: string) => void;
   notes: string; setNotes: (v: string) => void;
 }) {
+  const { t } = useTranslation('admin');
   return (
     <>
       <div style={{ marginBottom: 12 }}>
-        <label style={labelStyle}>نوع السبب *</label>
+        <label style={labelStyle}>{t('batchManagement.reasonType')} *</label>
         <select value={reasonCode} onChange={e => setReasonCode(e.target.value as BatchAdminReasonCode)} style={inputStyle}>
-          <option value="">اختر سبباً...</option>
+          <option value="">{t('batchManagement.chooseReason')}</option>
           {BATCH_ADMIN_REASON_CODES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
         </select>
       </div>
       <div style={{ marginBottom: 12 }}>
-        <label style={labelStyle}>تفاصيل السبب *</label>
-        <textarea value={reason} onChange={e => setReason(e.target.value)} rows={2} style={{ ...inputStyle, resize: 'vertical' }} placeholder="اشرح سبب هذا الإجراء..." />
+        <label style={labelStyle}>{t('batchManagement.reasonDetails')} *</label>
+        <textarea value={reason} onChange={e => setReason(e.target.value)} rows={2} style={{ ...inputStyle, resize: 'vertical' }} placeholder={t('batchManagement.reasonDetailsPlaceholder')} />
       </div>
       <div style={{ marginBottom: 14 }}>
-        <label style={labelStyle}>ملاحظات إضافية (اختياري)</label>
+        <label style={labelStyle}>{t('batchManagement.additionalNotes')}</label>
         <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
       </div>
     </>
@@ -95,17 +93,18 @@ function ErrorBox({ error }: { error: string }) {
 function ActionButtons({ onCancel, onConfirm, loading, confirmLabel, disabled }: {
   onCancel: () => void; onConfirm: () => void; loading: boolean; confirmLabel: string; disabled?: boolean;
 }) {
+  const { t } = useTranslation('admin');
   return (
     <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
       <button onClick={onCancel} disabled={loading} style={{ padding: '8px 18px', borderRadius: 8, border: '1.5px solid #E2E8F0', background: '#fff', color: '#0F2B4E', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', fontWeight: 700 }}>
-        إلغاء
+        {t('batchManagement.cancel')}
       </button>
       <button onClick={onConfirm} disabled={loading || disabled} style={{
         padding: '8px 18px', borderRadius: 8, border: 'none',
         background: (loading || disabled) ? '#CBD5E1' : '#15803D', color: '#fff',
         cursor: (loading || disabled) ? 'not-allowed' : 'pointer', fontSize: 13, fontFamily: 'inherit', fontWeight: 700,
       }}>
-        {loading ? 'جاري التنفيذ...' : confirmLabel}
+        {loading ? t('batchManagement.executing') : confirmLabel}
       </button>
     </div>
   );
@@ -115,6 +114,13 @@ function ActionButtons({ onCancel, onConfirm, loading, confirmLabel, disabled }:
 export function MoveShipmentsModal({ batchId, shipmentIds, onClose, onSuccess }: {
   batchId: string; shipmentIds: string[]; onClose: () => void; onSuccess: () => void;
 }) {
+  const { t } = useTranslation('admin');
+  const BLOCKED_REASON_LABELS: Record<string, string> = {
+    different_zone: t('batchManagement.blockedReason.differentZone'),
+    max_stops_exceeded: t('batchManagement.blockedReason.maxStopsExceeded'),
+    insufficient_capacity: t('batchManagement.blockedReason.insufficientCapacity'),
+    active_breakdown: t('batchManagement.blockedReason.activeBreakdown'),
+  };
   const [loadingDest, setLoadingDest] = useState(true);
   const [destinations, setDestinations] = useState<EligibleDestination[]>([]);
   const [movingVolume, setMovingVolume] = useState(0);
@@ -132,7 +138,7 @@ export function MoveShipmentsModal({ batchId, shipmentIds, onClose, onSuccess }:
       setLoadingDest(true);
       const res = await fetchEligibleDestinations(batchId, shipmentIds);
       if (!res.ok) {
-        setDestError(res.error ?? 'تعذّر تحميل التجميعات المتاحة');
+        setDestError(res.error ?? t('batchManagement.loadDestinationsError'));
       } else {
         setDestinations(res.destinations ?? []);
         setMovingVolume(res.moving_volume ?? 0);
@@ -153,26 +159,26 @@ export function MoveShipmentsModal({ batchId, shipmentIds, onClose, onSuccess }:
       reason_code: reasonCode, reason: reason.trim(), notes: notes.trim() || undefined,
     });
     setSubmitting(false);
-    if (!res.ok) { setError(res.error ?? 'فشلت عملية النقل'); return; }
+    if (!res.ok) { setError(res.error ?? t('batchManagement.moveError')); return; }
     onSuccess();
   }
 
   return (
-    <ModalShell title={`نقل ${shipmentIds.length} شحنة إلى تجميعة أخرى`} icon="🔁" onClose={onClose} width={560}>
+    <ModalShell title={t('batchManagement.moveModalTitle', { count: shipmentIds.length })} icon="🔁" onClose={onClose} width={560}>
       <ErrorBox error={error || destError} />
 
       {zonePairs.length > 0 && (
         <div style={{ fontSize: 12, color: '#64748B', marginBottom: 12 }}>
-          المسار{zonePairs.length > 1 ? 'ات' : ''}: <strong>{zonePairs.map(p => `${p.from} ← ${p.to}`).join('، ')}</strong> · الحجم الإجمالي للشحنات المختارة: <strong>{movingVolume}</strong> وحدة
+          {t('batchManagement.routes')}: <strong>{zonePairs.map(p => `${p.from} ← ${p.to}`).join('، ')}</strong> · {t('batchManagement.totalSelectedVolume')}: <strong>{movingVolume}</strong> {t('batchManagement.unit')}
         </div>
       )}
 
       <div style={{ marginBottom: 14 }}>
-        <label style={labelStyle}>التجميعة الوجهة *</label>
+        <label style={labelStyle}>{t('batchManagement.destinationBatch')} *</label>
         {loadingDest ? (
-          <div style={{ fontSize: 12, color: '#94A3B8' }}>جاري البحث عن تجميعات متاحة...</div>
+          <div style={{ fontSize: 12, color: '#94A3B8' }}>{t('batchManagement.searchingDestinations')}</div>
         ) : destinations.length === 0 ? (
-          <div style={{ fontSize: 12, color: '#94A3B8' }}>لا توجد تجميعات مرشحة حالياً</div>
+          <div style={{ fontSize: 12, color: '#94A3B8' }}>{t('batchManagement.noCandidateDestinations')}</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
             {destinations.map(d => (
@@ -191,7 +197,7 @@ export function MoveShipmentsModal({ batchId, shipmentIds, onClose, onSuccess }:
                     {d.courier_name && <span style={{ color: '#1D4ED8' }}>🚗 {d.courier_name}</span>}
                   </div>
                   <div style={{ fontSize: 11, color: '#64748B', marginTop: 3 }}>
-                    السعة: {d.total_volume} ← {d.capacity_after} / {d.max_volume} · المحطات: {d.stops_used} ← {d.stops_after} / {d.max_stops}
+                    {t('batchManagement.capacity')}: {d.total_volume} ← {d.capacity_after} / {d.max_volume} · {t('batchManagement.stops')}: {d.stops_used} ← {d.stops_after} / {d.max_stops}
                   </div>
                   {!d.eligible && (
                     <div style={{ fontSize: 11, color: '#DC2626', marginTop: 3 }}>
@@ -207,14 +213,14 @@ export function MoveShipmentsModal({ batchId, shipmentIds, onClose, onSuccess }:
 
       {dest && (
         <div style={{ padding: '10px 12px', background: '#EFF6FF', border: '1px solid #93C5FD', borderRadius: 8, fontSize: 12, color: '#1D4ED8', marginBottom: 14 }}>
-          ملخص: نقل {shipmentIds.length} شحنة ({movingVolume} وحدة) من هذه التجميعة إلى {dest.batch_number}.
-          السعة بعد النقل: {dest.capacity_after} / {dest.max_volume}. المحطات بعد النقل: {dest.stops_after} / {dest.max_stops}.
+          {t('batchManagement.moveSummary', { count: shipmentIds.length, volume: movingVolume, batchNumber: dest.batch_number })}
+          {' '}{t('batchManagement.capacityAfterMove', { after: dest.capacity_after, max: dest.max_volume })} {t('batchManagement.stopsAfterMove', { after: dest.stops_after, max: dest.max_stops })}
         </div>
       )}
 
       <ReasonFields reasonCode={reasonCode} setReasonCode={setReasonCode} reason={reason} setReason={setReason} notes={notes} setNotes={setNotes} />
 
-      <ActionButtons onCancel={onClose} onConfirm={handleConfirm} loading={submitting} confirmLabel="تأكيد النقل"
+      <ActionButtons onCancel={onClose} onConfirm={handleConfirm} loading={submitting} confirmLabel={t('batchManagement.confirmMove')}
         disabled={!selected || !reasonCode || !reason.trim()} />
     </ModalShell>
   );
@@ -224,6 +230,7 @@ export function MoveShipmentsModal({ batchId, shipmentIds, onClose, onSuccess }:
 export function RemoveShipmentsModal({ batchId, shipmentIds, onClose, onSuccess }: {
   batchId: string; shipmentIds: string[]; onClose: () => void; onSuccess: () => void;
 }) {
+  const { t } = useTranslation('admin');
   const [reasonCode, setReasonCode] = useState<BatchAdminReasonCode | ''>('');
   const [reason, setReason] = useState('');
   const [notes, setNotes] = useState('');
@@ -236,24 +243,25 @@ export function RemoveShipmentsModal({ batchId, shipmentIds, onClose, onSuccess 
     setError('');
     const res = await removeShipments(batchId, { shipment_ids: shipmentIds, reason_code: reasonCode, reason: reason.trim(), notes: notes.trim() || undefined });
     setSubmitting(false);
-    if (!res.ok) { setError(res.error ?? 'فشلت عملية الإزالة'); return; }
+    if (!res.ok) { setError(res.error ?? t('batchManagement.removeError')); return; }
     onSuccess();
   }
 
   return (
-    <ModalShell title={`إزالة ${shipmentIds.length} شحنة وإعادتها للمتاح`} icon="↩️" onClose={onClose}>
+    <ModalShell title={t('batchManagement.removeModalTitle', { count: shipmentIds.length })} icon="↩️" onClose={onClose}>
       <ErrorBox error={error} />
       <div style={{ fontSize: 12, color: '#64748B', marginBottom: 14 }}>
-        سيتم إرجاع الشحنات المختارة إلى حالة "متاحة" دون ربطها بأي تجميعة، لتتم إعادة تجميعها في الدورة التالية. هذا الإجراء متاح فقط للشحنات التي لم يتم استلامها من السائق بعد.
+        {t('batchManagement.removeExplanation')}
       </div>
       <ReasonFields reasonCode={reasonCode} setReasonCode={setReasonCode} reason={reason} setReason={setReason} notes={notes} setNotes={setNotes} />
-      <ActionButtons onCancel={onClose} onConfirm={handleConfirm} loading={submitting} confirmLabel="تأكيد الإزالة" disabled={!reasonCode || !reason.trim()} />
+      <ActionButtons onCancel={onClose} onConfirm={handleConfirm} loading={submitting} confirmLabel={t('batchManagement.confirmRemove')} disabled={!reasonCode || !reason.trim()} />
     </ModalShell>
   );
 }
 
 /* ───────────────────────────── Add Note / Monitoring Modal ───────────────────────────── */
 export function AddNoteModal({ batchId, onClose, onSuccess }: { batchId: string; onClose: () => void; onSuccess: () => void }) {
+  const { t } = useTranslation('admin');
   const [note, setNote] = useState('');
   const [underMonitoring, setUnderMonitoring] = useState(false);
   const [manualIntervention, setManualIntervention] = useState(false);
@@ -267,29 +275,29 @@ export function AddNoteModal({ batchId, onClose, onSuccess }: { batchId: string;
     setError('');
     const res = await addBatchNote(batchId, { note: note.trim(), under_monitoring: underMonitoring || undefined, manual_intervention: manualIntervention || undefined, driver_contacted: driverContacted || undefined });
     setSubmitting(false);
-    if (!res.ok) { setError(res.error ?? 'فشل حفظ الملاحظة'); return; }
+    if (!res.ok) { setError(res.error ?? t('batchManagement.saveNoteError')); return; }
     onSuccess();
   }
 
   return (
-    <ModalShell title="إضافة ملاحظة إدارية" icon="📝" onClose={onClose}>
+    <ModalShell title={t('batchManagement.addNoteTitle')} icon="📝" onClose={onClose}>
       <ErrorBox error={error} />
       <div style={{ marginBottom: 12 }}>
-        <label style={labelStyle}>الملاحظة *</label>
+        <label style={labelStyle}>{t('batchManagement.noteLabel')} *</label>
         <textarea value={note} onChange={e => setNote(e.target.value)} rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14, fontSize: 12, color: '#0F2B4E' }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-          <input type="checkbox" checked={driverContacted} onChange={e => setDriverContacted(e.target.checked)} /> تم التواصل مع السائق
+          <input type="checkbox" checked={driverContacted} onChange={e => setDriverContacted(e.target.checked)} /> {t('batchManagement.driverContacted')}
         </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-          <input type="checkbox" checked={underMonitoring} onChange={e => setUnderMonitoring(e.target.checked)} /> وضع التجميعة تحت المراقبة
+          <input type="checkbox" checked={underMonitoring} onChange={e => setUnderMonitoring(e.target.checked)} /> {t('batchManagement.underMonitoring')}
         </label>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-          <input type="checkbox" checked={manualIntervention} onChange={e => setManualIntervention(e.target.checked)} /> تصعيد لمعالجة يدوية
+          <input type="checkbox" checked={manualIntervention} onChange={e => setManualIntervention(e.target.checked)} /> {t('batchManagement.escalateManual')}
         </label>
       </div>
-      <ActionButtons onCancel={onClose} onConfirm={handleConfirm} loading={submitting} confirmLabel="حفظ" disabled={!note.trim()} />
+      <ActionButtons onCancel={onClose} onConfirm={handleConfirm} loading={submitting} confirmLabel={t('batchManagement.save')} disabled={!note.trim()} />
     </ModalShell>
   );
 }
@@ -298,6 +306,7 @@ export function AddNoteModal({ batchId, onClose, onSuccess }: { batchId: string;
 export function UpdateEstimatedTimeModal({ batchId, currentValue, onClose, onSuccess }: {
   batchId: string; currentValue: string | null; onClose: () => void; onSuccess: () => void;
 }) {
+  const { t } = useTranslation('admin');
   const [value, setValue] = useState(currentValue ? currentValue.slice(0, 16) : '');
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -309,22 +318,22 @@ export function UpdateEstimatedTimeModal({ batchId, currentValue, onClose, onSuc
     setError('');
     const res = await updateEstimatedTime(batchId, { expected_completion_at: new Date(value).toISOString(), reason: reason.trim() });
     setSubmitting(false);
-    if (!res.ok) { setError(res.error ?? 'فشل التحديث'); return; }
+    if (!res.ok) { setError(res.error ?? t('batchManagement.updateError')); return; }
     onSuccess();
   }
 
   return (
-    <ModalShell title="تحديث وقت الإنجاز المتوقع" icon="⏱" onClose={onClose} width={420}>
+    <ModalShell title={t('batchManagement.updateEtaTitle')} icon="⏱" onClose={onClose} width={420}>
       <ErrorBox error={error} />
       <div style={{ marginBottom: 12 }}>
-        <label style={labelStyle}>الوقت المتوقع الجديد *</label>
+        <label style={labelStyle}>{t('batchManagement.newExpectedTime')} *</label>
         <input type="datetime-local" value={value} onChange={e => setValue(e.target.value)} style={inputStyle} />
       </div>
       <div style={{ marginBottom: 14 }}>
-        <label style={labelStyle}>سبب التحديث *</label>
+        <label style={labelStyle}>{t('batchManagement.updateReason')} *</label>
         <textarea value={reason} onChange={e => setReason(e.target.value)} rows={2} style={{ ...inputStyle, resize: 'vertical' }} />
       </div>
-      <ActionButtons onCancel={onClose} onConfirm={handleConfirm} loading={submitting} confirmLabel="حفظ" disabled={!value || !reason.trim()} />
+      <ActionButtons onCancel={onClose} onConfirm={handleConfirm} loading={submitting} confirmLabel={t('batchManagement.save')} disabled={!value || !reason.trim()} />
     </ModalShell>
   );
 }
@@ -333,6 +342,7 @@ export function UpdateEstimatedTimeModal({ batchId, currentValue, onClose, onSuc
 export function ResolveBreakdownModal({ caseRow, onClose, onSuccess }: {
   caseRow: BreakdownCase; onClose: () => void; onSuccess: () => void;
 }) {
+  const { t } = useTranslation('admin');
   const [resolution, setResolution] = useState<'shipments_repooled' | 'manual_intervention_pending' | 'returned_to_warehouse' | 'follow_up_required'>('returned_to_warehouse');
   const [dispositions, setDispositions] = useState<Record<string, 'returned_to_warehouse' | 'still_with_driver'>>(
     Object.fromEntries(caseRow.stranded.map(s => [s.id, 'still_with_driver'])),
@@ -350,49 +360,49 @@ export function ResolveBreakdownModal({ caseRow, onClose, onSuccess }: {
       stranded_dispositions: Object.entries(dispositions).map(([shipment_id, disposition]) => ({ shipment_id, disposition })),
     });
     setSubmitting(false);
-    if (!res.ok) { setError(res.error ?? 'فشل إغلاق العطل'); return; }
+    if (!res.ok) { setError(res.error ?? t('batchManagement.closeBreakdownError')); return; }
     onSuccess();
   }
 
   return (
-    <ModalShell title={`معالجة عطل التجميعة ${caseRow.batch_number}`} icon="🛠" onClose={onClose} width={520}>
+    <ModalShell title={t('batchManagement.resolveBreakdownTitle', { batchNumber: caseRow.batch_number })} icon="🛠" onClose={onClose} width={520}>
       <ErrorBox error={error} />
 
       {caseRow.stranded.length > 0 && (
         <div style={{ marginBottom: 14 }}>
-          <label style={labelStyle}>الشحنات المُستلَمة من قبل السائق ({caseRow.stranded.length}) — حدد ما حدث فعلياً لكل شحنة</label>
+          <label style={labelStyle}>{t('batchManagement.strandedShipmentsLabel', { count: caseRow.stranded.length })}</label>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {caseRow.stranded.map(s => (
               <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', border: '1px solid #E2E8F0', borderRadius: 7, fontSize: 12 }}>
                 <span style={{ fontFamily: 'monospace' }}>{s.shipment_number}</span>
                 <select value={dispositions[s.id]} onChange={e => setDispositions(prev => ({ ...prev, [s.id]: e.target.value as any }))} style={{ ...inputStyle, width: 'auto', padding: '4px 8px' }}>
-                  <option value="still_with_driver">لا تزال مع السائق / قيد المعالجة</option>
-                  <option value="returned_to_warehouse">أُعيدت فعلياً للمخزون</option>
+                  <option value="still_with_driver">{t('batchManagement.disposition.stillWithDriver')}</option>
+                  <option value="returned_to_warehouse">{t('batchManagement.disposition.returnedToWarehouse')}</option>
                 </select>
               </div>
             ))}
           </div>
           <div style={{ fontSize: 11, color: '#94A3B8', marginTop: 6 }}>
-            لن يتم تغيير حالة أي شحنة "مُعادة للمخزون" إلا للشحنات المحددة هنا فعلياً — لا يوجد تغيير جماعي تلقائي.
+            {t('batchManagement.strandedNote')}
           </div>
         </div>
       )}
 
       <div style={{ marginBottom: 12 }}>
-        <label style={labelStyle}>نتيجة المعالجة *</label>
+        <label style={labelStyle}>{t('batchManagement.resolutionOutcome')} *</label>
         <select value={resolution} onChange={e => setResolution(e.target.value as any)} style={inputStyle}>
-          <option value="returned_to_warehouse">تم إرجاع البضائع للمخزون</option>
-          <option value="shipments_repooled">أُعيدت الشحنات غير المُستلمة للتجميع فقط</option>
-          <option value="manual_intervention_pending">لا تزال تتطلب معالجة يدوية</option>
-          <option value="follow_up_required">تتطلب متابعة لاحقة</option>
+          <option value="returned_to_warehouse">{t('batchManagement.resolution.returnedToWarehouse')}</option>
+          <option value="shipments_repooled">{t('batchManagement.resolution.shipmentsRepooled')}</option>
+          <option value="manual_intervention_pending">{t('batchManagement.resolution.manualInterventionPending')}</option>
+          <option value="follow_up_required">{t('batchManagement.resolution.followUpRequired')}</option>
         </select>
       </div>
       <div style={{ marginBottom: 14 }}>
-        <label style={labelStyle}>ملاحظة / سبب الإغلاق *</label>
+        <label style={labelStyle}>{t('batchManagement.closingNote')} *</label>
         <textarea value={note} onChange={e => setNote(e.target.value)} rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
       </div>
 
-      <ActionButtons onCancel={onClose} onConfirm={handleConfirm} loading={submitting} confirmLabel="حفظ المعالجة" disabled={!note.trim()} />
+      <ActionButtons onCancel={onClose} onConfirm={handleConfirm} loading={submitting} confirmLabel={t('batchManagement.saveResolution')} disabled={!note.trim()} />
     </ModalShell>
   );
 }

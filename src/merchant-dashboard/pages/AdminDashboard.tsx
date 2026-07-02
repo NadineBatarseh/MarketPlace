@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../../context/LanguageContext';
 import LogisticsSettingsPage from '../../pages/admin/logistics/LogisticsSettingsPage';
 import PaymentSettingsPage from '../../pages/admin/PaymentSettingsPage';
 import SalesLedgerPage from '../../pages/admin/SalesLedgerPage';
@@ -110,13 +112,6 @@ interface Batch {
   assigned_driver?: DriverInfo | null;
 }
 
-const TAB_LABELS: Record<FilterTab, string> = {
-  all: 'الكل',
-  pending: 'قيد المراجعة',
-  approved: 'موافق عليها',
-  rejected: 'مرفوضة',
-};
-
 /* Status classification box icons (right-aligned in RTL) */
 const TAB_ICONS: Record<FilterTab, JSX.Element> = {
   all: (
@@ -142,34 +137,6 @@ const TAB_ICONS: Record<FilterTab, JSX.Element> = {
   ),
 };
 
-const STORE_TYPES: Record<string, string> = {
-  retail: 'بيع بالتجزئة',
-  wholesale: 'بيع بالجملة',
-  food: 'أغذية ومشروبات',
-  fashion: 'ملابس وأزياء',
-  electronics: 'إلكترونيات',
-  handmade: 'منتجات يدوية',
-  other: 'أخرى',
-};
-
-const VEHICLE_TYPES: Record<string, string> = {
-  motorcycle: 'دراجة نارية',
-  car: 'سيارة',
-  van: 'فان',
-  bicycle: 'دراجة هوائية',
-};
-
-const SECTION_HEADERS: Record<string, { title: string; subtitle: string }> = {
-  merchant:  { title: 'طلبات التجار',     subtitle: 'إدارة ومراجعة طلبات انضمام التجار إلى المنصة' },
-  delivery:  { title: 'طلبات المناديب',   subtitle: 'إدارة ومراجعة طلبات انضمام مناديب التوصيل إلى المنصة' },
-};
-
-/* Table column headers for the applications list (per kind) */
-const APP_TABLE_COLUMNS: Record<'merchant' | 'delivery', string[]> = {
-  merchant: ['المتجر', 'نوع المتجر', 'الموقع', 'التواصل', 'المستندات', 'الحالة', 'الإجراءات'],
-  delivery: ['المندوب', 'نوع المركبة', 'الموقع', 'التواصل', 'المستندات', 'الحالة', 'الإجراءات'],
-};
-
 type ApproveModalState<T> = {
   app: T | null;
   platformEmail: string;
@@ -188,6 +155,44 @@ type RejectModalState<T> = {
 };
 
 export default function AdminDashboard() {
+  const { t } = useTranslation('merchant');
+  const { direction, lang } = useLanguage();
+
+  const TAB_LABELS: Record<FilterTab, string> = {
+    all: t('appReview.tabs.all'),
+    pending: t('applicationCard.status.pending'),
+    approved: t('applicationCard.status.approved'),
+    rejected: t('applicationCard.status.rejected'),
+  };
+
+  const STORE_TYPES: Record<string, string> = {
+    retail: t('appReview.storeTypes.retail'),
+    wholesale: t('appReview.storeTypes.wholesale'),
+    food: t('appReview.storeTypes.food'),
+    fashion: t('appReview.storeTypes.fashion'),
+    electronics: t('appReview.storeTypes.electronics'),
+    handmade: t('appReview.storeTypes.handmade'),
+    other: t('appReview.storeTypes.other'),
+  };
+
+  const VEHICLE_TYPES: Record<string, string> = {
+    motorcycle: t('appReview.vehicleTypes.motorcycle'),
+    car: t('appReview.vehicleTypes.car'),
+    van: t('appReview.vehicleTypes.van'),
+    bicycle: t('appReview.vehicleTypes.bicycle'),
+  };
+
+  const SECTION_HEADERS: Record<string, { title: string; subtitle: string }> = {
+    merchant: { title: t('appReview.sectionHeaders.merchant.title'), subtitle: t('appReview.sectionHeaders.merchant.subtitle') },
+    delivery: { title: t('appReview.sectionHeaders.delivery.title'), subtitle: t('appReview.sectionHeaders.delivery.subtitle') },
+  };
+
+  /* Table column headers for the applications list (per kind) */
+  const APP_TABLE_COLUMNS: Record<'merchant' | 'delivery', string[]> = {
+    merchant: t('appReview.tableColumns.merchant', { returnObjects: true }) as string[],
+    delivery: t('appReview.tableColumns.delivery', { returnObjects: true }) as string[],
+  };
+
   const [activeSection, setActiveSection] = useState<Section>('merchant');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const contentRef = useRef<HTMLElement>(null);
@@ -202,7 +207,7 @@ export default function AdminDashboard() {
   const [typeFilter, setTypeFilter]   = useState<string>('all');
   const [showArchived, setShowArchived] = useState(false);
 
-  const today = new Date().toLocaleDateString('ar-EG', {
+  const today = new Date().toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
 
@@ -329,9 +334,9 @@ export default function AdminDashboard() {
       const res = await fetch('/api/logistics/batches');
       const json = await res.json();
       if (json.ok) setBatches(json.batches);
-      else setBatchesError(json.error ?? 'فشل تحميل التجميعات');
+      else setBatchesError(json.error ?? t('appReview.errors.batchesLoadFailed'));
     } catch {
-      setBatchesError('تعذّر الاتصال بالخادم');
+      setBatchesError(t('appReview.errors.connectionFailed'));
     }
     setBatchesLoading(false);
   };
@@ -345,14 +350,14 @@ export default function AdminDashboard() {
     try {
       const res  = await fetch('/api/logistics/assign', { method: 'POST' });
       const json = await res.json();
-      if (!json.ok) { setAssignError(json.error ?? 'فشل التعيين'); setAssigning(false); return; }
+      if (!json.ok) { setAssignError(json.error ?? t('appReview.errors.assignFailed')); setAssigning(false); return; }
 
       setAssignSummary({ assigned: json.assigned_count, unassigned: json.unassigned_count });
 
       // Reload all batches from the server so persisted assignments are shown correctly
       await loadBatches();
     } catch {
-      setAssignError('تعذّر الاتصال بالخادم');
+      setAssignError(t('appReview.errors.connectionFailed'));
     }
     setAssigning(false);
   };
@@ -366,7 +371,7 @@ export default function AdminDashboard() {
       .from('batch_config')
       .select('max_driver_capacity, max_stops_per_batch, max_allowed_wait, max_distance_km, max_wait_days')
       .single();
-    if (error) setConfigError('تعذّر تحميل الإعدادات: ' + error.message);
+    if (error) setConfigError(t('appReview.errors.configLoadFailed', { message: error.message }));
     else if (data) {
       const d = data as BatchConfigForm;
       setSavedConfig(d);
@@ -395,7 +400,7 @@ export default function AdminDashboard() {
         max_wait_days:       parsedConfig.max_wait_days,
       })
       .eq('id', 1);
-    if (error) setConfigError('فشل الحفظ: ' + error.message);
+    if (error) setConfigError(t('appReview.errors.configSaveFailed', { message: error.message }));
     else { setConfigSuccess(true); setSavedConfig({ ...parsedConfig }); loadBatches(); }
     setConfigSaving(false);
   };
@@ -466,7 +471,7 @@ export default function AdminDashboard() {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error) setAppsError('تعذّر تحميل الطلبات: ' + error.message);
+    if (error) setAppsError(t('appReview.errors.loadFailed', { message: error.message }));
     else setApps((data ?? []) as MerchantApp[]);
     setAppsLoading(false);
   };
@@ -485,7 +490,7 @@ export default function AdminDashboard() {
     setApproveModal({
       app,
       platformEmail: '',
-      message: `عزيزي/عزيزتي ${app.name_of_owner}،\n\nيسعدنا إبلاغكم بقبول طلبكم للانضمام إلى منصة سوق لينك كتاجر معتمد!\n\nتم تخصيص بريد إلكتروني رسمي لحسابكم، يرجى مراجعته أدناه.\n\nلتفعيل حسابكم وإنشاء كلمة المرور، يرجى زيارة:\n${window.location.origin}/activate\n\nنتطلع إلى تعاون مثمر معكم،\nفريق سوق لينك`,
+      message: t('appReview.emails.approvalMerchant', { name: app.name_of_owner, activateUrl: `${window.location.origin}/activate` }),
       sending: false,
       error: '',
     });
@@ -495,7 +500,7 @@ export default function AdminDashboard() {
     if (!approveModal.app || !approveModal.platformEmail.trim()) return;
     setApproveModal(prev => ({ ...prev, sending: true, error: '' }));
 
-    const finalMessage = (approveModal.message + `\n\nبريدك الإلكتروني الرسمي: ${approveModal.platformEmail}`);
+    const finalMessage = (approveModal.message + t('appReview.emails.officialEmailSuffix', { email: approveModal.platformEmail }));
     try {
       await emailjs.send(
         import.meta.env.VITE_EMAILJS_SERVICE_ID,
@@ -504,7 +509,7 @@ export default function AdminDashboard() {
         { publicKey: import.meta.env.VITE_EMAILJS_PUBLIC_KEY }
       );
     } catch {
-      setApproveModal(prev => ({ ...prev, sending: false, error: 'تعذّر إرسال البريد الإلكتروني' }));
+      setApproveModal(prev => ({ ...prev, sending: false, error: t('appReview.errors.emailSendFailed') }));
       return;
     }
 
@@ -515,8 +520,8 @@ export default function AdminDashboard() {
 
     if (dbError) {
       const msg = dbError.message.includes('unique') || dbError.message.includes('duplicate')
-        ? 'هذا البريد الإلكتروني الرسمي مخصص لتاجر آخر — يرجى اختيار بريد مختلف'
-        : 'تعذّر تحديث الطلب: ' + dbError.message;
+        ? t('appReview.errors.duplicateEmailMerchant')
+        : t('appReview.errors.updateFailed', { message: dbError.message });
       setApproveModal(prev => ({ ...prev, sending: false, error: msg }));
       return;
     }
@@ -541,7 +546,7 @@ export default function AdminDashboard() {
         { publicKey: import.meta.env.VITE_EMAILJS_PUBLIC_KEY }
       );
     } catch {
-      setRejectModal(prev => ({ ...prev, sending: false, error: 'تعذّر إرسال البريد — سيتم تسجيل الرفض بدون إشعار' }));
+      setRejectModal(prev => ({ ...prev, sending: false, error: t('appReview.errors.emailSendFailedNoNotify') }));
       return;
     }
 
@@ -552,11 +557,11 @@ export default function AdminDashboard() {
   // Archive keeps the application row AND its uploaded documents (unlike the old
   // hard-delete) so the record stays auditable; it just leaves the active inbox.
   const archiveMerchantApp = async (app: MerchantApp) => {
-    if (!confirm(`هل أنت متأكد من حذف طلب "${app.name_of_store}"؟ لن يظهر في القوائم الرئيسية، ويمكن استعادته لاحقًا من سلة المحذوفات.`)) return;
+    if (!confirm(t('appReview.confirm.archiveApp', { name: app.name_of_store }))) return;
     setActionLoading(app.id);
     const res = await archiveApplication('merchant', app.id);
     if (res.ok) setApps(prev => prev.map(a => a.id === app.id ? { ...a, is_archived: true } : a));
-    else setAppsError('فشل الحذف: ' + (res.error ?? ''));
+    else setAppsError(t('appReview.errors.archiveFailed', { message: res.error ?? '' }));
     setActionLoading(null);
   };
 
@@ -564,7 +569,7 @@ export default function AdminDashboard() {
     setActionLoading(app.id);
     const res = await restoreApplication('merchant', app.id);
     if (res.ok) setApps(prev => prev.map(a => a.id === app.id ? { ...a, is_archived: false } : a));
-    else setAppsError('فشل الاستعادة: ' + (res.error ?? ''));
+    else setAppsError(t('appReview.errors.restoreFailed', { message: res.error ?? '' }));
     setActionLoading(null);
   };
 
@@ -578,7 +583,7 @@ export default function AdminDashboard() {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error) setDeliveryError('تعذّر تحميل الطلبات: ' + error.message);
+    if (error) setDeliveryError(t('appReview.errors.loadFailed', { message: error.message }));
     else setDeliveryApps((data ?? []) as DeliveryApp[]);
     setDeliveryLoading(false);
   };
@@ -597,7 +602,7 @@ export default function AdminDashboard() {
     setDeliveryApproveModal({
       app,
       platformEmail: '',
-      message: `عزيزي/عزيزتي ${app.name}،\n\nيسعدنا إبلاغكم بقبول طلبكم للانضمام إلى منصة سوق لينك كمندوب توصيل معتمد!\n\nتم تخصيص بريد إلكتروني رسمي لحسابكم، يرجى مراجعته أدناه.\n\nلتفعيل حسابكم وإنشاء كلمة المرور، يرجى زيارة:\n${window.location.origin}/activate\n\nنتطلع إلى تعاون مثمر معكم،\nفريق سوق لينك`,
+      message: t('appReview.emails.approvalDelivery', { name: app.name, activateUrl: `${window.location.origin}/activate` }),
       sending: false,
       error: '',
     });
@@ -607,7 +612,7 @@ export default function AdminDashboard() {
     if (!deliveryApproveModal.app || !deliveryApproveModal.platformEmail.trim()) return;
     setDeliveryApproveModal(prev => ({ ...prev, sending: true, error: '' }));
 
-    const finalMessage = (deliveryApproveModal.message + `\n\nبريدك الإلكتروني الرسمي: ${deliveryApproveModal.platformEmail}`);
+    const finalMessage = (deliveryApproveModal.message + t('appReview.emails.officialEmailSuffix', { email: deliveryApproveModal.platformEmail }));
     try {
       await emailjs.send(
         import.meta.env.VITE_EMAILJS_SERVICE_ID,
@@ -616,7 +621,7 @@ export default function AdminDashboard() {
         { publicKey: import.meta.env.VITE_EMAILJS_PUBLIC_KEY }
       );
     } catch {
-      setDeliveryApproveModal(prev => ({ ...prev, sending: false, error: 'تعذّر إرسال البريد الإلكتروني' }));
+      setDeliveryApproveModal(prev => ({ ...prev, sending: false, error: t('appReview.errors.emailSendFailed') }));
       return;
     }
 
@@ -627,8 +632,8 @@ export default function AdminDashboard() {
 
     if (dbError) {
       const msg = dbError.message.includes('unique') || dbError.message.includes('duplicate')
-        ? 'هذا البريد الإلكتروني الرسمي مخصص لمندوب آخر — يرجى اختيار بريد مختلف'
-        : 'تعذّر تحديث الطلب: ' + dbError.message;
+        ? t('appReview.errors.duplicateEmailDelivery')
+        : t('appReview.errors.updateFailed', { message: dbError.message });
       setDeliveryApproveModal(prev => ({ ...prev, sending: false, error: msg }));
       return;
     }
@@ -653,7 +658,7 @@ export default function AdminDashboard() {
         { publicKey: import.meta.env.VITE_EMAILJS_PUBLIC_KEY }
       );
     } catch {
-      setDeliveryRejectModal(prev => ({ ...prev, sending: false, error: 'تعذّر إرسال البريد — سيتم تسجيل الرفض بدون إشعار' }));
+      setDeliveryRejectModal(prev => ({ ...prev, sending: false, error: t('appReview.errors.emailSendFailedNoNotify') }));
       return;
     }
 
@@ -662,11 +667,11 @@ export default function AdminDashboard() {
   };
 
   const archiveDeliveryApp = async (app: DeliveryApp) => {
-    if (!confirm(`هل أنت متأكد من حذف طلب "${app.name}"؟ لن يظهر في القوائم الرئيسية، ويمكن استعادته لاحقًا من سلة المحذوفات.`)) return;
+    if (!confirm(t('appReview.confirm.archiveApp', { name: app.name }))) return;
     setDeliveryActionLoading(app.id);
     const res = await archiveApplication('delivery', app.id);
     if (res.ok) setDeliveryApps(prev => prev.map(a => a.id === app.id ? { ...a, is_archived: true } : a));
-    else setDeliveryError('فشل الحذف: ' + (res.error ?? ''));
+    else setDeliveryError(t('appReview.errors.archiveFailed', { message: res.error ?? '' }));
     setDeliveryActionLoading(null);
   };
 
@@ -674,7 +679,7 @@ export default function AdminDashboard() {
     setDeliveryActionLoading(app.id);
     const res = await restoreApplication('delivery', app.id);
     if (res.ok) setDeliveryApps(prev => prev.map(a => a.id === app.id ? { ...a, is_archived: false } : a));
-    else setDeliveryError('فشل الاستعادة: ' + (res.error ?? ''));
+    else setDeliveryError(t('appReview.errors.restoreFailed', { message: res.error ?? '' }));
     setDeliveryActionLoading(null);
   };
 
@@ -730,7 +735,7 @@ export default function AdminDashboard() {
   const sectionHeader = SECTION_HEADERS[activeSection];
 
   return (
-    <div className="ad-root">
+    <div className="ad-root" dir={direction}>
 
       {/* ── Topbar (mirrors MerchantDashboard) ── */}
       <header className="ad-topbar">
@@ -738,7 +743,7 @@ export default function AdminDashboard() {
           <button
             type="button"
             className="ad-menu-toggle"
-            aria-label="القائمة"
+            aria-label={t('appReview.topbar.menuLabel')}
             onClick={() => setMobileNavOpen(true)}
           >
             <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -747,13 +752,13 @@ export default function AdminDashboard() {
               <line x1="3" y1="18" x2="21" y2="18" />
             </svg>
           </button>
-          <img src="/logo.png" alt="سوق لينك" className="ad-topbar-logo" />
-          <div className="ad-topbar-brand-text">سوق <span>لينك</span></div>
+          <img src="/logo.png" alt="Souq Link" className="ad-topbar-logo" />
+          <div className="ad-topbar-brand-text">{t('appReview.brandWord1')} <span>{t('appReview.brandWord2')}</span></div>
         </div>
 
         <div className="ad-topbar-actions">
           {/* Bell */}
-          <button type="button" className="ad-topbar-bell" aria-label="الإشعارات">
+          <button type="button" className="ad-topbar-bell" aria-label={t('appReview.topbar.notificationsLabel')}>
             <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
               <path d="M13.73 21a2 2 0 0 1-3.46 0" />
@@ -764,15 +769,15 @@ export default function AdminDashboard() {
           <div className="ad-avatar-wrapper" ref={avatarRef}>
             <div
               className={`ad-topbar-avatar${showAvatarMenu ? ' ad-avatar-active' : ''}`}
-              title="المشرف"
+              title={t('appReview.sidebar.adminLabel')}
               onClick={() => setShowAvatarMenu(v => !v)}
             >
-              أ
+              {t('appReview.sidebar.adminInitial')}
             </div>
             {showAvatarMenu && (
               <div className="ad-avatar-menu">
                 <div className="ad-avatar-menu-header">
-                  <div className="ad-avatar-menu-name">المشرف</div>
+                  <div className="ad-avatar-menu-name">{t('appReview.sidebar.adminLabel')}</div>
                   <div className="ad-avatar-menu-email">SOUQ LINK Admin</div>
                 </div>
                 <button
@@ -784,7 +789,7 @@ export default function AdminDashboard() {
                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                     <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                   </svg>
-                  تغيير كلمة المرور
+                  {t('appReview.topbar.changePassword')}
                 </button>
                 <button
                   type="button"
@@ -796,7 +801,7 @@ export default function AdminDashboard() {
                     <polyline points="16 17 21 12 16 7" />
                     <line x1="21" y1="12" x2="9" y2="12" />
                   </svg>
-                  تسجيل الخروج
+                  {t('appReview.topbar.logout')}
                 </button>
               </div>
             )}
@@ -815,7 +820,7 @@ export default function AdminDashboard() {
 
           {/* Greeting */}
           <div className="ad-sidebar-greeting">
-            <div className="ad-sidebar-greeting-name">لوحة تحكم <strong>الإدارة</strong></div>
+            <div className="ad-sidebar-greeting-name">{t('appReview.sidebar.greetingPrefix')} <strong>{t('appReview.sidebar.greetingHighlight')}</strong></div>
             <div className="ad-sidebar-greeting-date">{today}</div>
           </div>
 
@@ -828,7 +833,7 @@ export default function AdminDashboard() {
                   <polyline points="9 22 9 12 15 12 15 22" />
                 </svg>
               }
-              label="طلبات التجار"
+              label={t('appReview.sidebar.nav.merchantApps')}
               active={activeSection === 'merchant'}
               badge={apps.filter(a => a.status === 'pending').length}
               onClick={() => setActiveSection('merchant')}
@@ -843,7 +848,7 @@ export default function AdminDashboard() {
                   <circle cx="18.5" cy="18.5" r="2.5" />
                 </svg>
               }
-              label="طلبات المناديب"
+              label={t('appReview.sidebar.nav.deliveryApps')}
               active={activeSection === 'delivery'}
               badge={deliveryApps.filter(a => a.status === 'pending').length}
               onClick={() => setActiveSection('delivery')}
@@ -860,7 +865,7 @@ export default function AdminDashboard() {
                   <circle cx="18.5" cy="18.5" r="2.5" />
                 </svg>
               }
-              label="المناديب"
+              label={t('appReview.sidebar.nav.couriers')}
               active={activeSection === 'couriers'}
               onClick={() => setActiveSection('couriers')}
             />
@@ -872,7 +877,7 @@ export default function AdminDashboard() {
                   <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
                 </svg>
               }
-              label="مشاكل التوصيل"
+              label={t('appReview.sidebar.nav.deliveryIssues')}
               active={activeSection === 'deliveryIssues'}
               onClick={() => setActiveSection('deliveryIssues')}
             />
@@ -884,7 +889,7 @@ export default function AdminDashboard() {
                   <polyline points="9 22 9 12 15 12 15 22" />
                 </svg>
               }
-              label="المتاجر"
+              label={t('appReview.sidebar.nav.shops')}
               active={activeSection === 'shops'}
               onClick={() => setActiveSection('shops')}
             />
@@ -897,7 +902,7 @@ export default function AdminDashboard() {
                   <path d="M21 15l-5-5L5 21" />
                 </svg>
               }
-              label="صور الفئات"
+              label={t('appReview.sidebar.nav.categoryImages')}
               active={activeSection === 'categories'}
               onClick={() => setActiveSection('categories')}
             />
@@ -909,7 +914,7 @@ export default function AdminDashboard() {
                   <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
                 </svg>
               }
-              label="تجميعات الاستلام"
+              label={t('appReview.sidebar.nav.batches')}
               active={activeSection === 'batches'}
               badge={batches.length || undefined}
               onClick={() => setActiveSection('batches')}
@@ -922,7 +927,7 @@ export default function AdminDashboard() {
                   <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                 </svg>
               }
-              label="إعدادات التوزيع"
+              label={t('appReview.sidebar.nav.logistics')}
               active={activeSection === 'logistics'}
               onClick={() => setActiveSection('logistics')}
             />
@@ -934,7 +939,7 @@ export default function AdminDashboard() {
                   <path d="M2 10h20" />
                 </svg>
               }
-              label="إعدادات الدفع"
+              label={t('appReview.sidebar.nav.payments')}
               active={activeSection === 'payments'}
               onClick={() => setActiveSection('payments')}
             />
@@ -946,7 +951,7 @@ export default function AdminDashboard() {
                   <path d="M14 2v6h6M9 13h6M9 17h6M9 9h1" />
                 </svg>
               }
-              label="كشف المبيعات"
+              label={t('appReview.sidebar.nav.ledger')}
               active={activeSection === 'ledger'}
               onClick={() => setActiveSection('ledger')}
             />
@@ -958,7 +963,7 @@ export default function AdminDashboard() {
                   <path d="M7 14l4-4 3 3 5-6" />
                 </svg>
               }
-              label="التحليلات"
+              label={t('appReview.sidebar.nav.analytics')}
               active={activeSection === 'analytics'}
               onClick={() => setActiveSection('analytics')}
             />
@@ -969,7 +974,7 @@ export default function AdminDashboard() {
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                 </svg>
               }
-              label="الرسائل المرسلة"
+              label={t('appReview.sidebar.nav.messages')}
               active={activeSection === 'messages'}
               onClick={() => setActiveSection('messages')}
             />
@@ -978,9 +983,9 @@ export default function AdminDashboard() {
           {/* Sidebar footer */}
           <div className="ad-sidebar-footer">
             <div className="ad-sidebar-user">
-              <div className="ad-sidebar-user-avatar">أ</div>
+              <div className="ad-sidebar-user-avatar">{t('appReview.sidebar.adminInitial')}</div>
               <div className="ad-sidebar-user-info">
-                <div className="ad-sidebar-user-name">المشرف</div>
+                <div className="ad-sidebar-user-name">{t('appReview.sidebar.adminLabel')}</div>
                 <div className="ad-sidebar-user-role">SOUQ LINK Admin</div>
               </div>
             </div>
@@ -994,7 +999,7 @@ export default function AdminDashboard() {
                 <polyline points="16 17 21 12 16 7" />
                 <line x1="21" y1="12" x2="9" y2="12" />
               </svg>
-              تسجيل الخروج
+              {t('appReview.topbar.logout')}
             </button>
           </div>
         </aside>
@@ -1043,13 +1048,13 @@ export default function AdminDashboard() {
                 className="ad-toolbar-refresh"
                 onClick={refreshCurrent}
                 disabled={loading}
-                title="تحديث"
+                title={t('appReview.toolbar.refresh')}
               >
                 <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" />
                   <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
                 </svg>
-                تحديث
+                {t('appReview.toolbar.refresh')}
               </button>
 
               <div className="ad-toolbar-search">
@@ -1060,10 +1065,10 @@ export default function AdminDashboard() {
                   type="text"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="بحث بالاسم، المتجر، الهاتف..."
+                  placeholder={t('appReview.toolbar.searchPlaceholder')}
                 />
                 {searchQuery && (
-                  <button type="button" className="ad-toolbar-search-clear" onClick={() => setSearchQuery('')} aria-label="مسح البحث">×</button>
+                  <button type="button" className="ad-toolbar-search-clear" onClick={() => setSearchQuery('')} aria-label={t('appReview.toolbar.clearSearchLabel')}>×</button>
                 )}
               </div>
 
@@ -1075,7 +1080,7 @@ export default function AdminDashboard() {
                     <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
                   </svg>
                   <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
-                    <option value="all">كل الأنواع</option>
+                    <option value="all">{t('appReview.toolbar.allTypes')}</option>
                     {typeFilterOptions.map(opt => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
@@ -1089,8 +1094,8 @@ export default function AdminDashboard() {
                   <polyline points="17 8 17 18" /><polyline points="20 15 17 18 14 15" />
                 </svg>
                 <select value={sortOrder} onChange={e => setSortOrder(e.target.value as 'newest' | 'oldest')}>
-                  <option value="newest">ترتيب: الأحدث</option>
-                  <option value="oldest">ترتيب: الأقدم</option>
+                  <option value="newest">{t('appReview.toolbar.sortNewest')}</option>
+                  <option value="oldest">{t('appReview.toolbar.sortOldest')}</option>
                 </select>
               </div>
 
@@ -1098,10 +1103,10 @@ export default function AdminDashboard() {
                 type="button"
                 className="ad-toolbar-refresh"
                 onClick={() => setShowArchived(v => !v)}
-                title="عرض العناصر المحذوفة"
+                title={t('appReview.toolbar.archiveToggleTitle')}
                 style={showArchived ? { background: '#475569', color: '#fff', borderColor: '#475569' } : undefined}
               >
-                🗑️ سلة المحذوفات{archivedCount > 0 ? ` (${archivedCount})` : ''}
+                {t('appReview.toolbar.archiveBinLabel')}{archivedCount > 0 ? ` (${archivedCount})` : ''}
               </button>
             </div>
           )}
@@ -1109,20 +1114,20 @@ export default function AdminDashboard() {
           {activeSection !== 'batches' && activeSection !== 'logistics' && activeSection !== 'couriers' && activeSection !== 'shops' && activeSection !== 'categories' && activeSection !== 'messages' && activeSection !== 'payments' && activeSection !== 'ledger' && activeSection !== 'analytics' && activeSection !== 'deliveryIssues' && activeSection !== 'settlements' && (loading ? (
             <div className="ad-state" role="status" aria-live="polite">
               <span className="ad-state-spin" aria-hidden="true" />
-              <div className="ad-state-title">جاري تحميل الطلبات…</div>
-              <div className="ad-state-sub">يرجى الانتظار قليلاً بينما نجلب أحدث الطلبات.</div>
+              <div className="ad-state-title">{t('appReview.states.loadingTitle')}</div>
+              <div className="ad-state-sub">{t('appReview.states.loadingSub')}</div>
             </div>
           ) : currentApps.length === 0 ? (
             <div className="ad-state">
               <div className="ad-state-icon">{AppIcons.inbox}</div>
               <div className="ad-state-title">
-                {activeTab === 'all'      ? 'لا توجد طلبات' :
-                 activeTab === 'pending'  ? 'لا توجد طلبات قيد المراجعة' :
-                 activeTab === 'approved' ? 'لا توجد طلبات موافق عليها بعد' :
-                                            'لا توجد طلبات مرفوضة'}
+                {activeTab === 'all'      ? t('appReview.states.emptyAll') :
+                 activeTab === 'pending'  ? t('appReview.states.emptyPending') :
+                 activeTab === 'approved' ? t('appReview.states.emptyApproved') :
+                                            t('appReview.states.emptyRejected')}
               </div>
               <div className="ad-state-sub">
-                ستظهر الطلبات الجديدة هنا فور وصولها — يمكنك مراجعتها والرد عليها مباشرة.
+                {t('appReview.states.emptySub')}
               </div>
             </div>
           ) : (
@@ -1141,29 +1146,29 @@ export default function AdminDashboard() {
             const documents: MediaSpec[] = [];
             if (app.pictures) {
               app.pictures.forEach((url, i) => {
-                documents.push({ url, label: `صورة المتجر ${i + 1}`, variant: 'picture' });
+                documents.push({ url, label: t('appReview.merchantCard.pictureLabel', { index: i + 1 }), variant: 'picture' });
               });
             }
-            if (app.id_front_url) documents.push({ path: app.id_front_url, bucket: 'merchant-id-docs', label: 'الهوية — الواجهة' });
-            if (app.id_back_url)  documents.push({ path: app.id_back_url,  bucket: 'merchant-id-docs', label: 'الهوية — الخلفية' });
+            if (app.id_front_url) documents.push({ path: app.id_front_url, bucket: 'merchant-id-docs', label: t('appReview.merchantCard.idFront') });
+            if (app.id_back_url)  documents.push({ path: app.id_back_url,  bucket: 'merchant-id-docs', label: t('appReview.merchantCard.idBack') });
 
             const contactItems: InfoSpec[] = [
-              { icon: AppIcons.mail,  label: 'البريد الإلكتروني', value: app.email,        href: `mailto:${app.email}` },
-              { icon: AppIcons.phone, label: 'رقم الهاتف',       value: app.phone_number, href: `tel:${app.phone_number}` },
-              { icon: AppIcons.pin,   label: 'المدينة',          value: app.city },
+              { icon: AppIcons.mail,  label: t('appReview.fields.email'), value: app.email,        href: `mailto:${app.email}` },
+              { icon: AppIcons.phone, label: t('appReview.fields.phone'), value: app.phone_number, href: `tel:${app.phone_number}` },
+              { icon: AppIcons.pin,   label: t('appReview.fields.city'), value: app.city },
             ];
 
             const detailItems: InfoSpec[] = [];
             if (app.Type_of_store) {
               detailItems.push({
                 icon: AppIcons.store,
-                label: 'نوع المتجر',
+                label: t('appReview.merchantCard.storeTypeLabel'),
                 value: STORE_TYPES[app.Type_of_store] ?? app.Type_of_store,
               });
             }
             detailItems.push({
               icon: AppIcons.user,
-              label: 'صاحب المتجر',
+              label: t('appReview.merchantCard.ownerLabel'),
               value: app.name_of_owner,
             });
 
@@ -1199,28 +1204,28 @@ export default function AdminDashboard() {
           {/* ── Delivery cards ── */}
           {activeSection === 'delivery' && (filteredDelivery as DeliveryApp[]).map(app => {
             const documents: MediaSpec[] = [];
-            if (app.id_front_url)      documents.push({ path: app.id_front_url,      bucket: 'delivery-applications', label: 'الهوية الوطنية — الواجهة' });
-            if (app.id_back_url)       documents.push({ path: app.id_back_url,       bucket: 'delivery-applications', label: 'الهوية الوطنية — الخلفية' });
-            if (app.license_front_url) documents.push({ path: app.license_front_url, bucket: 'delivery-applications', label: 'رخصة القيادة — الواجهة' });
-            if (app.license_back_url)  documents.push({ path: app.license_back_url,  bucket: 'delivery-applications', label: 'رخصة القيادة — الخلفية' });
+            if (app.id_front_url)      documents.push({ path: app.id_front_url,      bucket: 'delivery-applications', label: t('appReview.deliveryCard.idFrontNational') });
+            if (app.id_back_url)       documents.push({ path: app.id_back_url,       bucket: 'delivery-applications', label: t('appReview.deliveryCard.idBackNational') });
+            if (app.license_front_url) documents.push({ path: app.license_front_url, bucket: 'delivery-applications', label: t('appReview.deliveryCard.licenseFront') });
+            if (app.license_back_url)  documents.push({ path: app.license_back_url,  bucket: 'delivery-applications', label: t('appReview.deliveryCard.licenseBack') });
 
             const contactItems: InfoSpec[] = [
-              { icon: AppIcons.mail,  label: 'البريد الإلكتروني', value: app.email,        href: `mailto:${app.email}` },
-              { icon: AppIcons.phone, label: 'رقم الهاتف',       value: app.phone_number, href: `tel:${app.phone_number}` },
+              { icon: AppIcons.mail,  label: t('appReview.fields.email'), value: app.email,        href: `mailto:${app.email}` },
+              { icon: AppIcons.phone, label: t('appReview.fields.phone'), value: app.phone_number, href: `tel:${app.phone_number}` },
             ];
 
             const detailItems: InfoSpec[] = [];
             if (app.type_of_vehicle) {
               detailItems.push({
                 icon: AppIcons.car,
-                label: 'نوع المركبة',
+                label: t('appReview.deliveryCard.vehicleTypeLabel'),
                 value: VEHICLE_TYPES[app.type_of_vehicle] ?? app.type_of_vehicle,
               });
             }
             if (app.ID_number) {
               detailItems.push({
                 icon: AppIcons.idCard,
-                label: 'رقم الهوية الوطنية',
+                label: t('appReview.deliveryCard.nationalIdLabel'),
                 value: app.ID_number,
               });
             }
@@ -1229,7 +1234,7 @@ export default function AdminDashboard() {
               <ApplicationCard
                 key={app.id}
                 applicantName={app.name}
-                ownerName="مندوب توصيل"
+                ownerName={t('appReview.deliveryCard.ownerPlaceholder')}
                 typeChip={app.type_of_vehicle ? (VEHICLE_TYPES[app.type_of_vehicle] ?? app.type_of_vehicle) : undefined}
                 appKind="delivery"
                 status={app.status}
@@ -1312,11 +1317,11 @@ export default function AdminDashboard() {
 
                 {/* Header row */}
                 <div className="ad-batches-header">
-                  <h2 className="ad-batches-title">تجميعات الاستلام — الميل الأول</h2>
+                  <h2 className="ad-batches-title">{t('appReview.legacyBatches.title')}</h2>
                   <div className="ad-batches-header-actions">
-                    <button className="ad-batches-refresh" onClick={loadBatches} disabled={batchesLoading}>↻ تحديث</button>
+                    <button className="ad-batches-refresh" onClick={loadBatches} disabled={batchesLoading}>{t('appReview.legacyBatches.refresh')}</button>
                     <button className="ad-assign-btn" onClick={runAssignment} disabled={assigning || batches.length === 0}>
-                      {assigning ? '⏳ جاري التعيين...' : '🚗 تعيين السائقين'}
+                      {assigning ? t('appReview.legacyBatches.assigning') : t('appReview.legacyBatches.assignDrivers')}
                     </button>
                   </div>
                 </div>
@@ -1325,13 +1330,13 @@ export default function AdminDashboard() {
                 {assignError   && <div className="ad-error">{assignError}</div>}
                 {assignSummary && (
                   <div className="ad-assign-summary">
-                    <span className="ad-assign-summary-item ad-assign-summary-item--ok">✔ {assignSummary.assigned} دفعة تم تعيينها</span>
+                    <span className="ad-assign-summary-item ad-assign-summary-item--ok">{t('appReview.legacyBatches.assignedSummary', { count: assignSummary.assigned })}</span>
                     {assignSummary.unassigned > 0 && (
-                      <span className="ad-assign-summary-item ad-assign-summary-item--warn">⚠ {assignSummary.unassigned} في قائمة الانتظار</span>
+                      <span className="ad-assign-summary-item ad-assign-summary-item--warn">{t('appReview.legacyBatches.unassignedSummary', { count: assignSummary.unassigned })}</span>
                     )}
                     {assignSummary.assigned === 0 && assignSummary.unassigned > 0 && (
                       <span className="ad-assign-summary-item ad-assign-summary-item--warn">
-                        لم يتم العثور على سائقين متاحين بموقع جغرافي — تأكد من أن السائقين قد فتحوا تطبيقهم
+                        {t('appReview.legacyBatches.noDriversFound')}
                       </span>
                     )}
                   </div>
@@ -1350,7 +1355,7 @@ export default function AdminDashboard() {
                           className={`ad-batch-filter-btn${batchFilter === f ? ' ad-batch-filter-btn--active' : ''}`}
                           onClick={() => setBatchFilter(f)}
                         >
-                          {f === 'all' ? 'الكل' : f === 'assigned' ? '✔ مُعيَّنة' : '⏳ قائمة الانتظار'}
+                          {f === 'all' ? t('appReview.legacyBatches.filterAll') : f === 'assigned' ? t('appReview.legacyBatches.filterAssigned') : t('appReview.legacyBatches.filterQueued')}
                           <span className="ad-batch-filter-count">{count}</span>
                         </button>
                       );
@@ -1358,10 +1363,10 @@ export default function AdminDashboard() {
                   </div>
                 )}
 
-                {batchesLoading && <div className="ad-loading">جاري حساب التجميعات...</div>}
+                {batchesLoading && <div className="ad-loading">{t('appReview.legacyBatches.computingBatches')}</div>}
                 {batchesError  && <div className="ad-error">{batchesError}</div>}
                 {!batchesLoading && !batchesError && batches.length === 0 && (
-                  <div className="ad-empty">لا توجد طلبات معلقة للتجميع حالياً</div>
+                  <div className="ad-empty">{t('appReview.legacyBatches.noBatches')}</div>
                 )}
 
                 {!batchesLoading && batches
@@ -1382,19 +1387,19 @@ export default function AdminDashboard() {
                       {/* Header */}
                       <div className="ad-batch-header ad-batch-header--clickable" onClick={() => toggleBatch(origIdx)}>
                         <div className="ad-batch-title">
-                          <span className="ad-batch-num">دفعة {origIdx + 1}</span>
-                          <span className="ad-batch-chip">{batch.stops} {batch.stops === 1 ? 'متجر' : 'متاجر'}</span>
-                          <span className="ad-batch-chip ad-batch-chip--vol">حجم {batch.total_volume} وحدة</span>
+                          <span className="ad-batch-num">{t('appReview.legacyBatches.batchLabel', { num: origIdx + 1 })}</span>
+                          <span className="ad-batch-chip">{batch.stops} {batch.stops === 1 ? t('appReview.legacyBatches.storeSingular') : t('appReview.legacyBatches.storePlural')}</span>
+                          <span className="ad-batch-chip ad-batch-chip--vol">{t('appReview.legacyBatches.volumeChip', { volume: batch.total_volume })}</span>
                           {isAssigned && (
                             <span className="ad-batch-chip ad-batch-chip--driver">🚗 {batch.assigned_driver!.name}</span>
                           )}
                           {isQueued && (
-                            <span className="ad-batch-chip ad-batch-chip--queued">⏳ انتظار</span>
+                            <span className="ad-batch-chip ad-batch-chip--queued">⏳ {t('appReview.legacyBatches.queuedChip')}</span>
                           )}
                           <span className="ad-batch-chevron">{batchOpen ? '▲' : '▼'}</span>
                         </div>
                         <div className="ad-batch-orders-summary">
-                          {batch.stops} محطة استلام — انقر لعرض التفاصيل
+                          {t('appReview.legacyBatches.stopsSummary', { count: batch.stops })}
                         </div>
                       </div>
 
@@ -1411,20 +1416,19 @@ export default function AdminDashboard() {
                                   <div className="ad-batch-shop-info">
                                     <span className="ad-batch-shop-id">{shop.shop_name}</span>
                                     <span className="ad-batch-shop-meta">
-                                      {shop.order_ids.length} {shop.order_ids.length === 1 ? 'طلب' : 'طلبات'} · حجم {shop.total_volume} وحدة · جاهز{' '}
-                                      {new Date(shop.ready_time).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                                      {shop.order_ids.length} {shop.order_ids.length === 1 ? t('appReview.legacyBatches.orderSingular') : t('appReview.legacyBatches.orderPlural')} · {t('appReview.legacyBatches.volumeChip', { volume: shop.total_volume })} · {t('appReview.legacyBatches.readyAt', { time: new Date(shop.ready_time).toLocaleTimeString(lang === 'ar' ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit' }) })}
                                     </span>
                                   </div>
                                   <div className="ad-batch-shop-actions">
                                     <a href={`https://www.google.com/maps?q=${shop.lat},${shop.lng}`} target="_blank" rel="noreferrer" className="ad-batch-map-link" onClick={e => e.stopPropagation()}>
-                                      📍 خريطة
+                                      {t('appReview.legacyBatches.mapLink')}
                                     </a>
                                     <span className="ad-batch-chevron">{shopOpen ? '▲' : '▼'}</span>
                                   </div>
                                 </div>
                                 {shopOpen && (
                                   <div className="ad-batch-shop-detail">
-                                    <span className="ad-batch-detail-label">المنتجات المطلوب استلامها:</span>
+                                    <span className="ad-batch-detail-label">{t('appReview.legacyBatches.productsToPickup')}</span>
                                     <div className="ad-batch-item-list">
                                       {shop.items.map((item, i) => (
                                         <div key={i} className="ad-batch-item-row">
@@ -1452,113 +1456,113 @@ export default function AdminDashboard() {
 
               {/* Right: config panel */}
               <div className="ad-config-panel">
-                <h3 className="ad-config-panel-title">⚙️ إعدادات التجميع</h3>
+                <h3 className="ad-config-panel-title">{t('appReview.legacyBatches.configTitle')}</h3>
 
                 {configError   && <div className="ad-error" style={{ fontSize: '0.82rem' }}>{configError}</div>}
-                {configSuccess && <div className="ad-config-success">✔ تم الحفظ</div>}
+                {configSuccess && <div className="ad-config-success">{t('appReview.legacyBatches.savedSuccess')}</div>}
 
                 {configLoading
-                  ? <div style={{ color: '#888', fontSize: '0.85rem', padding: '1rem 0' }}>جاري التحميل...</div>
+                  ? <div style={{ color: '#888', fontSize: '0.85rem', padding: '1rem 0' }}>{t('appReview.legacyBatches.loadingConfig')}</div>
                   : (
                     <div className="ad-config-fields" onClick={() => setActiveTooltip(null)}>
 
                       {/* Capacity */}
                       <div className="ad-config-field">
                         <div className="ad-config-label-row">
-                          <span className="ad-config-label-text">الطاقة الاستيعابية</span>
-                          <button className="ad-config-info-btn" onClick={e => { e.stopPropagation(); setActiveTooltip(t => t === 'capacity' ? null : 'capacity'); }}>!</button>
+                          <span className="ad-config-label-text">{t('appReview.legacyBatches.capacityLabel')}</span>
+                          <button className="ad-config-info-btn" onClick={e => { e.stopPropagation(); setActiveTooltip(prev => prev === 'capacity' ? null : 'capacity'); }}>!</button>
                           {activeTooltip === 'capacity' && (
-                            <div className="ad-config-tooltip">الحد الأقصى لمجموع وحدات الحجم التي يستطيع سائق واحد حملها في رحلة استلام واحدة</div>
+                            <div className="ad-config-tooltip">{t('appReview.legacyBatches.capacityTooltip')}</div>
                           )}
                         </div>
                         <div className="ad-config-input-row">
                           <input type="number" min={1} max={200} className="ad-config-input"
-                            title="الطاقة الاستيعابية"
-                            placeholder="أدخل الحد الأقصى للوحدات"
+                            title={t('appReview.legacyBatches.capacityLabel')}
+                            placeholder={t('appReview.legacyBatches.capacityPlaceholder')}
                             value={draftConfig.max_driver_capacity}
                             onChange={e => { setConfigSuccess(false); setDraftConfig(p => ({ ...p, max_driver_capacity: e.target.value })); }}
                           />
-                          <span className="ad-config-unit">وحدة</span>
+                          <span className="ad-config-unit">{t('appReview.legacyBatches.unitCapacity')}</span>
                         </div>
                       </div>
 
                       {/* Stops */}
                       <div className="ad-config-field">
                         <div className="ad-config-label-row">
-                          <span className="ad-config-label-text">الحد الأقصى للمحطات</span>
-                          <button className="ad-config-info-btn" onClick={e => { e.stopPropagation(); setActiveTooltip(t => t === 'stops' ? null : 'stops'); }}>!</button>
+                          <span className="ad-config-label-text">{t('appReview.legacyBatches.stopsLabel')}</span>
+                          <button className="ad-config-info-btn" onClick={e => { e.stopPropagation(); setActiveTooltip(prev => prev === 'stops' ? null : 'stops'); }}>!</button>
                           {activeTooltip === 'stops' && (
-                            <div className="ad-config-tooltip">أقصى عدد من المتاجر يمكن للسائق زيارتها في دفعة استلام واحدة</div>
+                            <div className="ad-config-tooltip">{t('appReview.legacyBatches.stopsTooltip')}</div>
                           )}
                         </div>
                         <div className="ad-config-input-row">
                           <input type="number" min={1} max={20} className="ad-config-input"
-                            title="الحد الأقصى للمحطات"
-                            placeholder="أدخل الحد الأقصى للمحطات"
+                            title={t('appReview.legacyBatches.stopsLabel')}
+                            placeholder={t('appReview.legacyBatches.stopsPlaceholder')}
                             value={draftConfig.max_stops_per_batch}
                             onChange={e => { setConfigSuccess(false); setDraftConfig(p => ({ ...p, max_stops_per_batch: e.target.value })); }}
                           />
-                          <span className="ad-config-unit">متجر</span>
+                          <span className="ad-config-unit">{t('appReview.legacyBatches.unitStore')}</span>
                         </div>
                       </div>
 
                       {/* Wait */}
                       <div className="ad-config-field">
                         <div className="ad-config-label-row">
-                          <span className="ad-config-label-text">وقت الانتظار</span>
-                          <button className="ad-config-info-btn" onClick={e => { e.stopPropagation(); setActiveTooltip(t => t === 'wait' ? null : 'wait'); }}>!</button>
+                          <span className="ad-config-label-text">{t('appReview.legacyBatches.waitLabel')}</span>
+                          <button className="ad-config-info-btn" onClick={e => { e.stopPropagation(); setActiveTooltip(prev => prev === 'wait' ? null : 'wait'); }}>!</button>
                           {activeTooltip === 'wait' && (
-                            <div className="ad-config-tooltip">الوقت الأقصى (بالدقائق) الذي يُسمح فيه للطرد بالانتظار قبل الاستلام — يُستخدم للتنبيهات فقط ولا يوقف التجميع</div>
+                            <div className="ad-config-tooltip">{t('appReview.legacyBatches.waitTooltip')}</div>
                           )}
                         </div>
                         <div className="ad-config-input-row">
                           <input type="number" min={10} max={480} className="ad-config-input"
-                            title="الحد الأقصى لوقت الانتظار"
-                            placeholder="أدخل الحد الأقصى لوقت الانتظار"
+                            title={t('appReview.legacyBatches.waitLabel')}
+                            placeholder={t('appReview.legacyBatches.waitPlaceholder')}
                             value={draftConfig.max_allowed_wait}
                             onChange={e => { setConfigSuccess(false); setDraftConfig(p => ({ ...p, max_allowed_wait: e.target.value })); }}
                           />
-                          <span className="ad-config-unit">دقيقة</span>
+                          <span className="ad-config-unit">{t('appReview.legacyBatches.unitMinute')}</span>
                         </div>
                       </div>
 
                       {/* Distance */}
                       <div className="ad-config-field">
                         <div className="ad-config-label-row">
-                          <span className="ad-config-label-text">الحد الأقصى للمسافة</span>
-                          <button className="ad-config-info-btn" onClick={e => { e.stopPropagation(); setActiveTooltip(t => t === 'dist' ? null : 'dist'); }}>!</button>
+                          <span className="ad-config-label-text">{t('appReview.legacyBatches.distanceLabel')}</span>
+                          <button className="ad-config-info-btn" onClick={e => { e.stopPropagation(); setActiveTooltip(prev => prev === 'dist' ? null : 'dist'); }}>!</button>
                           {activeTooltip === 'dist' && (
-                            <div className="ad-config-tooltip">أبعد مسافة (بالكيلومتر) مسموح بها بين أي متجرين داخل نفس الدفعة — تُحسب بخط مستقيم</div>
+                            <div className="ad-config-tooltip">{t('appReview.legacyBatches.distanceTooltip')}</div>
                           )}
                         </div>
                         <div className="ad-config-input-row">
                           <input type="number" min={0.5} max={50} step={0.5} className="ad-config-input"
-                            title="الحد الأقصى للمسافة"
-                            placeholder="أدخل الحد الأقصى للمسافة"
+                            title={t('appReview.legacyBatches.distanceLabel')}
+                            placeholder={t('appReview.legacyBatches.distancePlaceholder')}
                             value={draftConfig.max_distance_km}
                             onChange={e => { setConfigSuccess(false); setDraftConfig(p => ({ ...p, max_distance_km: e.target.value })); }}
                           />
-                          <span className="ad-config-unit">كم</span>
+                          <span className="ad-config-unit">{t('appReview.legacyBatches.unitKm')}</span>
                         </div>
                       </div>
 
                       {/* Max wait days */}
                       <div className="ad-config-field">
                         <div className="ad-config-label-row">
-                          <span className="ad-config-label-text">أقصى أيام انتظار الشحنة</span>
-                          <button className="ad-config-info-btn" onClick={e => { e.stopPropagation(); setActiveTooltip(t => t === 'wait_days' ? null : 'wait_days'); }}>!</button>
+                          <span className="ad-config-label-text">{t('appReview.legacyBatches.waitDaysLabel')}</span>
+                          <button className="ad-config-info-btn" onClick={e => { e.stopPropagation(); setActiveTooltip(prev => prev === 'wait_days' ? null : 'wait_days'); }}>!</button>
                           {activeTooltip === 'wait_days' && (
-                            <div className="ad-config-tooltip">الحد الأقصى لعدد الأيام التي يُسمح فيها للشحنة بالانتظار قبل الاستلام — يُحسب الموعد النهائي تلقائياً عند إنشاء الشحنة</div>
+                            <div className="ad-config-tooltip">{t('appReview.legacyBatches.waitDaysTooltip')}</div>
                           )}
                         </div>
                         <div className="ad-config-input-row">
                           <input type="number" min={1} max={30} className="ad-config-input"
-                            title="أقصى أيام انتظار الشحنة"
-                            placeholder="أدخل عدد الأيام"
+                            title={t('appReview.legacyBatches.waitDaysLabel')}
+                            placeholder={t('appReview.legacyBatches.waitDaysPlaceholder')}
                             value={draftConfig.max_wait_days}
                             onChange={e => { setConfigSuccess(false); setDraftConfig(p => ({ ...p, max_wait_days: e.target.value })); }}
                           />
-                          <span className="ad-config-unit">يوم</span>
+                          <span className="ad-config-unit">{t('appReview.legacyBatches.unitDay')}</span>
                         </div>
                       </div>
 
@@ -1568,7 +1572,7 @@ export default function AdminDashboard() {
                         disabled={configSaving}
                         style={{ cursor: configChanged ? 'pointer' : 'default' }}
                       >
-                        {configSaving ? 'جاري الحفظ...' : '💾 حفظ'}
+                        {configSaving ? t('appReview.legacyBatches.saving') : t('appReview.legacyBatches.save')}
                       </button>
                     </div>
                   )
@@ -1584,18 +1588,18 @@ export default function AdminDashboard() {
       {/* Lightbox */}
       {lightbox && (
         <div className="ad-lightbox" onClick={() => setLightbox(null)}>
-          <img src={lightbox} alt="صورة كاملة" />
+          <img src={lightbox} alt={t('appReview.lightbox.fullImageAlt')} />
         </div>
       )}
 
       {/* ── Merchant approve modal ── */}
       {approveModal.app && (
         <div className="ad-modal-overlay" onClick={() => !approveModal.sending && setApproveModal({ app: null, platformEmail: '', message: '', sending: false, error: '' })}>
-          <div className="ad-modal" dir="rtl" onClick={e => e.stopPropagation()}>
-            <h3 className="ad-modal-title">✅ إرسال إشعار القبول</h3>
-            <p className="ad-modal-to">إلى: <strong>{approveModal.app.email}</strong></p>
+          <div className="ad-modal" dir={direction} onClick={e => e.stopPropagation()}>
+            <h3 className="ad-modal-title">{t('appReview.approveModal.titleMerchant')}</h3>
+            <p className="ad-modal-to">{t('appReview.approveModal.toLabel')} <strong>{approveModal.app.email}</strong></p>
             <div className="ad-modal-field">
-              <label className="ad-modal-label">البريد الإلكتروني الرسمي للتاجر *</label>
+              <label className="ad-modal-label">{t('appReview.approveModal.merchantEmailLabel')}</label>
               <div className="ad-modal-input-row">
                 <input
                   type="email"
@@ -1611,29 +1615,29 @@ export default function AdminDashboard() {
                   onClick={generateMerchantEmail}
                   disabled={approveModal.sending || !!approveModal.generatingEmail}
                 >
-                  {approveModal.generatingEmail ? '...' : 'توليد'}
+                  {approveModal.generatingEmail ? '...' : t('appReview.approveModal.generate')}
                 </button>
               </div>
             </div>
             <div className="ad-modal-field">
-              <label className="ad-modal-label">نص الرسالة</label>
+              <label className="ad-modal-label">{t('appReview.approveModal.messageLabel')}</label>
               <textarea
                 className="ad-modal-textarea"
                 value={approveModal.message}
                 onChange={e => setApproveModal(prev => ({ ...prev, message: e.target.value }))}
                 rows={8}
                 disabled={approveModal.sending}
-                title="نص رسالة القبول"
-                placeholder="اكتب رسالة القبول هنا..."
+                title={t('appReview.approveModal.messageTitle')}
+                placeholder={t('appReview.approveModal.messagePlaceholder')}
               />
             </div>
             {approveModal.error && <p className="ad-modal-error">{approveModal.error}</p>}
             <div className="ad-modal-actions">
               <button type="button" className="ad-btn ad-btn--approve" onClick={handleSendApproval} disabled={approveModal.sending || !approveModal.platformEmail.trim()}>
-                {approveModal.sending ? 'جارٍ الإرسال...' : 'إرسال وتسجيل القبول'}
+                {approveModal.sending ? t('appReview.approveModal.sending') : t('appReview.approveModal.sendAndApprove')}
               </button>
               <button type="button" className="ad-btn ad-btn--delete" onClick={() => setApproveModal({ app: null, platformEmail: '', message: '', sending: false, error: '' })} disabled={approveModal.sending}>
-                إلغاء
+                {t('appReview.approveModal.cancel')}
               </button>
             </div>
           </div>
@@ -1643,40 +1647,40 @@ export default function AdminDashboard() {
       {/* ── Merchant reject modal ── */}
       {rejectModal.app && (
         <div className="ad-modal-overlay" onClick={() => !rejectModal.sending && setRejectModal({ app: null, reason: '', message: '', sending: false, error: '' })}>
-          <div className="ad-modal" dir="rtl" onClick={e => e.stopPropagation()}>
-            <h3 className="ad-modal-title">📧 إرسال إشعار رفض</h3>
-            <p className="ad-modal-to">إلى: <strong>{rejectModal.app.email}</strong></p>
+          <div className="ad-modal" dir={direction} onClick={e => e.stopPropagation()}>
+            <h3 className="ad-modal-title">{t('appReview.rejectModal.titleMerchant')}</h3>
+            <p className="ad-modal-to">{t('appReview.approveModal.toLabel')} <strong>{rejectModal.app.email}</strong></p>
             <div className="ad-modal-field">
-              <label className="ad-modal-label">سبب الرفض <span className="ad-required">*</span></label>
+              <label className="ad-modal-label">{t('appReview.rejectModal.reasonLabel')} <span className="ad-required">*</span></label>
               <textarea
                 className="ad-modal-textarea"
                 rows={3}
                 disabled={rejectModal.sending}
-                placeholder="مثال: المستندات المرفقة غير مكتملة..."
+                placeholder={t('appReview.rejectModal.reasonPlaceholder')}
                 onChange={e => {
                   const reason = e.target.value;
                   const app = rejectModal.app!;
                   setRejectModal(prev => ({
                     ...prev,
                     reason,
-                    message: `عزيزي/عزيزتي ${app.name_of_owner}،\n\nنشكركم على اهتمامكم بالانضمام إلى منصة سوق لينك.\n\nبعد مراجعة طلبكم بعناية، نأسف لإبلاغكم بأننا غير قادرين على قبول طلبكم للسبب التالي:\n${reason}\n\nنتمنى لكم التوفيق والنجاح في مساعيكم.\n\nمع تحياتنا،\nفريق سوق لينك`,
+                    message: t('appReview.emails.rejectionMerchant', { name: app.name_of_owner, reason }),
                   }));
                 }}
               />
             </div>
             {rejectModal.message && (
               <div className="ad-modal-field">
-                <label className="ad-modal-label">معاينة الرسالة</label>
+                <label className="ad-modal-label">{t('appReview.rejectModal.previewLabel')}</label>
                 <pre className="ad-modal-preview">{rejectModal.message}</pre>
               </div>
             )}
             {rejectModal.error && <p className="ad-modal-error">{rejectModal.error}</p>}
             <div className="ad-modal-actions">
               <button type="button" className="ad-btn ad-btn--reject" onClick={handleSendRejection} disabled={rejectModal.sending || !rejectModal.reason.trim()}>
-                {rejectModal.sending ? 'جارٍ الإرسال...' : 'إرسال وتسجيل الرفض'}
+                {rejectModal.sending ? t('appReview.rejectModal.sending') : t('appReview.rejectModal.sendAndReject')}
               </button>
               <button type="button" className="ad-btn ad-btn--delete" onClick={() => setRejectModal({ app: null, reason: '', message: '', sending: false, error: '' })} disabled={rejectModal.sending}>
-                إلغاء
+                {t('appReview.rejectModal.cancel')}
               </button>
             </div>
           </div>
@@ -1686,11 +1690,11 @@ export default function AdminDashboard() {
       {/* ── Delivery approve modal ── */}
       {deliveryApproveModal.app && (
         <div className="ad-modal-overlay" onClick={() => !deliveryApproveModal.sending && setDeliveryApproveModal({ app: null, platformEmail: '', message: '', sending: false, error: '' })}>
-          <div className="ad-modal" dir="rtl" onClick={e => e.stopPropagation()}>
-            <h3 className="ad-modal-title">✅ إرسال إشعار القبول — مندوب توصيل</h3>
-            <p className="ad-modal-to">إلى: <strong>{deliveryApproveModal.app.email}</strong></p>
+          <div className="ad-modal" dir={direction} onClick={e => e.stopPropagation()}>
+            <h3 className="ad-modal-title">{t('appReview.approveModal.titleDelivery')}</h3>
+            <p className="ad-modal-to">{t('appReview.approveModal.toLabel')} <strong>{deliveryApproveModal.app.email}</strong></p>
             <div className="ad-modal-field">
-              <label className="ad-modal-label">البريد الإلكتروني الرسمي للمندوب *</label>
+              <label className="ad-modal-label">{t('appReview.approveModal.deliveryEmailLabel')}</label>
               <div className="ad-modal-input-row">
                 <input
                   type="email"
@@ -1706,29 +1710,29 @@ export default function AdminDashboard() {
                   onClick={generateDeliveryEmail}
                   disabled={deliveryApproveModal.sending || !!deliveryApproveModal.generatingEmail}
                 >
-                  {deliveryApproveModal.generatingEmail ? '...' : 'توليد'}
+                  {deliveryApproveModal.generatingEmail ? '...' : t('appReview.approveModal.generate')}
                 </button>
               </div>
             </div>
             <div className="ad-modal-field">
-              <label className="ad-modal-label">نص الرسالة</label>
+              <label className="ad-modal-label">{t('appReview.approveModal.messageLabel')}</label>
               <textarea
                 className="ad-modal-textarea"
                 value={deliveryApproveModal.message}
                 onChange={e => setDeliveryApproveModal(prev => ({ ...prev, message: e.target.value }))}
                 rows={8}
                 disabled={deliveryApproveModal.sending}
-                title="نص رسالة القبول"
-                placeholder="اكتب رسالة القبول هنا..."
+                title={t('appReview.approveModal.messageTitle')}
+                placeholder={t('appReview.approveModal.messagePlaceholder')}
               />
             </div>
             {deliveryApproveModal.error && <p className="ad-modal-error">{deliveryApproveModal.error}</p>}
             <div className="ad-modal-actions">
               <button type="button" className="ad-btn ad-btn--approve" onClick={handleSendDeliveryApproval} disabled={deliveryApproveModal.sending || !deliveryApproveModal.platformEmail.trim()}>
-                {deliveryApproveModal.sending ? 'جارٍ الإرسال...' : 'إرسال وتسجيل القبول'}
+                {deliveryApproveModal.sending ? t('appReview.approveModal.sending') : t('appReview.approveModal.sendAndApprove')}
               </button>
               <button type="button" className="ad-btn ad-btn--delete" onClick={() => setDeliveryApproveModal({ app: null, platformEmail: '', message: '', sending: false, error: '' })} disabled={deliveryApproveModal.sending}>
-                إلغاء
+                {t('appReview.approveModal.cancel')}
               </button>
             </div>
           </div>
@@ -1738,40 +1742,40 @@ export default function AdminDashboard() {
       {/* ── Delivery reject modal ── */}
       {deliveryRejectModal.app && (
         <div className="ad-modal-overlay" onClick={() => !deliveryRejectModal.sending && setDeliveryRejectModal({ app: null, reason: '', message: '', sending: false, error: '' })}>
-          <div className="ad-modal" dir="rtl" onClick={e => e.stopPropagation()}>
-            <h3 className="ad-modal-title">📧 إرسال إشعار رفض — مندوب توصيل</h3>
-            <p className="ad-modal-to">إلى: <strong>{deliveryRejectModal.app.email}</strong></p>
+          <div className="ad-modal" dir={direction} onClick={e => e.stopPropagation()}>
+            <h3 className="ad-modal-title">{t('appReview.rejectModal.titleDelivery')}</h3>
+            <p className="ad-modal-to">{t('appReview.approveModal.toLabel')} <strong>{deliveryRejectModal.app.email}</strong></p>
             <div className="ad-modal-field">
-              <label className="ad-modal-label">سبب الرفض <span className="ad-required">*</span></label>
+              <label className="ad-modal-label">{t('appReview.rejectModal.reasonLabel')} <span className="ad-required">*</span></label>
               <textarea
                 className="ad-modal-textarea"
                 rows={3}
                 disabled={deliveryRejectModal.sending}
-                placeholder="مثال: المستندات المرفقة غير مكتملة..."
+                placeholder={t('appReview.rejectModal.reasonPlaceholder')}
                 onChange={e => {
                   const reason = e.target.value;
                   const app = deliveryRejectModal.app!;
                   setDeliveryRejectModal(prev => ({
                     ...prev,
                     reason,
-                    message: `عزيزي/عزيزتي ${app.name}،\n\nنشكركم على اهتمامكم بالانضمام إلى منصة سوق لينك كمندوب توصيل.\n\nبعد مراجعة طلبكم بعناية، نأسف لإبلاغكم بأننا غير قادرين على قبول طلبكم للسبب التالي:\n${reason}\n\nنتمنى لكم التوفيق والنجاح في مساعيكم.\n\nمع تحياتنا،\nفريق سوق لينك`,
+                    message: t('appReview.emails.rejectionDelivery', { name: app.name, reason }),
                   }));
                 }}
               />
             </div>
             {deliveryRejectModal.message && (
               <div className="ad-modal-field">
-                <label className="ad-modal-label">معاينة الرسالة</label>
+                <label className="ad-modal-label">{t('appReview.rejectModal.previewLabel')}</label>
                 <pre className="ad-modal-preview">{deliveryRejectModal.message}</pre>
               </div>
             )}
             {deliveryRejectModal.error && <p className="ad-modal-error">{deliveryRejectModal.error}</p>}
             <div className="ad-modal-actions">
               <button type="button" className="ad-btn ad-btn--reject" onClick={handleSendDeliveryRejection} disabled={deliveryRejectModal.sending || !deliveryRejectModal.reason.trim()}>
-                {deliveryRejectModal.sending ? 'جارٍ الإرسال...' : 'إرسال وتسجيل الرفض'}
+                {deliveryRejectModal.sending ? t('appReview.rejectModal.sending') : t('appReview.rejectModal.sendAndReject')}
               </button>
               <button type="button" className="ad-btn ad-btn--delete" onClick={() => setDeliveryRejectModal({ app: null, reason: '', message: '', sending: false, error: '' })} disabled={deliveryRejectModal.sending}>
-                إلغاء
+                {t('appReview.rejectModal.cancel')}
               </button>
             </div>
           </div>

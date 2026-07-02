@@ -1,0 +1,228 @@
+{
+  "steps": {
+    "order": ["Order Placed", "Processing", "Ready for Pickup", "Out for Delivery", "Order Complete"],
+    "product": ["Order Placed", "Ready for Pickup", "Awaiting Pickup", "Out for Delivery", "Delivered"]
+  },
+  "badges": {
+    "pending": "Order Placed",
+    "processing": "Processing",
+    "ready": "Ready for Pickup",
+    "shipping": "Out for Delivery",
+    "delivered": "Delivered",
+    "cancelled": "Cancelled"
+  },
+  "history": {
+    "title": "My Orders",
+    "subtitle": "Track all your orders and delivery status",
+    "loading": "Loading your orders…",
+    "loginRequired": {
+      "title": "Sign in to view your orders",
+      "subtitle": "Sign in or create an account to access your order history",
+      "login": "Sign In",
+      "signup": "Create Account"
+    },
+    "error": {
+      "title": "Something went wrong",
+      "load": "An error occurred while loading orders"
+    },
+    "stats": {
+      "total": "Total Orders",
+      "spent": "Total Spent",
+      "inProgress": "In Delivery"
+    },
+    "filter": {
+      "search": "Search orders...",
+      "clearSearch": "Clear search",
+      "status": "Order Status",
+      "period": "All periods",
+      "all": "All",
+      "today": "Today",
+      "week": "This week",
+      "month": "This month",
+      "months3": "Last 3 months"
+    },
+    "empty": {
+      "title": "No orders found",
+      "subtitle": "Try a different filter or search term."
+    },
+    "card": {
+      "orderNumber": "Order No.",
+      "store": "Store",
+      "unit": "item",
+      "units": "items",
+      "product": "product",
+      "products": "products",
+      "andOneOther": "and {{count}} other item",
+      "andManyOther": "and {{count}} other items",
+      "total": "Total",
+      "deliveryDate": "Delivery Date",
+      "expectedDelivery": "Expected Delivery",
+      "cancelled": "Order Cancelled",
+      "unreadUpdate": "You have a new update on this order",
+      "delivering": {
+        "title": "Your order is on the way",
+        "arrivalLabel": "Expected arrival:",
+        "remainingLabel": "Time remaining:"
+      },
+      "timeline": {
+        "delivering": "In delivery",
+        "awaitingConfirm": "Awaiting your confirmation"
+      },
+      "success": {
+        "title": "Order delivered successfully",
+        "deliveryDate": "Delivery date:",
+        "deliveryTime": "Delivery time:"
+      },
+      "foot": {
+        "itemCount": "Items:",
+        "total": "Total:",
+        "orderDate": "Order date:",
+        "expectedDelivery": "Expected delivery:"
+      },
+      "actions": {
+        "reorder": "Reorder",
+        "track": "Track Order"
+      }
+    },
+    "estimate": {
+      "delivered": "Delivered successfully",
+      "today": "Today, {{time}}",
+      "hours": "Within hours",
+      "soon": "Shortly",
+      "oneDay": "Within 1 day",
+      "twoDays": "Within 2 days",
+      "days": "Within {{count}} days"
+    },
+    "time": {
+      "soon": "Shortly",
+      "minutes": "{{count}} min",
+      "hour": "{{count}} hr",
+      "hourAndMinutes": "{{h}} hr {{m}} min"
+    }
+  },
+  "tracking": {
+    "loading": "Loading order data…",
+    "back": "Back to Orders",
+    "notFound": {
+      "title": "Order not found",
+      "defaultMsg": "This order does not exist or does not belong to your account.",
+      "backToOrders": "Back to My Orders"
+    },
+    "orderNotFound": "Order not found",
+    "loadError": "An error occurred while loading the order",
+    "updates": {
+      "driver_delivered": {
+        "title": "Your order was delivered",
+        "msg": "Your products have been delivered successfully."
+      },
+      "admin_resolved": {
+        "title": "Delay report resolved",
+        "msg": "The admin has reviewed and resolved your report."
+      },
+      "customer_confirmed": {
+        "title": "Receipt confirmed",
+        "msg": "Your confirmation of receipt has been recorded."
+      }
+    },
+    "multiShipment": {
+      "title": "Your order will arrive in multiple batches",
+      "desc": "Products in this order may be delivered separately based on product availability and delivery plan. Each product's status will be updated independently until the order is fully complete.",
+      "note": "You can track each product's status via the timeline below."
+    },
+    "status": {
+      "pending": "Pending",
+      "delivering": "Out for Delivery",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    },
+    "header": {
+      "created": "Order Created",
+      "orderStatus": "Order Status",
+      "deliveredSuccess": "Order delivered successfully",
+      "deliveredAt": "Delivered on:",
+      "deliveryTime": "Delivery Time",
+      "timeSoon": "Delivery time will be set soon",
+      "notifyWhenSet": "You will be notified when the time is set",
+      "expectedArrival": "Expected Arrival",
+      "multiShipmentNote": "Your order may arrive in multiple batches",
+      "autoUpdate": "Time will be updated automatically",
+      "today": "Today",
+      "by": "by"
+    },
+    "timeline": {
+      "title": "Overall Order Status",
+      "delivering": "In delivery",
+      "awaitingConfirm": "Awaiting your confirmation"
+    },
+    "alerts": {
+      "stranded": {
+        "title": "There is an issue with one of your products",
+        "sub": "Our support team will contact you soon to resolve it"
+      },
+      "completed": {
+        "title": "Your order was delivered successfully",
+        "sub": "Thank you for trusting SouqLink"
+      },
+      "delivering": {
+        "title": "The driver is on the way to your location",
+        "sub": "Last update: 15 minutes ago"
+      },
+      "preparing": {
+        "title": "Your order is being prepared",
+        "sub": "You will be notified when the courier picks it up"
+      }
+    },
+    "delivery": {
+      "title": "Delivery Information",
+      "driverName": "Driver Name",
+      "driverPhone": "Contact Number",
+      "arrivalTime": "Expected Arrival Time",
+      "address": "Delivery Address",
+      "trackDriver": "Track Driver on Map",
+      "between": "between"
+    },
+    "summary": {
+      "title": "Order Summary",
+      "itemCount": "Items",
+      "deliveryFee": "Delivery Fee",
+      "grandTotal": "Grand Total",
+      "paymentStatus": "Payment Status",
+      "paid": "Paid"
+    },
+    "products": {
+      "title": "Products in this Order",
+      "showLess": "Show Less",
+      "showAll": "Show All Products",
+      "unknown": "Product",
+      "store": "Store:",
+      "unit": "item(s)"
+    },
+    "feedback": {
+      "confirmed": "✓ You confirmed receipt of this product",
+      "delayReported": "Your report has been submitted, our support team will contact you soon",
+      "confirm": "Confirm Receipt",
+      "reportDelay": "Report Delivery Delay",
+      "submit": "Submit Report",
+      "cancel": "Cancel",
+      "delayPlaceholder": "Describe the issue...",
+      "writeDesc": "Please describe the issue",
+      "error": "An error occurred, please try again"
+    },
+    "shipmentStatus": {
+      "delivered": "Product delivered successfully.",
+      "picked_up": "The driver is on the way to your location.",
+      "stranded_main": "We are experiencing a temporary issue with the delivery.",
+      "stranded_sub": "Our team is working to resolve it and the status will be updated soon.",
+      "delayed_main": "There is a slight delay in scheduling the delivery.",
+      "delayed_sub": "The status will be updated automatically soon.",
+      "reserved": "A driver has been assigned to pick up the product soon.",
+      "batched": "The product is scheduled for delivery, awaiting driver pickup from the store.",
+      "available": "The product is ready for pickup from the store.",
+      "pending": "The store is currently preparing your product."
+    },
+    "time": {
+      "today": "Today",
+      "between": "between"
+    }
+  }
+}

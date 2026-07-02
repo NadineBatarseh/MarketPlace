@@ -2,9 +2,11 @@ import {
   useState, useEffect, useCallback, useMemo, type FormEvent, type ReactNode,
 } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import Topbar from '../../components/Topbar';
 import supabase from '../../lib/supabase';
 import { getProductBadge } from '../../lib/productBadge';
+import { useLanguage } from '../../context/LanguageContext';
 import '../../lib/productBadge.css';
 import './SearchResultsPage.css';
 
@@ -95,6 +97,7 @@ function DualRange({
   onMin: (v: number) => void;
   onMax: (v: number) => void;
 }) {
+  const { t } = useTranslation('customer');
   const pct = (v: number) => Math.round((v / PRICE_MAX) * 100);
   return (
     <div className="srp-dual-range" dir="ltr">
@@ -106,12 +109,12 @@ function DualRange({
       <input type="range" min={0} max={PRICE_MAX} value={minVal}
         className="srp-dr-input"
         style={{ zIndex: minVal > PRICE_MAX - 60 ? 5 : 3 }}
-        aria-label="الحد الأدنى للسعر"
+        aria-label={t('search.filter.minPriceAria')}
         onChange={e => onMin(Math.min(+e.target.value, maxVal - 10))}
       />
       <input type="range" min={0} max={PRICE_MAX} value={maxVal}
         className="srp-dr-input srp-dr-input--max"
-        aria-label="الحد الأقصى للسعر"
+        aria-label={t('search.filter.maxPriceAria')}
         onChange={e => onMax(Math.max(+e.target.value, minVal + 10))}
       />
     </div>
@@ -174,6 +177,7 @@ function FilterPanel({
   localMin, localMax, setLocalMin, setLocalMax,
   onApply, onClear, activeCount,
 }: FPProps) {
+  const { t } = useTranslation('customer');
   const [minDraft, setMinDraft] = useState(String(localMin));
   const [maxDraft, setMaxDraft] = useState(String(localMax));
 
@@ -198,21 +202,20 @@ function FilterPanel({
           <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/>
           <line x1="11" y1="18" x2="13" y2="18"/>
         </svg>
-        <span className="srp-filter-title">تصفية النتائج</span>
+        <span className="srp-filter-title">{t('search.filter.title')}</span>
         {activeCount > 0 && (
           <button type="button" className="srp-clear-btn" onClick={onClear}>
-            مسح الكل
+            {t('search.filter.clearAll')}
             <span className="srp-clear-badge">{activeCount}</span>
           </button>
         )}
       </div>
 
-      {/* السعر */}
-      <FSection title="السعر">
+      <FSection title={t('search.filter.price')}>
         <DualRange minVal={localMin} maxVal={localMax} onMin={setLocalMin} onMax={setLocalMax} />
         <form onSubmit={onApply} className="srp-price-row">
           <div className="srp-price-box">
-            <span className="srp-price-lbl">من</span>
+            <span className="srp-price-lbl">{t('search.filter.priceFrom')}</span>
             <input
               type="text"
               inputMode="numeric"
@@ -223,13 +226,13 @@ function FilterPanel({
               onBlur={() => commitMin(minDraft)}
               onKeyDown={e => e.key === 'Enter' && commitMin(minDraft)}
               className="srp-price-in"
-              aria-label="الحد الأدنى للسعر"
-              title="الحد الأدنى للسعر"
+              aria-label={t('search.filter.minPriceAria')}
+              title={t('search.filter.minPriceAria')}
               placeholder="0"
             />
           </div>
           <div className="srp-price-box">
-            <span className="srp-price-lbl">إلى</span>
+            <span className="srp-price-lbl">{t('search.filter.priceTo')}</span>
             <input
               type="text"
               inputMode="numeric"
@@ -240,26 +243,24 @@ function FilterPanel({
               onBlur={() => commitMax(maxDraft)}
               onKeyDown={e => e.key === 'Enter' && commitMax(maxDraft)}
               className="srp-price-in"
-              aria-label="الحد الأقصى للسعر"
-              title="الحد الأقصى للسعر"
+              aria-label={t('search.filter.maxPriceAria')}
+              title={t('search.filter.maxPriceAria')}
               placeholder="200"
             />
             <span className="srp-price-cur">₪</span>
           </div>
         </form>
         <button type="button" onClick={e => onApply(e as unknown as FormEvent)}
-          className="srp-apply-price">تطبيق</button>
+          className="srp-apply-price">{t('search.filter.applyPrice')}</button>
       </FSection>
 
-      {/* التقييم */}
-      <FSection title="التقييم">
-        <CB label="4★ فأعلى" checked={filters.rating4} onChange={() => toggle('rating4')} />
-        <CB label="3★ فأعلى" checked={filters.rating3} onChange={() => toggle('rating3')} />
-        <CB label="5★ فقط"   checked={filters.rating5} onChange={() => toggle('rating5')} />
+      <FSection title={t('search.filter.rating')}>
+        <CB label={t('search.filter.rating4')} checked={filters.rating4} onChange={() => toggle('rating4')} />
+        <CB label={t('search.filter.rating3')} checked={filters.rating3} onChange={() => toggle('rating3')} />
+        <CB label={t('search.filter.rating5')} checked={filters.rating5} onChange={() => toggle('rating5')} />
       </FSection>
 
-      {/* المنطقة */}
-      <FSection title="المنطقة">
+      <FSection title={t('search.filter.zone')}>
         {zones.map(zone => (
           <CB
             key={zone.id}
@@ -270,10 +271,9 @@ function FilterPanel({
         ))}
       </FSection>
 
-      {/* التوفر */}
-      <FSection title="التوفر">
-        <CB label="متوفر"       checked={filters.inStock}    onChange={() => toggle('inStock')} />
-        <CB label="نفدت الكمية" checked={filters.outOfStock} onChange={() => toggle('outOfStock')} />
+      <FSection title={t('search.filter.availability')}>
+        <CB label={t('search.filter.inStock')}    checked={filters.inStock}    onChange={() => toggle('inStock')} />
+        <CB label={t('search.filter.outOfStock')} checked={filters.outOfStock} onChange={() => toggle('outOfStock')} />
       </FSection>
     </div>
   );
@@ -285,6 +285,7 @@ function FilterPanel({
 function ProductCard({ product, rating, onView }: {
   product: Product; rating: RatingData | null; onView: (id: string) => void;
 }) {
+  const { t } = useTranslation('customer');
   const [liked, setLiked] = useState(false);
   const img = firstImg(product.image_urls);
   const oos = product.stock_Quantity === 0;
@@ -308,7 +309,7 @@ function ProductCard({ product, rating, onView }: {
           type="button"
           className={`srp-heart${liked ? ' srp-heart--on' : ''}`}
           onClick={e => { e.stopPropagation(); setLiked(v => !v); }}
-          aria-label="أضف للمفضلة"
+          aria-label={t('search.card.addFav')}
         >
           <svg viewBox="0 0 24 24" width="15" height="15"
             fill={liked ? '#ef4444' : 'none'}
@@ -336,19 +337,19 @@ function ProductCard({ product, rating, onView }: {
         <div className="srp-price-line" dir="ltr">
           {product.price != null
             ? <span className="srp-cur-price">₪{product.price.toFixed(0)}</span>
-            : <span className="srp-price-na" dir="rtl">السعر عند الطلب</span>}
+            : <span className="srp-price-na" dir="rtl">{t('search.card.priceOnRequest')}</span>}
         </div>
 
         {oos
           ? <button type="button" className="srp-btn srp-btn--oos" disabled onClick={e => e.stopPropagation()}>
-              نفدت الكمية
+              {t('search.card.outOfStock')}
             </button>
           : <button type="button" className="srp-btn srp-btn--add" onClick={e => e.stopPropagation()}>
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
                 <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
               </svg>
-              أضف للسلة
+              {t('search.card.addToCart')}
             </button>
         }
       </div>
@@ -378,6 +379,7 @@ function SkeletonCard() {
    EMPTY STATE
 ═══════════════════════════════════════════════ */
 function EmptyState({ onBrowse }: { onBrowse: () => void }) {
+  const { t } = useTranslation('customer');
   return (
     <div className="srp-empty">
       <div className="srp-empty-ico">
@@ -388,9 +390,9 @@ function EmptyState({ onBrowse }: { onBrowse: () => void }) {
           <path d="M28 32h14M35 25v14" stroke="#136540" strokeWidth="2" strokeLinecap="round" opacity=".4"/>
         </svg>
       </div>
-      <h3 className="srp-empty-title">لم نجد نتائج مطابقة</h3>
-      <p className="srp-empty-sub">جرّب البحث بكلمة أخرى أو تصفح الفئات لاكتشاف منتجات من السوق المحلي</p>
-      <button type="button" className="srp-empty-btn" onClick={onBrowse}>تصفح الفئات</button>
+      <h3 className="srp-empty-title">{t('search.empty.noResults')}</h3>
+      <p className="srp-empty-sub">{t('search.empty.noResultsSub')}</p>
+      <button type="button" className="srp-empty-btn" onClick={onBrowse}>{t('search.empty.browse')}</button>
     </div>
   );
 }
@@ -412,6 +414,8 @@ function pageNums(total: number, cur: number): (number | '…')[] {
    MAIN PAGE
 ═══════════════════════════════════════════════ */
 export default function SearchResultsPage() {
+  const { t } = useTranslation('customer');
+  const { direction } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
@@ -516,14 +520,14 @@ export default function SearchResultsPage() {
       if (citiesParam) p.set('cities', citiesParam);
       const res  = await fetch(`/api/search?${p}`);
       const data: SearchResponse = await res.json();
-      if (!data.ok) throw new Error(data.error ?? 'خطأ في البحث');
+      if (!data.ok) throw new Error(data.error ?? t('search.error'));
       setResults(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'فشل في البحث');
+      setError(err instanceof Error ? err.message : t('search.fetchError'));
     } finally {
       setLoading(false);
     }
-  }, [q, page, minPrice, maxPrice, citiesParam]);
+  }, [q, page, minPrice, maxPrice, citiesParam, t]);
 
   useEffect(() => { fetchResults(); }, [fetchResults]);
 
@@ -604,7 +608,7 @@ export default function SearchResultsPage() {
   const hasProducts = !loading && !error && sorted.length > 0;
 
   return (
-    <div dir="rtl" className="srp-page">
+    <div dir={direction} className="srp-page">
       <Topbar />
 
       <div className="srp-container">
@@ -613,9 +617,9 @@ export default function SearchResultsPage() {
         <div className="srp-title-row">
           <div className="srp-title-main">
             <h1 className="srp-h1">
-              نتائج البحث عن: {q && <span className="srp-q"> {q}</span>}
+              {t('search.title')} {q && <span className="srp-q"> {q}</span>}
             </h1>
-            {q && <p className="srp-h1-sub">وجدنا لك منتجات ومتاجر مناسبة من السوق المحلي</p>}
+            {q && <p className="srp-h1-sub">{t('search.subtitle')}</p>}
           </div>
         </div>
 
@@ -636,7 +640,7 @@ export default function SearchResultsPage() {
                 <button
                   type="button"
                   className={`srp-view-btn${viewMode === 'grid' ? ' srp-view-btn--on' : ''}`}
-                  onClick={() => setViewMode('grid')} title="شبكة"
+                  onClick={() => setViewMode('grid')} title={t('search.toolbar.gridTitle')}
                 >
                   <svg viewBox="0 0 18 18" width="14" height="14" fill="currentColor">
                     <rect width="7" height="7" rx="1.2"/><rect x="11" width="7" height="7" rx="1.2"/>
@@ -646,7 +650,7 @@ export default function SearchResultsPage() {
                 <button
                   type="button"
                   className={`srp-view-btn${viewMode === 'list' ? ' srp-view-btn--on' : ''}`}
-                  onClick={() => setViewMode('list')} title="قائمة"
+                  onClick={() => setViewMode('list')} title={t('search.toolbar.listTitle')}
                 >
                   <svg viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8">
                     <line x1="0" y1="4"  x2="18" y2="4"/>
@@ -657,18 +661,18 @@ export default function SearchResultsPage() {
               </div>
 
               <div className="srp-sort-grp">
-                <span className="srp-sort-lbl">ترتيب حسب</span>
+                <span className="srp-sort-lbl">{t('search.toolbar.sortBy')}</span>
                 <div className="srp-select-wrap">
                   <select
                     value={sortBy}
                     onChange={e => setSortBy(e.target.value as SortOption)}
                     className="srp-select"
-                    aria-label="ترتيب النتائج"
+                    aria-label={t('search.toolbar.sortAria')}
                   >
-                    <option value="newest">الأحدث</option>
-                    <option value="price_asc">السعر الأقل</option>
-                    <option value="price_desc">السعر الأعلى</option>
-                    <option value="rating">الأعلى تقييمًا</option>
+                    <option value="newest">{t('search.sort.newest')}</option>
+                    <option value="price_asc">{t('search.sort.priceAsc')}</option>
+                    <option value="price_desc">{t('search.sort.priceDesc')}</option>
+                    <option value="rating">{t('search.sort.rating')}</option>
                   </select>
                   <svg viewBox="0 0 24 24" width="12" height="12" fill="none"
                     stroke="currentColor" strokeWidth="2.5" className="srp-sel-chevron">
@@ -678,7 +682,7 @@ export default function SearchResultsPage() {
               </div>
 
               {results && (
-                <span className="srp-toolbar-count">عرض {sorted.length} نتيجة</span>
+                <span className="srp-toolbar-count">{t('search.toolbar.showCount', { count: sorted.length })}</span>
               )}
             </div>
 
@@ -689,15 +693,15 @@ export default function SearchResultsPage() {
                   <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/>
                   <line x1="11" y1="18" x2="13" y2="18"/>
                 </svg>
-                الفلاتر
+                {t('search.mobile.filters')}
                 {activeCount > 0 && <span className="srp-mob-badge">{activeCount}</span>}
               </button>
               <select value={sortBy} onChange={e => setSortBy(e.target.value as SortOption)}
-                className="srp-select srp-select--sm" aria-label="ترتيب النتائج">
-                <option value="newest">الأحدث</option>
-                <option value="price_asc">السعر ↑</option>
-                <option value="price_desc">السعر ↓</option>
-                <option value="rating">الأعلى تقييمًا</option>
+                className="srp-select srp-select--sm" aria-label={t('search.toolbar.sortAria')}>
+                <option value="newest">{t('search.sort.newest')}</option>
+                <option value="price_asc">{t('search.sort.priceAscMobile')}</option>
+                <option value="price_desc">{t('search.sort.priceDescMobile')}</option>
+                <option value="rating">{t('search.sort.rating')}</option>
               </select>
             </div>
 
@@ -724,9 +728,9 @@ export default function SearchResultsPage() {
                     <path d="M28 32h14M35 25v14" stroke="#136540" strokeWidth="2" strokeLinecap="round" opacity=".4"/>
                   </svg>
                 </div>
-                <h3 className="srp-empty-title">لا توجد نتائج بهذه الفلاتر</h3>
-                <p className="srp-empty-sub">جرّب تغيير الفلاتر أو مسحها للاطلاع على جميع النتائج</p>
-                <button type="button" className="srp-empty-btn" onClick={clearFilters}>مسح الفلاتر</button>
+                <h3 className="srp-empty-title">{t('search.empty.noFilters')}</h3>
+                <p className="srp-empty-sub">{t('search.empty.noFiltersSub')}</p>
+                <button type="button" className="srp-empty-btn" onClick={clearFilters}>{t('search.empty.clearFilters')}</button>
               </div>
             )}
 
@@ -741,9 +745,9 @@ export default function SearchResultsPage() {
 
             {/* Pagination */}
             {totalPages > 1 && (
-              <nav className="srp-pagination" aria-label="تنقل بين الصفحات">
+              <nav className="srp-pagination" aria-label={t('search.toolbar.sortAria')}>
                 <button type="button" className="srp-pg-arrow" disabled={page <= 1}
-                  aria-label="الصفحة السابقة" onClick={() => goToPage(page - 1)}>
+                  aria-label={t('search.pagination.prev')} onClick={() => goToPage(page - 1)}>
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
                     stroke="currentColor" strokeWidth="2.2">
                     <polyline points="15 18 9 12 15 6"/>
@@ -762,7 +766,7 @@ export default function SearchResultsPage() {
                 )}
 
                 <button type="button" className="srp-pg-arrow" disabled={page >= totalPages}
-                  aria-label="الصفحة التالية" onClick={() => goToPage(page + 1)}>
+                  aria-label={t('search.pagination.next')} onClick={() => goToPage(page + 1)}>
                   <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
                     stroke="currentColor" strokeWidth="2.2">
                     <polyline points="9 18 15 12 9 6"/>
@@ -779,8 +783,8 @@ export default function SearchResultsPage() {
         <div className="srp-overlay" onClick={() => setDrawerOpen(false)}>
           <div className="srp-drawer" onClick={e => e.stopPropagation()}>
             <div className="srp-drawer-hdr">
-              <span className="srp-drawer-title">تصفية النتائج</span>
-              <button type="button" className="srp-drawer-x" onClick={() => setDrawerOpen(false)} aria-label="إغلاق">
+              <span className="srp-drawer-title">{t('search.mobile.drawerTitle')}</span>
+              <button type="button" className="srp-drawer-x" onClick={() => setDrawerOpen(false)} aria-label={t('search.mobile.close')}>
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
                 </svg>
@@ -791,7 +795,7 @@ export default function SearchResultsPage() {
             </div>
             <div className="srp-drawer-foot">
               <button type="button" className="srp-drawer-apply" onClick={() => setDrawerOpen(false)}>
-                عرض النتائج ({sorted.length})
+                {t('search.mobile.showResults', { count: sorted.length })}
               </button>
             </div>
           </div>

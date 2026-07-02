@@ -1,25 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import supabase from '../lib/supabase';
 import './ChangePasswordModal.css';
 
 type Step = 'verify' | 'change' | 'success';
 
-interface StrengthResult {
-  level: 0 | 1 | 2 | 3 | 4;
-  label: string;
-}
-
-function getStrength(pwd: string): StrengthResult {
-  if (!pwd) return { level: 0, label: '' };
+function getStrengthLevel(pwd: string): 0 | 1 | 2 | 3 | 4 {
+  if (!pwd) return 0;
   let score = 0;
   if (pwd.length >= 8) score++;
   if (pwd.length >= 12) score++;
   if (/[A-Z]/.test(pwd)) score++;
   if (/[0-9]/.test(pwd)) score++;
   if (/[^A-Za-z0-9]/.test(pwd)) score++;
-  const level = (score <= 1 ? 1 : score === 2 ? 2 : score === 3 ? 3 : 4) as 1 | 2 | 3 | 4;
-  const labels = ['', 'ضعيفة جداً', 'ضعيفة', 'متوسطة', 'قوية'];
-  return { level, label: labels[level] };
+  return (score <= 1 ? 1 : score === 2 ? 2 : score === 3 ? 3 : 4) as 1 | 2 | 3 | 4;
 }
 
 function EyeIcon({ open }: { open: boolean }) {
@@ -38,6 +32,7 @@ function EyeIcon({ open }: { open: boolean }) {
 }
 
 export default function ChangePasswordModal({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation('common');
   const [step, setStep] = useState<Step>('verify');
   const [email, setEmail] = useState('');
   const [isGoogleUser, setIsGoogleUser] = useState(false);
@@ -51,7 +46,9 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
   const [loading, setLoading] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
 
-  const strength = getStrength(newPassword);
+  const strengthLevel = getStrengthLevel(newPassword);
+  const strengthLabels = ['', t('changePassword.strength.veryWeak'), t('changePassword.strength.weak'), t('changePassword.strength.medium'), t('changePassword.strength.strong')];
+  const strengthLabel = strengthLabels[strengthLevel];
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -68,23 +65,23 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
   const handleVerify = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!currentPassword) { setError('أدخل كلمة المرور الحالية'); return; }
+    if (!currentPassword) { setError(t('changePassword.errors.enterCurrent')); return; }
     setLoading(true);
     const { error: authError } = await supabase.auth.signInWithPassword({ email, password: currentPassword });
     setLoading(false);
-    if (authError) { setError('كلمة المرور الحالية غير صحيحة'); return; }
+    if (authError) { setError(t('changePassword.errors.wrongCurrent')); return; }
     setStep('change');
   };
 
   const handleChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (newPassword.length < 6) { setError('كلمة المرور يجب أن تكون 6 أحرف على الأقل'); return; }
-    if (newPassword !== confirmPassword) { setError('كلمتا المرور غير متطابقتين'); return; }
+    if (newPassword.length < 6) { setError(t('changePassword.errors.tooShort')); return; }
+    if (newPassword !== confirmPassword) { setError(t('changePassword.errors.mismatch')); return; }
     setLoading(true);
     const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
     setLoading(false);
-    if (updateError) { setError('حدث خطأ أثناء تغيير كلمة المرور، حاول مرة أخرى'); return; }
+    if (updateError) { setError(t('changePassword.errors.failed')); return; }
     setStep('success');
   };
 
@@ -95,31 +92,31 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
       onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
     >
       <div className="cpm-modal">
-        <button className="cpm-close" onClick={onClose} aria-label="إغلاق">✕</button>
+        <button className="cpm-close" onClick={onClose} aria-label={t('actions.close')}>✕</button>
 
         {isGoogleUser ? (
           <div className="cpm-centered">
             <span className="cpm-icon">🔒</span>
-            <h2>تغيير كلمة المرور</h2>
-            <p>حسابك مرتبط بـ Google — لا يمكن تغيير كلمة المرور من هنا.</p>
-            <button className="cpm-submit" onClick={onClose}>حسناً</button>
+            <h2>{t('changePassword.title')}</h2>
+            <p>{t('changePassword.googleUserMessage')}</p>
+            <button className="cpm-submit" onClick={onClose}>{t('actions.ok')}</button>
           </div>
         ) : step === 'verify' ? (
           <>
             <div className="cpm-header">
               <span className="cpm-icon">🔑</span>
-              <h2>تغيير كلمة المرور</h2>
-              <p>أدخل كلمة المرور الحالية للتحقق من هويتك</p>
+              <h2>{t('changePassword.title')}</h2>
+              <p>{t('changePassword.verify.subtitle')}</p>
             </div>
             <form className="cpm-form" onSubmit={handleVerify}>
               <div className="cpm-field">
-                <label>كلمة المرور الحالية</label>
+                <label>{t('changePassword.verify.currentLabel')}</label>
                 <div className="cpm-input-wrap">
                   <input
                     type={showCurrentPwd ? 'text' : 'password'}
                     value={currentPassword}
                     onChange={e => setCurrentPassword(e.target.value)}
-                    placeholder="أدخل كلمة المرور الحالية"
+                    placeholder={t('changePassword.verify.currentPlaceholder')}
                     autoFocus
                     disabled={loading}
                     autoComplete="current-password"
@@ -129,7 +126,7 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
                     className="cpm-eye"
                     onClick={() => setShowCurrentPwd(v => !v)}
                     tabIndex={-1}
-                    aria-label={showCurrentPwd ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                    aria-label={showCurrentPwd ? t('changePassword.hidePassword') : t('changePassword.showPassword')}
                   >
                     <EyeIcon open={showCurrentPwd} />
                   </button>
@@ -137,7 +134,7 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
               </div>
               {error && <div className="cpm-error" role="alert">{error}</div>}
               <button type="submit" className="cpm-submit" disabled={loading}>
-                {loading ? 'جاري التحقق...' : 'التحقق والمتابعة'}
+                {loading ? t('changePassword.verify.verifying') : t('changePassword.verify.submit')}
               </button>
             </form>
           </>
@@ -145,18 +142,18 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
           <>
             <div className="cpm-header">
               <span className="cpm-icon">🔒</span>
-              <h2>كلمة المرور الجديدة</h2>
-              <p>أدخل كلمة مرور جديدة وأكدها</p>
+              <h2>{t('changePassword.change.title')}</h2>
+              <p>{t('changePassword.change.subtitle')}</p>
             </div>
             <form className="cpm-form" onSubmit={handleChange}>
               <div className="cpm-field">
-                <label>كلمة المرور الجديدة</label>
+                <label>{t('changePassword.change.newLabel')}</label>
                 <div className="cpm-input-wrap">
                   <input
                     type={showNewPwd ? 'text' : 'password'}
                     value={newPassword}
                     onChange={e => setNewPassword(e.target.value)}
-                    placeholder="6 أحرف على الأقل"
+                    placeholder={t('changePassword.change.newPlaceholder')}
                     autoFocus
                     disabled={loading}
                     autoComplete="new-password"
@@ -166,30 +163,30 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
                     className="cpm-eye"
                     onClick={() => setShowNewPwd(v => !v)}
                     tabIndex={-1}
-                    aria-label={showNewPwd ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                    aria-label={showNewPwd ? t('changePassword.hidePassword') : t('changePassword.showPassword')}
                   >
                     <EyeIcon open={showNewPwd} />
                   </button>
                 </div>
                 {newPassword && (
-                  <div className="cpm-strength" data-level={strength.level}>
+                  <div className="cpm-strength" data-level={strengthLevel}>
                     <div className="cpm-strength-bars">
                       {[1, 2, 3, 4].map(i => (
                         <div key={i} className="cpm-strength-bar" />
                       ))}
                     </div>
-                    <span className="cpm-strength-label">{strength.label}</span>
+                    <span className="cpm-strength-label">{strengthLabel}</span>
                   </div>
                 )}
               </div>
               <div className="cpm-field">
-                <label>تأكيد كلمة المرور</label>
+                <label>{t('changePassword.change.confirmLabel')}</label>
                 <div className="cpm-input-wrap">
                   <input
                     type={showConfirmPwd ? 'text' : 'password'}
                     value={confirmPassword}
                     onChange={e => setConfirmPassword(e.target.value)}
-                    placeholder="أعد إدخال كلمة المرور"
+                    placeholder={t('changePassword.change.confirmPlaceholder')}
                     disabled={loading}
                     autoComplete="new-password"
                   />
@@ -198,7 +195,7 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
                     className="cpm-eye"
                     onClick={() => setShowConfirmPwd(v => !v)}
                     tabIndex={-1}
-                    aria-label={showConfirmPwd ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                    aria-label={showConfirmPwd ? t('changePassword.hidePassword') : t('changePassword.showPassword')}
                   >
                     <EyeIcon open={showConfirmPwd} />
                   </button>
@@ -206,16 +203,16 @@ export default function ChangePasswordModal({ onClose }: { onClose: () => void }
               </div>
               {error && <div className="cpm-error" role="alert">{error}</div>}
               <button type="submit" className="cpm-submit" disabled={loading}>
-                {loading ? 'جاري التغيير...' : 'تغيير كلمة المرور'}
+                {loading ? t('changePassword.change.saving') : t('changePassword.change.submit')}
               </button>
             </form>
           </>
         ) : (
           <div className="cpm-centered">
             <span className="cpm-icon">✅</span>
-            <h2>تم التغيير بنجاح</h2>
-            <p>تم تغيير كلمة المرور بنجاح</p>
-            <button className="cpm-submit" onClick={onClose}>إغلاق</button>
+            <h2>{t('changePassword.success.title')}</h2>
+            <p>{t('changePassword.success.message')}</p>
+            <button className="cpm-submit" onClick={onClose}>{t('actions.close')}</button>
           </div>
         )}
       </div>

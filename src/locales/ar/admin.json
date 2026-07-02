@@ -1,0 +1,307 @@
+{
+  "deliveryIssues": {
+    "confirmResolveTitle": "تأكيد حل المشكلة",
+    "confirmResolveMessage": "هل تريد تعليم تقرير التأخير للطلب #{{orderId}} كمحلول؟ سيتم إزالته من قائمة المشاكل المفتوحة.",
+    "confirmResolveLabel": "تم الحل",
+    "loadError": "تعذّر تحميل البيانات: {{error}}",
+    "resolveError": "فشل تحديث الحالة: {{error}}",
+    "title": "مشاكل التوصيل",
+    "refresh": "تحديث",
+    "openIssuesLabel": "تقارير تأخير مفتوحة",
+    "loading": "جاري التحميل...",
+    "noIssues": "لا توجد مشاكل توصيل مفتوحة",
+    "table": {
+      "orderNumber": "رقم الطلب",
+      "shipmentNumber": "رقم الشحنة",
+      "customer": "العميل",
+      "customerNote": "ملاحظة العميل",
+      "reportDate": "تاريخ التقرير",
+      "currentStatus": "حالة الشحنة الحالية",
+      "actions": "إجراءات"
+    },
+    "markResolved": "تعليم كمحلول",
+    "status": {
+      "pending": "قيد التحضير",
+      "available": "جاهز للاستلام",
+      "delayed": "متأخر",
+      "batched": "مجمّع للنقل",
+      "reserved": "محجوز للتوصيل",
+      "picked_up": "قيد التوصيل",
+      "delivered": "تم التسليم",
+      "stranded": "مشكلة في النقل"
+    }
+  },
+  "categoryImages": {
+    "loadError": "تعذّر تحميل الفئات: {{error}}",
+    "invalidFile": "يرجى اختيار ملف صورة صالح",
+    "rlsError": "لم يتم الحفظ — لا تملك صلاحية تعديل الفئات (تحقّق من سياسات RLS).",
+    "uploadError": "تعذّر رفع الصورة: {{error}}",
+    "removeError": "تعذّر حذف الصورة: {{error}}",
+    "title": "صور الفئات",
+    "subtitle": "ارفع صورة الغلاف (البانر) التي تظهر أعلى صفحة كل فئة. الصورة العريضة (أفقية) تعطي أفضل نتيجة.",
+    "refresh": "تحديث",
+    "loadingCategories": "جاري تحميل الفئات…",
+    "noCategories": "لا توجد فئات.",
+    "noImage": "لا توجد صورة",
+    "defaultImageBadge": "صورة افتراضية (الغلاف)",
+    "saved": "تم الحفظ",
+    "changeImage": "تغيير الصورة",
+    "uploadImage": "رفع صورة",
+    "delete": "حذف"
+  },
+  "financialAnalytics": {
+    "gran": { "day": "يومي", "week": "أسبوعي", "month": "شهري" },
+    "period": {
+      "week": "أسبوع",
+      "month": "شهر",
+      "2months": "شهرين",
+      "6months": "6 أشهر",
+      "year": "سنة",
+      "sinceStart": "منذ بدء المنصّة"
+    },
+    "sessionExpired": "انتهت الجلسة — يرجى تسجيل الدخول من جديد.",
+    "loadError": "تعذّر تحميل التحليلات.",
+    "connectionError": "تعذّر الاتصال بالخادم.",
+    "title": "التحليلات",
+    "subtitle": "نظرة بصرية تحليلية. اختاري الفترة الزمنية ونوع الرسم لعرضه.",
+    "chartType": {
+      "revenue": "الإيرادات عبر الوقت",
+      "distribution": "توزيع الأموال",
+      "topMerchants": "أعلى التجار أرباحًا"
+    },
+    "loading": "...جاري تحميل التحليلات",
+    "noData": "لا توجد بيانات ضمن هذه الفترة.",
+    "xAxis": "المحور الأفقي (السيني)",
+    "yAxis": "المحور العمودي (الصادي)",
+    "merchants": "التجار",
+    "couriers": "المناديب",
+    "platform": "المنصّة",
+    "total": "الإجمالي",
+    "revenueOverTime": "الإيرادات عبر الوقت (تجميع {{gran}})",
+    "revenueXAxis": "الزمن — كل نقطة فترة {{gran}}",
+    "revenueYAxis": "المبلغ الموزَّع ({{currency}}) مقسومًا على التجار/المناديب/المنصّة",
+    "distributionTitle": "توزيع الأموال بين الأطراف",
+    "topMerchantsTitle": "أعلى التجار أرباحًا (أعلى 10)",
+    "topMerchantsXAxis": "إجمالي أرباح التاجر ({{currency}}) — كلّما طال العمود زادت الأرباح",
+    "topMerchantsYAxis": "اسم التاجر"
+  },
+  "salesLedger": {
+    "type": { "shop": "تاجر", "courier": "مندوب", "platform": "المنصّة" },
+    "status": {
+      "distributed": "موزّعة عبر PayTabs",
+      "platform_held": "محتجزة لدى المنصّة",
+      "pending": "قيد الانتظار",
+      "queued": "في الطابور",
+      "submitted": "قيد التحويل",
+      "paid": "مدفوع",
+      "failed": "فشل",
+      "skipped": "متجاوز",
+      "reversed": "معكوس"
+    },
+    "sessionExpired": "انتهت الجلسة — يرجى تسجيل الدخول من جديد.",
+    "loadError": "تعذّر تحميل الكشف.",
+    "connectionError": "تعذّر الاتصال بالخادم.",
+    "title": "كشف المبيعات والأرباح",
+    "subtitle": "سجلّ توزيع الأموال على التجار والمناديب والمنصّة، مع الإجماليات وإمكانية التصدير.",
+    "cards": {
+      "customerPaid": "مدفوعات العملاء",
+      "merchantShares": "حصص التجار",
+      "courierFees": "أجور المناديب",
+      "platformCommission": "عمولة المنصّة"
+    },
+    "filters": {
+      "allPayees": "كل المستفيدين",
+      "allStatuses": "كل الحالات",
+      "from": "من",
+      "to": "إلى",
+      "searchPlaceholder": "بحث بالاسم...",
+      "apply": "تطبيق",
+      "exportCsv": "تصدير CSV"
+    },
+    "tabs": { "byTransaction": "حسب المعاملة", "byPayee": "حسب المستفيد" },
+    "loading": "...جاري تحميل الكشف",
+    "noRecords": "لا توجد سجلات مطابقة.",
+    "order": "الطلب",
+    "paidAtDate": "تاريخ الصرف",
+    "csv": {
+      "date": "التاريخ",
+      "orderNumber": "رقم الطلب",
+      "payee": "المستفيد",
+      "type": "النوع",
+      "amount": "المبلغ",
+      "currency": "العملة",
+      "status": "الحالة",
+      "total": "الإجمالي",
+      "distributed": "موزّعة",
+      "held": "محتجزة",
+      "transactionCount": "عدد المعاملات"
+    }
+  },
+  "logisticsSettings": {
+    "title": "إعدادات الخوارزمية",
+    "subtitle": "ضبط خوارزمية التجميع اللوجستي",
+    "categories": {
+      "batch": "إعدادات الدفعة",
+      "flow": "إعدادات التدفق",
+      "scoring": "أوزان التقييم",
+      "scoringFormulaVars": "N̂ = عدد الشحنات  ·  Û = الأولوية  ·  D̂ = مدة المسار",
+      "route": "إعدادات المسار",
+      "assignment": "تعيين السائق"
+    },
+    "weightGroups": { "batchScoreWeights": "أوزان تقييم الدفعات" },
+    "settings": {
+      "MAX_VOLUME": {
+        "label": "أقصى حجم في الدفعة",
+        "unit": "وحدة حجم",
+        "explanation": "أقصى سعة يمكن لمركبة السائق حملها في رحلة واحدة."
+      },
+      "MAX_STOPS": {
+        "label": "أقصى محطات في الدفعة",
+        "unit": "محطة",
+        "explanation": "الحد الأقصى لعدد محطات الاستلام أو التسليم في دفعة واحدة."
+      },
+      "MIN_BATCH_THRESHOLD": {
+        "label": "الحد الأدنى للدفعة",
+        "unit": "شحنة",
+        "explanation": "أدنى عدد شحنات مطلوب لإرسال الدفعة. إذا كان العدد أقل تُؤجَّل للدورة التالية."
+      },
+      "CYCLE_INTERVAL_MINUTES": {
+        "label": "فترة دورة التجميع",
+        "unit": "دقيقة",
+        "explanation": "كم مرة تعمل دورة التجميع وتُجمّع الشحنات المتاحة."
+      },
+      "MAX_FLOW_WAITING_MINUTES": {
+        "label": "أقصى وقت انتظار التدفق",
+        "unit": "دقيقة",
+        "explanation": "إذا انتظرت شحنات تدفق ما بمعدل يتجاوز هذا الوقت، تُرسَل الدفعة قسراً بغض النظر عن حجمها."
+      },
+      "MAX_DISTANCE_KM": {
+        "label": "أقصى مسافة بين المناطق",
+        "unit": "كم",
+        "explanation": "أقصى مسافة مسموح بها بين منطقتين في نفس المسار."
+      },
+      "W_N": {
+        "label": "وزن عدد الشحنات (W_n)",
+        "unit": "نسبة",
+        "explanation": "تأثير عدد الشحنات على تقييم الدفعة. قيمة أعلى = عدد أكبر يرفع الأولوية."
+      },
+      "W_U": {
+        "label": "وزن الأولوية (W_u)",
+        "unit": "نسبة",
+        "explanation": "تأثير الأولوية على ترتيب الدفعات. قيمة أعلى = الأكثر إلحاحاً يُرسَل أولاً."
+      },
+      "W_D": {
+        "label": "وزن مدة المسار (W_d)",
+        "unit": "نسبة",
+        "explanation": "عقوبة المسارات الطويلة. قيمة أعلى = المسارات الأطول تُخفَّض أولويتها أكثر."
+      },
+      "BASE_PENALTY": {
+        "label": "عقوبة النهاية المسدودة",
+        "unit": "نقاط",
+        "explanation": "العقوبة المطروحة من تقييم الدفعة عند غياب طلب في منطقة الوجهة. penalty = BASE_PENALTY × (1 − Û)"
+      },
+      "COST_PER_KM": {
+        "label": "التكلفة لكل كيلومتر",
+        "unit": "₪/كم",
+        "explanation": "التكلفة المحسوبة لكل كيلومتر. تُستخدم لمقارنة تمديد المسار مقابل إرسال سائق جديد."
+      },
+      "ROAD_FACTOR": {
+        "label": "معامل تعديل المسافة",
+        "unit": "معامل",
+        "explanation": "نسبة المسافة الفعلية على الطريق إلى المسافة المستقيمة. يعوّض عن التعرجات والمنعطفات."
+      },
+      "INTRA_CITY_MIN_TIME_BUFFER_MINUTES": {
+        "label": "أدنى وقت للإضافة أثناء الرحلة",
+        "unit": "دقيقة",
+        "explanation": "أدنى وقت متبقٍ للوصول للمنطقة ب حتى يُسمح بإضافة شحنات جديدة أثناء الرحلة."
+      },
+      "DRIVERS_PER_ROUND": {
+        "label": "سائقون لكل جولة",
+        "unit": "سائق",
+        "explanation": "عدد السائقين الذين يُرسَل إليهم إشعار الدفعة في كل جولة تعيين."
+      },
+      "MAX_ASSIGNMENT_ROUNDS": {
+        "label": "أقصى عدد جولات التعيين",
+        "unit": "جولة",
+        "explanation": "إذا رفض جميع السائقين أو انتهت المهلة في كل الجولات، تُحال الدفعة للمشرف."
+      },
+      "ASSIGNMENT_TIMEOUT_SECONDS": {
+        "label": "مهلة انتظار قبول السائق",
+        "unit": "ثانية",
+        "explanation": "المدة الزمنية التي ينتظرها النظام لقبول السائق في كل جولة قبل الانتقال للجولة التالية."
+      }
+    },
+    "unit": { "minute": "دقيقة", "hour": "ساعة" },
+    "weightsValid": "الأوزان صحيحة",
+    "weightsMustEqualOne": "يجب أن يساوي 1.000",
+    "settingSingular": "إعداد",
+    "settingPlural": "إعدادات",
+    "columns": { "setting": "الإعداد", "value": "القيمة", "unit": "الوحدة" },
+    "errors": {
+      "mustBeNumber": "يجب أن يكون رقماً",
+      "min": "الحد الأدنى {{min}}",
+      "max": "الحد الأقصى {{max}}",
+      "weightsMustEqualOne": "يجب أن تساوي الأوزان 1"
+    },
+    "saveSuccess": "تم حفظ الإعدادات بنجاح في قاعدة البيانات.",
+    "saveFailed": "فشل الحفظ: {{error}}",
+    "saving": "...جاري الحفظ",
+    "saved": "تم الحفظ",
+    "saveFailedShort": "فشل الحفظ",
+    "saveChanges": "حفظ التغييرات",
+    "searchPlaceholder": "...البحث في الإعدادات",
+    "allCategories": "جميع الفئات",
+    "unsaved": "غير محفوظ",
+    "errorCount": "{{count}} خطأ",
+    "weightErrorCount": "{{count}} خطأ في الأوزان",
+    "restore": "استعادة",
+    "categoriesLabel": "الفئات",
+    "summary": "ملخص",
+    "totalSettings": "إجمالي الإعدادات",
+    "errorsLabel": "الأخطاء",
+    "noMatchingSettings": "لا توجد إعدادات تطابق \"{{query}}\"",
+    "clearSearch": "مسح البحث"
+  },
+  "paymentSettings": {
+    "title": "إعدادات الدفع",
+    "subtitle": "ضبط العمولة، أجرة التوصيل وتوقيت التسوية",
+    "sessionExpired": "انتهت الجلسة — يرجى تسجيل الدخول من جديد.",
+    "loadError": "تعذّر تحميل الإعدادات.",
+    "connectionError": "تعذّر الاتصال بالخادم.",
+    "categories": { "fees": "العمولات والرسوم" },
+    "settings": {
+      "platform_commission_rate": {
+        "label": "عمولة المنصّة",
+        "unit": "نسبة",
+        "explanation": "النسبة المقتطعة من إجمالي مبيعات كل متجر (0.10 = 10%)."
+      },
+      "delivery_fee": {
+        "label": "أجرة التوصيل",
+        "unit": "₪",
+        "explanation": "تُضاف على إجمالي طلب العميل وتُدفع للسائق المعيَّن."
+      }
+    }
+  },
+  "sentMessages": {
+    "loadError": "تعذّر تحميل الرسائل",
+    "defaultUser": "مستخدم",
+    "replyError": "تعذّر إرسال الرد",
+    "title": "الرسائل",
+    "newCount": "{{count}} جديد",
+    "refresh": "تحديث",
+    "newMessage": "إنشاء رسالة جديدة",
+    "chooseRecipient": "اختر المستلم",
+    "recipientSearchPlaceholder": "ابحث عن مندوب أو متجر...",
+    "loading": "جاري التحميل...",
+    "noResults": "لا توجد نتائج",
+    "courierType": "مندوب توصيل",
+    "shopType": "تاجر / متجر",
+    "noConversations": "لا توجد محادثات بعد",
+    "noConversationsHint": "اضغط \"إنشاء رسالة جديدة\" لبدء محادثة",
+    "conversationSearchPlaceholder": "بحث في المحادثات...",
+    "back": "رجوع",
+    "adminInitial": "أ",
+    "noText": "لا يوجد نص",
+    "replyPlaceholder": "اكتب ردّك... (Enter للإرسال، Shift+Enter لسطر جديد)"
+  }
+}

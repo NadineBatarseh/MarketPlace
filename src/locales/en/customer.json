@@ -1,0 +1,340 @@
+{
+  "home": {
+    "slides": [
+      { "title": "Discover Trusted Stores", "subtitle": "Shop from the best local stores in one place" },
+      { "title": "Authentic Products at Competitive Prices", "subtitle": "Choose from thousands of products from trusted stores" },
+      { "title": "Fast Delivery to Your Door", "subtitle": "Professional delivery service across Palestine" }
+    ],
+    "hero": {
+      "shopNow": "Shop Now",
+      "prev": "Previous",
+      "next": "Next",
+      "slideAria": "Slide {{n}}"
+    },
+    "categories": {
+      "title": "Categories",
+      "empty": "No categories available"
+    },
+    "stores": {
+      "title": "Top Rated Stores",
+      "empty": "No stores available"
+    },
+    "products": {
+      "title": "Products & Special Offers",
+      "tabBestSelling": "Best Sellers",
+      "tabDeals": "Special Offers",
+      "emptyDeals": "No special offers",
+      "emptyAll": "No products",
+      "showMore": "Show More Products",
+      "showLess": "Show Less",
+      "addToCart": "Add to Cart",
+      "inCart": "In Cart",
+      "addToFav": "Add to Favorites",
+      "prevImg": "Previous image",
+      "nextImg": "Next image",
+      "imgAria": "Image {{n}}"
+    }
+  },
+  "storeList": {
+    "hero": {
+      "title": "Explore Local Stores",
+      "desc": "Discover trusted local stores and browse their products with ease. Support your community by shopping from independently owned businesses."
+    },
+    "filters": {
+      "title": "Filters",
+      "clearAll": "Clear All",
+      "search": "Search",
+      "searchPlaceholder": "Search stores...",
+      "category": "Category",
+      "city": "City"
+    },
+    "toolbar": {
+      "loading": "Loading…",
+      "storeCount": "{{count}} stores",
+      "sortAria": "Sort stores"
+    },
+    "sort": {
+      "newest": "Newest",
+      "popular": "Most Popular",
+      "az": "A–Z"
+    },
+    "badge": {
+      "open": "Open",
+      "closed": "Closed"
+    },
+    "card": {
+      "viewStore": "View Store",
+      "fallbackDesc": "A local store on SouqLink."
+    },
+    "empty": {
+      "title": "No stores found",
+      "desc": "We couldn't find any stores matching your search or filters. Try adjusting your criteria.",
+      "clearFilters": "Clear all filters"
+    },
+    "loadMore": "Load More Stores",
+    "footer": {
+      "brand": "SouqLink",
+      "copyright": "© 2024 SouqLink Marketplace. We connect local communities by providing a platform for local stores to thrive and for customers to discover unique products.",
+      "marketplace": "Marketplace",
+      "aboutUs": "About Us",
+      "terms": "Terms of Service",
+      "privacy": "Privacy Policy",
+      "support": "Support",
+      "contactSupport": "Contact Support",
+      "careers": "Careers",
+      "helpCenter": "Help Center"
+    }
+  },
+  "search": {
+    "title": "Search results for:",
+    "subtitle": "We found products and stores for you from the local market",
+    "filter": {
+      "title": "Filter Results",
+      "clearAll": "Clear All",
+      "price": "Price",
+      "priceFrom": "From",
+      "priceTo": "To",
+      "applyPrice": "Apply",
+      "minPriceAria": "Minimum price",
+      "maxPriceAria": "Maximum price",
+      "rating": "Rating",
+      "rating5": "5★ only",
+      "rating4": "4★ and above",
+      "rating3": "3★ and above",
+      "zone": "Region",
+      "availability": "Availability",
+      "inStock": "In Stock",
+      "outOfStock": "Out of Stock"
+    },
+    "toolbar": {
+      "sortBy": "Sort by",
+      "sortAria": "Sort results",
+      "showCount": "Showing {{count}} results",
+      "gridTitle": "Grid",
+      "listTitle": "List"
+    },
+    "sort": {
+      "newest": "Newest",
+      "priceAsc": "Price: Low to High",
+      "priceDesc": "Price: High to Low",
+      "priceAscMobile": "Price ↑",
+      "priceDescMobile": "Price ↓",
+      "rating": "Highest Rated"
+    },
+    "mobile": {
+      "filters": "Filters",
+      "showResults": "Show Results ({{count}})",
+      "close": "Close",
+      "drawerTitle": "Filter Results"
+    },
+    "card": {
+      "addFav": "Add to Favorites",
+      "addToCart": "Add to Cart",
+      "outOfStock": "Out of Stock",
+      "priceOnRequest": "Price on Request"
+    },
+    "pagination": {
+      "prev": "Previous page",
+      "next": "Next page"
+    },
+    "empty": {
+      "noResults": "No matching results found",
+      "noResultsSub": "Try searching with a different term or browse categories to discover products from the local market",
+      "browse": "Browse Categories",
+      "noFilters": "No results with these filters",
+      "noFiltersSub": "Try changing or clearing the filters to see all results",
+      "clearFilters": "Clear Filters"
+    },
+    "error": "Search error",
+    "fetchError": "Search failed"
+  },
+  "category": {
+    "heroFallbackDesc": "Discover products and stores available in this category"
+  },
+  "sidebar": {
+    "filters": "Filters",
+    "clearAll": "Clear All",
+    "stores": "Stores",
+    "selectAll": "Select All",
+    "deselectAll": "Deselect All",
+    "priceRange": "Price Range",
+    "priceFrom": "From",
+    "priceTo": "To",
+    "minPriceAria": "Minimum price",
+    "maxPriceAria": "Maximum price",
+    "availability": "Availability",
+    "inStockOnly": "In stock only",
+    "loadingFilters": "Loading filters...",
+    "viewMore": "+ Show more ({{count}})",
+    "viewLess": "− Show less",
+    "yes": "Yes",
+    "priceChip": {
+      "minOnly": "From {{min}} ₪",
+      "maxOnly": "Up to {{max}} ₪"
+    },
+    "inStockChip": "In stock only"
+  },
+  "toast": {
+    "loginRequired": "Please log in or create an account first",
+    "customersOnly": "Available to customers only",
+    "addedFav": "❤ Added to favorites",
+    "removedFav": "Removed from favorites",
+    "addedToCart": "✓ Added to cart",
+    "addedAnotherToCart": "✓ Another item added to cart"
+  },
+  "storeHero": {
+    "loading": "Loading...",
+    "stats": {
+      "location": "Location",
+      "products": "products",
+      "rating": "Rating"
+    },
+    "rateBtn": "Rate",
+    "ratingPopupTitle": "Rate this store"
+  },
+  "storeRating": {
+    "loginRequired": "You must be logged in to leave a review",
+    "thanks": "Thank you for your review!",
+    "label": "Rate the store:",
+    "submit": "Submit"
+  },
+  "productsSection": {
+    "sort": {
+      "bestSelling": "Best Selling",
+      "newest": "Newest",
+      "priceAsc": "Price: Low to High",
+      "priceDesc": "Price: High to Low",
+      "rating": "Rating"
+    },
+    "toolbar": {
+      "showing": "Showing {{shown}} of {{total}} products",
+      "sortAria": "Sort products",
+      "gridTitle": "Grid",
+      "gridAria": "Grid view",
+      "listTitle": "List",
+      "listAria": "List view"
+    },
+    "loading": "Loading products...",
+    "empty": "No products",
+    "pagination": {
+      "prev": "Previous page",
+      "next": "Next page",
+      "pageAria": "Page {{n}}"
+    }
+  },
+  "productCard": {
+    "addToCart": "Add to Cart",
+    "addWishlist": "Add to wishlist",
+    "removeWishlist": "Remove from wishlist",
+    "prevImage": "Previous image",
+    "nextImage": "Next image",
+    "imageAria": "Image {{n}}"
+  },
+  "pdp": {
+    "loading": "Loading...",
+    "noProducts": "No products available",
+    "fetchError": "Error loading product",
+    "breadcrumb": {
+      "home": "Home"
+    },
+    "discount": {
+      "save": "Save {{pct}}%"
+    },
+    "trust": {
+      "verified": "Verified"
+    },
+    "stock": {
+      "inStock": "In Stock",
+      "inStockLow": "In Stock — only {{count}} left",
+      "outOfStock": "Out of Stock"
+    },
+    "variants": {
+      "color": "Color:",
+      "chooseColor": "Choose color",
+      "size": "Size:",
+      "chooseSize": "Choose size",
+      "outOfStock": "Out of stock",
+      "chooseSizeHint": "Choose a color first to see available sizes"
+    },
+    "qty": {
+      "label": "Quantity:",
+      "aria": "Quantity"
+    },
+    "actions": {
+      "addToCart": "Add to Cart",
+      "buyNow": "Buy Now",
+      "addFav": "Add to Favorites",
+      "share": "Share"
+    },
+    "trustStrip": {
+      "fastDelivery": "Fast Delivery",
+      "fastDeliverySub": "Fast and safe delivery to your door",
+      "securePay": "Secure Payment",
+      "securePaySub": "Secure encrypted payment — your data is protected",
+      "shipping": "Shipping",
+      "shippingSub": "Calculated at checkout"
+    },
+    "tabs": {
+      "desc": "Description",
+      "specs": "Specifications",
+      "reviews": "Reviews ({{count}})"
+    },
+    "specs": {
+      "empty": "Specifications not available"
+    },
+    "reviews": {
+      "basedOn": "Based on {{count}} reviews",
+      "authLoading": "Verifying your account...",
+      "loginRequired": "You must log in to add a review",
+      "loginLink": "Log In",
+      "customersOnly": "Only customers can add reviews.",
+      "success": "✅ Your review was submitted successfully, thank you!",
+      "formTitle": "Add Your Review",
+      "yourRating": "Your rating:",
+      "placeholder": "Write your review here...",
+      "addPhotos": "Add photos (optional)",
+      "previewAlt": "Preview {{n}}",
+      "submit": "Submit Review",
+      "submitting": "Submitting...",
+      "empty": "No reviews yet — be the first to review this product!",
+      "storeReply": "Store reply:",
+      "imageAlt": "Image {{n}}",
+      "error": {
+        "noRating": "Please choose a star rating",
+        "noText": "Please write your review",
+        "submitFailed": "An error occurred while submitting your review"
+      }
+    },
+    "login": {
+      "title": "Log In",
+      "hint": "Enter your email to verify your account.",
+      "placeholder": "example@email.com",
+      "verifying": "Verifying...",
+      "enter": "Enter",
+      "errors": {
+        "emailInvalid": "Please enter a valid email address",
+        "fetchError": "An error occurred, please try again",
+        "notRegistered": "This email is not registered",
+        "notCustomer": "You must register as a customer to add a review"
+      }
+    },
+    "lightbox": {
+      "alt": "Enlarged image"
+    },
+    "cart": {
+      "loginRequired": "Please log in or create an account first",
+      "customersOnly": "Available to customers only",
+      "chooseColor": "Please choose a color first",
+      "chooseSize": "Please choose a size first",
+      "added": "✓ Added to cart",
+      "addedAnother": "✓ Another item added to cart"
+    },
+    "customer": "Customer #{{id}}",
+    "product": {
+      "share": "Product from SouqLink"
+    },
+    "thumb": {
+      "imageAlt": "Image {{n}}"
+    }
+  }
+}

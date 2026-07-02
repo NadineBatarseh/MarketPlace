@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import supabase from '../../lib/supabase';
+import { useLanguage } from '../../context/LanguageContext';
 import './CategoryImagesPage.css';
 
 interface CategoryRow {
@@ -12,6 +14,8 @@ interface CategoryRow {
 const BUCKET = 'category-images';
 
 export default function CategoryImagesPage() {
+  const { t } = useTranslation('admin');
+  const { direction } = useLanguage();
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -27,7 +31,7 @@ export default function CategoryImagesPage() {
       .from('categories')
       .select('id, label, image_url, hero_image_url')
       .order('label', { ascending: true });
-    if (err) setError('تعذّر تحميل الفئات: ' + err.message);
+    if (err) setError(t('categoryImages.loadError', { error: err.message }));
     else setCategories((data ?? []) as CategoryRow[]);
     setLoading(false);
   }
@@ -36,7 +40,7 @@ export default function CategoryImagesPage() {
 
   async function handleFile(cat: CategoryRow, file: File) {
     if (!file.type.startsWith('image/')) {
-      setError('يرجى اختيار ملف صورة صالح');
+      setError(t('categoryImages.invalidFile'));
       return;
     }
     setError('');
@@ -65,7 +69,7 @@ export default function CategoryImagesPage() {
         .select('id');
       if (updateErr) throw updateErr;
       if (!updated || updated.length === 0) {
-        throw new Error('لم يتم الحفظ — لا تملك صلاحية تعديل الفئات (تحقّق من سياسات RLS).');
+        throw new Error(t('categoryImages.rlsError'));
       }
 
       if (prevPath) await supabase.storage.from(BUCKET).remove([prevPath]);
@@ -75,7 +79,7 @@ export default function CategoryImagesPage() {
       );
       setSavedId(cat.id);
     } catch (e) {
-      setError('تعذّر رفع الصورة: ' + (e instanceof Error ? e.message : String(e)));
+      setError(t('categoryImages.uploadError', { error: e instanceof Error ? e.message : String(e) }));
     } finally {
       setUploadingId(null);
     }
@@ -93,37 +97,37 @@ export default function CategoryImagesPage() {
         .select('id');
       if (updateErr) throw updateErr;
       if (!updated || updated.length === 0) {
-        throw new Error('لم يتم الحفظ — لا تملك صلاحية تعديل الفئات (تحقّق من سياسات RLS).');
+        throw new Error(t('categoryImages.rlsError'));
       }
       if (prevPath) await supabase.storage.from(BUCKET).remove([prevPath]);
       setCategories(prev =>
         prev.map(c => (c.id === cat.id ? { ...c, hero_image_url: null } : c)),
       );
     } catch (e) {
-      setError('تعذّر حذف الصورة: ' + (e instanceof Error ? e.message : String(e)));
+      setError(t('categoryImages.removeError', { error: e instanceof Error ? e.message : String(e) }));
     } finally {
       setUploadingId(null);
     }
   }
 
   return (
-    <div className="cat-img-admin" dir="rtl">
+    <div className="cat-img-admin" dir={direction}>
       <div className="cat-img-head">
         <div>
-          <h1 className="cat-img-title">صور الفئات</h1>
+          <h1 className="cat-img-title">{t('categoryImages.title')}</h1>
           <p className="cat-img-subtitle">
-            ارفع صورة الغلاف (البانر) التي تظهر أعلى صفحة كل فئة. الصورة العريضة (أفقية) تعطي أفضل نتيجة.
+            {t('categoryImages.subtitle')}
           </p>
         </div>
-        <button className="cat-img-refresh" onClick={load} disabled={loading}>↻ تحديث</button>
+        <button className="cat-img-refresh" onClick={load} disabled={loading}>↻ {t('categoryImages.refresh')}</button>
       </div>
 
       {error && <div className="cat-img-error">{error}</div>}
 
       {loading ? (
-        <div className="cat-img-state">جاري تحميل الفئات…</div>
+        <div className="cat-img-state">{t('categoryImages.loadingCategories')}</div>
       ) : categories.length === 0 ? (
-        <div className="cat-img-state">لا توجد فئات.</div>
+        <div className="cat-img-state">{t('categoryImages.noCategories')}</div>
       ) : (
         <div className="cat-img-grid">
           {categories.map(cat => {
@@ -135,17 +139,17 @@ export default function CategoryImagesPage() {
                   {hero ? (
                     <img src={hero} alt={cat.label} />
                   ) : (
-                    <div className="cat-img-placeholder">لا توجد صورة</div>
+                    <div className="cat-img-placeholder">{t('categoryImages.noImage')}</div>
                   )}
                   {busy && <div className="cat-img-overlay"><span className="cat-img-spin" /></div>}
                   {!cat.hero_image_url && cat.image_url && (
-                    <span className="cat-img-badge">صورة افتراضية (الغلاف)</span>
+                    <span className="cat-img-badge">{t('categoryImages.defaultImageBadge')}</span>
                   )}
                 </div>
 
                 <div className="cat-img-body">
                   <div className="cat-img-label">{cat.label}</div>
-                  {savedId === cat.id && <div className="cat-img-saved">✓ تم الحفظ</div>}
+                  {savedId === cat.id && <div className="cat-img-saved">✓ {t('categoryImages.saved')}</div>}
 
                   <input
                     ref={el => { fileInputs.current[cat.id] = el; }}
@@ -165,7 +169,7 @@ export default function CategoryImagesPage() {
                       disabled={busy}
                       onClick={() => fileInputs.current[cat.id]?.click()}
                     >
-                      {cat.hero_image_url ? 'تغيير الصورة' : 'رفع صورة'}
+                      {cat.hero_image_url ? t('categoryImages.changeImage') : t('categoryImages.uploadImage')}
                     </button>
                     {cat.hero_image_url && (
                       <button
@@ -173,7 +177,7 @@ export default function CategoryImagesPage() {
                         disabled={busy}
                         onClick={() => handleRemove(cat)}
                       >
-                        حذف
+                        {t('categoryImages.delete')}
                       </button>
                     )}
                   </div>

@@ -1,0 +1,129 @@
+{
+  "nav": {
+    "home": "الصفحة الرئيسية",
+    "stores": "المتاجر",
+    "categories": "الفئات",
+    "offers": "العروض",
+    "orders": "الطلبات",
+    "cart": "السلة",
+    "favorites": "المفضلة"
+  },
+  "account": {
+    "title": "الحساب",
+    "login": "تسجيل الدخول",
+    "signup": "إنشاء حساب",
+    "logout": "تسجيل الخروج",
+    "changePassword": "تغيير كلمة المرور",
+    "profile": "إعدادات الملف الشخصي",
+    "dashboard": "لوحة التحكم",
+    "merchantApply": "تقديم طلب كتاجر",
+    "deliveryApply": "تقديم طلب كمندوب",
+    "adminLogin": "دخول كمشرف"
+  },
+  "roles": {
+    "merchant": "تاجر",
+    "admin": "مشرف",
+    "delivery": "مندوب توصيل",
+    "customer": "عميل"
+  },
+  "actions": {
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "confirm": "تأكيد",
+    "delete": "حذف",
+    "edit": "تعديل",
+    "add": "إضافة",
+    "search": "بحث",
+    "back": "رجوع",
+    "close": "إغلاق",
+    "submit": "إرسال",
+    "loading": "جاري التحميل...",
+    "executing": "جاري التنفيذ...",
+    "retry": "إعادة المحاولة",
+    "viewAll": "عرض الكل",
+    "seeMore": "عرض المزيد",
+    "ok": "حسناً",
+    "yes": "نعم",
+    "no": "لا"
+  },
+  "search": {
+    "placeholder": "ابحث عن منتج أو متجر...",
+    "label": "بحث"
+  },
+  "logo": {
+    "ar": "سوق لينك",
+    "en": "SOUQ LINK"
+  },
+  "missingShop": "معرّف المتجر مفقود",
+  "language": {
+    "ar": "العربية",
+    "en": "English",
+    "switch": "English"
+  },
+  "footer": {
+    "quickLinks": "روابط سريعة",
+    "customerService": "خدمة العملاء",
+    "help": "مساعدة",
+    "paymentMethods": "طرق الدفع",
+    "copyright": "جميع الحقوق محفوظة © 2026 سوق لينك",
+    "aboutLine1": "منصة تجمع أفضل المتاجر المحلية الموثوقة.",
+    "aboutLine2": "تجربة تسوق مميزة وآمنة.",
+    "toggleLabel": "تبديل الفوتر",
+    "quickNav": {
+      "home": "الرئيسية",
+      "stores": "المتاجر",
+      "categories": "الفئات",
+      "offers": "العروض"
+    },
+    "serviceLinks": ["تواصل معنا", "الأسئلة الشائعة", "سياسة الاسترجاع", "سياسة الشحن", "تتبع الطلب"],
+    "helpLinks": ["عن سوق لينك", "الشروط والأحكام", "سياسة الخصوصية"]
+  },
+  "changePassword": {
+    "title": "تغيير كلمة المرور",
+    "googleUserMessage": "حسابك مرتبط بـ Google — لا يمكن تغيير كلمة المرور من هنا.",
+    "verify": {
+      "subtitle": "أدخل كلمة المرور الحالية للتحقق من هويتك",
+      "currentLabel": "كلمة المرور الحالية",
+      "currentPlaceholder": "أدخل كلمة المرور الحالية",
+      "verifying": "جاري التحقق...",
+      "submit": "التحقق والمتابعة"
+    },
+    "change": {
+      "title": "كلمة المرور الجديدة",
+      "subtitle": "أدخل كلمة مرور جديدة وأكدها",
+      "newLabel": "كلمة المرور الجديدة",
+      "newPlaceholder": "6 أحرف على الأقل",
+      "confirmLabel": "تأكيد كلمة المرور",
+      "confirmPlaceholder": "أعد إدخال كلمة المرور",
+      "saving": "جاري التغيير...",
+      "submit": "تغيير كلمة المرور"
+    },
+    "success": {
+      "title": "تم التغيير بنجاح",
+      "message": "تم تغيير كلمة المرور بنجاح"
+    },
+    "strength": {
+      "veryWeak": "ضعيفة جداً",
+      "weak": "ضعيفة",
+      "medium": "متوسطة",
+      "strong": "قوية"
+    },
+    "showPassword": "إظهار كلمة المرور",
+    "hidePassword": "إخفاء كلمة المرور",
+    "errors": {
+      "enterCurrent": "أدخل كلمة المرور الحالية",
+      "wrongCurrent": "كلمة المرور الحالية غير صحيحة",
+      "tooShort": "كلمة المرور يجب أن تكون 6 أحرف على الأقل",
+      "mismatch": "كلمتا المرور غير متطابقتين",
+      "failed": "حدث خطأ أثناء تغيير كلمة المرور، حاول مرة أخرى"
+    }
+  },
+  "confirmDialog": {
+    "defaultTitle": "تأكيد الإجراء",
+    "defaultConfirm": "تأكيد",
+    "defaultCancel": "إلغاء",
+    "executing": "جاري التنفيذ...",
+    "irreversible": "هذا الإجراء لا يمكن التراجع عنه.",
+    "reversible": "يمكن التراجع عن هذا الإجراء لاحقاً."
+  }
+}

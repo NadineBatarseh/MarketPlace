@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { useLanguage } from '../../context/LanguageContext';
 import './LocationPickerMap.css';
 
 // Fix Leaflet's broken marker icons when bundled by Vite
@@ -35,6 +37,8 @@ export default function LocationPickerMap({
   error = '',
   onRequestLocation,
 }: LocationPickerMapProps) {
+  const { t } = useTranslation('merchant');
+  const { direction } = useLanguage();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef    = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
@@ -97,7 +101,7 @@ export default function LocationPickerMap({
   }, [value]);
 
   return (
-    <div className="lpm-root">
+    <div className="lpm-root" dir={direction}>
       <div className="lpm-toolbar">
         <button
           type="button"
@@ -109,7 +113,7 @@ export default function LocationPickerMap({
             <circle cx="12" cy="12" r="3" />
             <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
           </svg>
-          {loading ? 'جاري تحديد الموقع...' : 'استخدم موقعي الحالي'}
+          {loading ? t('locationPicker.gettingLocation') : t('locationPicker.useCurrentLocation')}
         </button>
 
         {value && (
@@ -123,7 +127,7 @@ export default function LocationPickerMap({
 
       <div ref={containerRef} className="lpm-map" />
 
-      <p className="lpm-hint">انقر على الخريطة لتثبيت الدبوس على موقع متجرك</p>
+      <p className="lpm-hint">{t('locationPicker.hint')}</p>
     </div>
   );
 }

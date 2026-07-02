@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import supabase from '../../lib/supabase';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import './Auth.css';
@@ -7,6 +8,7 @@ import './Auth.css';
 export default function Login() {
   const navigate = useNavigate();
   const { signInWithGoogle } = useCustomerAuth();
+  const { t } = useTranslation('auth');
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,7 +24,6 @@ export default function Login() {
     const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
 
     if (authError || !data.user) {
-      // Check if this is a Google account trying to use password login
       if (authError?.message === 'Invalid login credentials') {
         const { data: userRow } = await supabase
           .from('Users')
@@ -32,7 +33,7 @@ export default function Login() {
 
         if (userRow?.provider === 'google') {
           setLoading(false);
-          setError('هذا الحساب مرتبط بـ Google — استخدم زر "تسجيل الدخول بـ Google" ولا تحتاج إلى كلمة مرور');
+          setError(t('login.errors.googleAccount'));
           return;
         }
       }
@@ -40,10 +41,10 @@ export default function Login() {
       setLoading(false);
       setError(
         authError?.message === 'Email not confirmed'
-          ? 'لم يتم تأكيد البريد الإلكتروني بعد — تحقق من بريدك واضغط على رابط التأكيد'
+          ? t('login.errors.emailNotConfirmed')
           : authError?.message === 'Invalid login credentials'
-          ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة'
-          : 'حدث خطأ غير متوقع'
+          ? t('login.errors.invalidCredentials')
+          : t('errors.unexpected')
       );
       return;
     }
@@ -70,15 +71,15 @@ export default function Login() {
   };
 
   return (
-    <div className="auth-page" dir="rtl">
+    <div className="auth-page">
       <div className="auth-card">
         <img src="/logo.png" alt="سوق لينك" className="auth-logo auth-logo-img" />
-        <h1 className="auth-title">تسجيل الدخول</h1>
-        <p className="auth-sub">مرحباً بك في سوق لينك</p>
+        <h1 className="auth-title">{t('login.title')}</h1>
+        <p className="auth-sub">{t('login.subtitle')}</p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="auth-field">
-            <label>البريد الإلكتروني</label>
+            <label>{t('shared.emailLabel')}</label>
             <input
               type="email"
               placeholder="example@email.com"
@@ -86,12 +87,13 @@ export default function Login() {
               onChange={e => setEmail(e.target.value)}
               required
               autoComplete="email"
+              dir="ltr"
             />
           </div>
           <div className="auth-field">
             <div className="auth-field-label-row">
-              <label>كلمة المرور</label>
-              <Link to="/forgot-password" className="auth-forgot-link">نسيت كلمة المرور؟</Link>
+              <label>{t('shared.passwordLabel')}</label>
+              <Link to="/forgot-password" className="auth-forgot-link">{t('login.forgotPassword')}</Link>
             </div>
             <div className="auth-input-wrap">
               <input
@@ -121,10 +123,10 @@ export default function Login() {
           {error && <p className="auth-error">{error}</p>}
 
           <button type="submit" className="auth-submit" disabled={loading}>
-            {loading ? 'جارٍ تسجيل الدخول...' : 'دخول'}
+            {loading ? t('login.loading') : t('login.submit')}
           </button>
 
-          <div className="auth-divider"><span>أو</span></div>
+          <div className="auth-divider"><span>{t('shared.or')}</span></div>
 
           <button type="button" className="auth-google-btn" onClick={signInWithGoogle}>
             <svg width="18" height="18" viewBox="0 0 48 48">
@@ -133,21 +135,21 @@ export default function Login() {
               <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
               <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
             </svg>
-            تسجيل الدخول بـ Google
+            {t('login.withGoogle')}
           </button>
         </form>
 
         <p className="auth-switch">
-          ليس لديك حساب؟{' '}
-          <Link to="/signup">إنشاء حساب عميل</Link>
+          {t('login.noAccount')}{' '}
+          <Link to="/signup">{t('login.createAccount')}</Link>
         </p>
         <p className="auth-switch auth-switch--spaced">
-          تاجر جديد؟{' '}
-          <Link to="/merchant-application">تقديم طلب تسجيل كتاجر</Link>
+          {t('login.newMerchant')}{' '}
+          <Link to="/merchant-application">{t('login.merchantApply')}</Link>
         </p>
         <p className="auth-switch auth-switch--spaced">
-          مندوب توصيل؟{' '}
-          <Link to="/delivery-application">تقديم طلب كمندوب توصيل</Link>
+          {t('login.isDelivery')}{' '}
+          <Link to="/delivery-application">{t('login.deliveryApply')}</Link>
         </p>
       </div>
     </div>

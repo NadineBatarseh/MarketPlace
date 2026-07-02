@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import Topbar from '../../components/Topbar';
 import '../singleStore/storePage.css';
 import '../categoryListing/categoryListing.css';
 import './StoreListPage.css';
 import { supabase } from '../../lib/supabase';
+import { useLanguage } from '../../context/LanguageContext';
 
 /**
  * Explore Local Stores
@@ -40,6 +42,8 @@ type SortKey = 'newest' | 'popular' | 'az';
 const PAGE_SIZE = 9;
 
 export default function StoreListPage() {
+  const { t } = useTranslation('customer');
+  const { direction } = useLanguage();
   const [stores, setStores] = useState<StoreItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -165,7 +169,7 @@ export default function StoreListPage() {
   if (city) chips.push({ key: 'city', label: city, onRemove: () => setCity('') });
 
   return (
-    <div className="cat-page els" dir="rtl">
+    <div className="cat-page els" dir={direction}>
       <Topbar />
 
       {/* ── Hero — faded banner fading into the page surface ── */}
@@ -174,11 +178,8 @@ export default function StoreListPage() {
           <div className="cat-hero-fade" />
         </div>
         <div className="cat-hero-content">
-          <h1 className="cat-hero-title">استكشف المتاجر المحلية</h1>
-          <p className="cat-hero-desc">
-            اكتشف المتاجر المحلية الموثوقة وتصفح منتجاتها بسهولة. ادعم مجتمعك من خلال
-            التسوق من الأعمال المملوكة بشكل مستقل.
-          </p>
+          <h1 className="cat-hero-title">{t('storeList.hero.title')}</h1>
+          <p className="cat-hero-desc">{t('storeList.hero.desc')}</p>
         </div>
       </section>
 
@@ -190,10 +191,10 @@ export default function StoreListPage() {
               <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
                 <line x1="4" y1="6" x2="20" y2="6" /><line x1="8" y1="12" x2="16" y2="12" /><line x1="11" y1="18" x2="13" y2="18" />
               </svg>
-              الفلاتر
+              {t('storeList.filters.title')}
             </span>
             {hasActiveFilters && (
-              <button type="button" className="sp-clear-all" onClick={clearFilters}>مسح الكل</button>
+              <button type="button" className="sp-clear-all" onClick={clearFilters}>{t('storeList.filters.clearAll')}</button>
             )}
           </div>
 
@@ -211,7 +212,7 @@ export default function StoreListPage() {
           {/* Search */}
           <div className="sp-section">
             <div className="sp-section-header" style={{ cursor: 'default', paddingBottom: 12 }}>
-              <span className="sp-section-title">بحث</span>
+              <span className="sp-section-title">{t('storeList.filters.search')}</span>
             </div>
             <div className="els-side-search">
               <svg className="els-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -220,7 +221,7 @@ export default function StoreListPage() {
               </svg>
               <input
                 type="text"
-                placeholder="ابحث عن المتاجر..."
+                placeholder={t('storeList.filters.searchPlaceholder')}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
@@ -231,7 +232,7 @@ export default function StoreListPage() {
           {categories.length > 0 && (
             <div className="sp-section">
               <div className="sp-section-header" style={{ cursor: 'default' }}>
-                <span className="sp-section-title">الفئة</span>
+                <span className="sp-section-title">{t('storeList.filters.category')}</span>
               </div>
               <div className="sp-check-list">
                 {categories.map(c => {
@@ -259,7 +260,7 @@ export default function StoreListPage() {
           {cities.length > 0 && (
             <div className="sp-section">
               <div className="sp-section-header" style={{ cursor: 'default' }}>
-                <span className="sp-section-title">المدينة</span>
+                <span className="sp-section-title">{t('storeList.filters.city')}</span>
               </div>
               <div className="sp-check-list">
                 {cities.map(c => {
@@ -289,18 +290,18 @@ export default function StoreListPage() {
           {/* Toolbar */}
           <div className="products-toolbar">
             <span className="label">
-              {loading ? 'جاري التحميل…' : `${filtered.length} متجر`}
+              {loading ? t('storeList.toolbar.loading') : t('storeList.toolbar.storeCount', { count: filtered.length })}
             </span>
             <div className="toolbar-right">
               <select
                 className="sort-select"
                 value={sort}
                 onChange={e => setSort(e.target.value as SortKey)}
-                aria-label="ترتيب المتاجر"
+                aria-label={t('storeList.toolbar.sortAria')}
               >
-                <option value="newest">الأحدث</option>
-                <option value="popular">الأكثر شهرة</option>
-                <option value="az">أبجدياً</option>
+                <option value="newest">{t('storeList.sort.newest')}</option>
+                <option value="popular">{t('storeList.sort.popular')}</option>
+                <option value="az">{t('storeList.sort.az')}</option>
               </select>
             </div>
           </div>
@@ -331,10 +332,10 @@ export default function StoreListPage() {
                   <path d="M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0" />
                 </svg>
               </div>
-              <h3>لم يتم العثور على متاجر</h3>
-              <p>لم نتمكن من العثور على أي متاجر تطابق بحثك أو عوامل التصفية. حاول تعديل معاييرك.</p>
+              <h3>{t('storeList.empty.title')}</h3>
+              <p>{t('storeList.empty.desc')}</p>
               <button className="els-btn" style={{ width: 'auto', padding: '12px 32px' }} onClick={clearFilters}>
-                مسح كل عوامل التصفية
+                {t('storeList.empty.clearFilters')}
               </button>
             </div>
           )}
@@ -358,7 +359,7 @@ export default function StoreListPage() {
                         </div>
                       )}
                       <span className={`els-badge ${store.is_open ? 'els-badge--open' : 'els-badge--closed'}`}>
-                        {store.is_open ? 'مفتوح' : 'مغلق'}
+                        {store.is_open ? t('storeList.badge.open') : t('storeList.badge.closed')}
                       </span>
                     </div>
 
@@ -389,11 +390,11 @@ export default function StoreListPage() {
                       </div>
 
                       <p className="els-desc">
-                        {store.description || 'متجر محلي على سوق لينك.'}
+                        {store.description || t('storeList.card.fallbackDesc')}
                       </p>
 
                       <button className="els-btn" onClick={() => navigate(`/stores/${store.shop_id}`)}>
-                        عرض المتجر
+                        {t('storeList.card.viewStore')}
                       </button>
                     </div>
                   </article>
@@ -403,7 +404,7 @@ export default function StoreListPage() {
               {visible < filtered.length && (
                 <div className="els-more">
                   <button className="els-more-btn" onClick={() => setVisible(v => v + PAGE_SIZE)}>
-                    تحميل المزيد من المتاجر
+                    {t('storeList.loadMore')}
                   </button>
                 </div>
               )}
@@ -416,26 +417,23 @@ export default function StoreListPage() {
       <footer className="els-footer">
         <div className="els-footer-inner">
           <div>
-            <span className="els-footer-brand">سوق لينك</span>
-            <p>
-              © 2024 سوق لينك ماركتبليس. نربط المجتمعات المحلية من خلال توفير منصة
-              للمتاجر المحلية لتزدهر وللعملاء لاكتشاف منتجات فريدة.
-            </p>
+            <span className="els-footer-brand">{t('storeList.footer.brand')}</span>
+            <p>{t('storeList.footer.copyright')}</p>
           </div>
           <div>
-            <h4>السوق</h4>
+            <h4>{t('storeList.footer.marketplace')}</h4>
             <nav>
-              <a onClick={() => navigate('/home')}>من نحن</a>
-              <a>شروط الخدمة</a>
-              <a onClick={() => navigate('/privacy-policy')}>سياسة الخصوصية</a>
+              <a onClick={() => navigate('/home')}>{t('storeList.footer.aboutUs')}</a>
+              <a>{t('storeList.footer.terms')}</a>
+              <a onClick={() => navigate('/privacy-policy')}>{t('storeList.footer.privacy')}</a>
             </nav>
           </div>
           <div>
-            <h4>الدعم</h4>
+            <h4>{t('storeList.footer.support')}</h4>
             <nav>
-              <a>اتصل بالدعم</a>
-              <a>الوظائف</a>
-              <a>مركز المساعدة</a>
+              <a>{t('storeList.footer.contactSupport')}</a>
+              <a>{t('storeList.footer.careers')}</a>
+              <a>{t('storeList.footer.helpCenter')}</a>
             </nav>
           </div>
         </div>

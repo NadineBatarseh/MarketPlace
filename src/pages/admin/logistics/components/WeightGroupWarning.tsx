@@ -1,16 +1,19 @@
 import React from 'react';
-import { WEIGHT_GROUPS, getWeightGroupSum, SettingsValues } from '../settingsData';
+import { useTranslation } from 'react-i18next';
+import { getWeightGroupSum, SettingsValues } from '../settingsData';
 
 interface WeightGroupWarningProps {
   groupKey: string;
   values: SettingsValues;
+  weightGroups: Record<string, { label: string; keys: string[] }>;
 }
 
-const WeightGroupWarning: React.FC<WeightGroupWarningProps> = ({ groupKey, values }) => {
-  const group = WEIGHT_GROUPS[groupKey];
+const WeightGroupWarning: React.FC<WeightGroupWarningProps> = ({ groupKey, values, weightGroups }) => {
+  const { t } = useTranslation('admin');
+  const group = weightGroups[groupKey];
   if (!group) return null;
 
-  const sum = getWeightGroupSum(groupKey, values);
+  const sum = getWeightGroupSum(groupKey, values, weightGroups);
   const isValid = Math.abs(sum - 1) < 0.001;
 
   return (
@@ -46,7 +49,7 @@ const WeightGroupWarning: React.FC<WeightGroupWarningProps> = ({ groupKey, value
       </div>
 
       <span style={{ fontSize: 11, color: isValid ? '#16A34A' : '#DC2626', fontWeight: 600, whiteSpace: 'nowrap' }}>
-        {isValid ? 'الأوزان صحيحة' : 'يجب أن يساوي 1.000'}
+        {isValid ? t('logisticsSettings.weightsValid') : t('logisticsSettings.weightsMustEqualOne')}
       </span>
     </div>
   );

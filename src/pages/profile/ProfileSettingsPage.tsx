@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../../context/LanguageContext';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import {
   fetchProfile,
@@ -16,40 +18,13 @@ import { parsePhone } from '../../lib/formValidation';
 import { useFieldHint } from '../auth/useFieldHint';
 import './ProfileSettingsPage.css';
 
-/**
- * Customer Settings — redesigned as a categorised, sidebar-driven layout.
- *
- * One shared `form` (ProfileData) backs every tab, and one Save action persists
- * the whole profile via PUT /api/profile (see src/lib/profile.ts). The active
- * tab only decides which section is visible — so a user can edit their name in
- * "Account", drop a pin in "Address Book", and save once.
- *
- * Tabs:
- *   • account      — name, email (read-only), phone
- *   • address      — text address + Google Maps delivery pin (lat/lng)
- *   • security     — change password (reuses ChangePasswordModal)
- *   • preferences  — device-local notification toggles + quick links
- */
-
 type TabKey = 'account' | 'address' | 'security' | 'preferences';
 type IconName = 'user' | 'pin' | 'lock' | 'gear' | 'box' | 'heart';
 
-// Settings tabs (switch the central panel) and navigation links (route away),
-// rendered as ONE connected sidebar list in this order.
 type NavItem =
   | { kind: 'tab'; key: TabKey; label: string; hint: string; icon: IconName }
   | { kind: 'link'; to: string; label: string; icon: IconName };
 
-const NAV: NavItem[] = [
-  { kind: 'tab',  key: 'account',     label: 'الحساب',        hint: 'الاسم ومعلومات التواصل', icon: 'user' },
-  { kind: 'tab',  key: 'address',     label: 'دفتر العناوين', hint: 'عنوان وموقع التسليم',    icon: 'pin'  },
-  { kind: 'tab',  key: 'security',    label: 'الأمان',         hint: 'كلمة المرور والدخول',    icon: 'lock' },
-  { kind: 'tab',  key: 'preferences', label: 'التفضيلات',      hint: 'الإشعارات والروابط',     icon: 'gear' },
-  { kind: 'link', to: '/orders',      label: 'طلباتي',         icon: 'box'   },
-  { kind: 'link', to: '/favorites',   label: 'المفضلة',        icon: 'heart' },
-];
-
-/** Minimalist line icons (single consistent stroke style) for the sidebar. */
 function NavIcon({ name }: { name: IconName }) {
   const p = {
     width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none',
@@ -67,19 +42,27 @@ function NavIcon({ name }: { name: IconName }) {
 }
 
 export default function ProfileSettingsPage() {
+  const { t } = useTranslation('cart-checkout');
+  const { direction } = useLanguage();
   const { customer } = useCustomerAuth();
   const navigate = useNavigate();
+
+  const NAV: NavItem[] = [
+    { kind: 'tab',  key: 'account',     label: t('profile.tabs.account'),     hint: t('profile.tabs.accountHint'),     icon: 'user' },
+    { kind: 'tab',  key: 'address',     label: t('profile.tabs.address'),     hint: t('profile.tabs.addressHint'),     icon: 'pin'  },
+    { kind: 'tab',  key: 'security',    label: t('profile.tabs.security'),    hint: t('profile.tabs.securityHint'),    icon: 'lock' },
+    { kind: 'tab',  key: 'preferences', label: t('profile.tabs.preferences'), hint: t('profile.tabs.preferencesHint'), icon: 'gear' },
+    { kind: 'link', to: '/orders',      label: t('profile.tabs.orders'),      icon: 'box'   },
+    { kind: 'link', to: '/favorites',   label: t('profile.tabs.favorites'),   icon: 'heart' },
+  ];
 
   const [tab, setTab] = useState<TabKey>('account');
   const [pwOpen, setPwOpen] = useState(false);
 
-  // Working copy + the last-saved snapshot (to detect unsaved changes).
   const [form, setForm] = useState<ProfileData>(emptyProfile());
   const [saved, setSavedSnapshot] = useState<ProfileData>(emptyProfile());
   const [zones, setZones] = useState<Zone[]>([]);
 
-  // Phone is edited via a split control (country code + "05" prefix + 8 digits)
-  // and recomposed into form.phone. Inline hints mirror the checkout form.
   const [phoneCode, setPhoneCode]   = useState('970');
   const [phoneLocal, setPhoneLocal] = useState('');
   const phoneHint     = useFieldHint();
@@ -97,15 +80,12 @@ export default function ProfileSettingsPage() {
 
   const dirty = useMemo(() => !profilesEqual(form, saved), [form, saved]);
 
-  // ── Load saved profile once ─────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const data = await fetchProfile();
         if (!cancelled) {
-          // Normalise the saved phone into the split control's canonical form so
-          // the recomposed value doesn't read as an unsaved change.
           const { code, local } = parsePhone(data.phone);
           setPhoneCode(code);
           setPhoneLocal(local);
@@ -114,7 +94,7 @@ export default function ProfileSettingsPage() {
           setSavedSnapshot(normalized);
         }
       } catch (e: unknown) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'خطأ في التحميل');
+        if (!cancelled) setError(e instanceof Error ? e.message : t('profile.errors.loadError'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -122,24 +102,21 @@ export default function ProfileSettingsPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Text-field updater (inputs, selects, textareas).
   const update = (field: keyof ProfileData) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
       setForm((prev) => ({ ...prev, [field]: e.target.value }));
       setJustSaved(false);
     };
 
-  // Name updater — strips digits and flashes a hint (names can't contain numbers).
   const updateName = (field: 'firstName' | 'lastName', hint: ReturnType<typeof useFieldHint>) =>
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const raw = e.target.value;
-      if (/[0-9]/.test(raw)) hint.show('لا يُسمح بالأرقام في هذا الحقل');
+      if (/[0-9]/.test(raw)) hint.show(t('profile.errors.noNumbers'));
       else hint.clear();
       setForm((prev) => ({ ...prev, [field]: raw.replace(/[0-9]/g, '') }));
       setJustSaved(false);
     };
 
-  // Phone split → recompose into form.phone as `${code}5${local}`.
   const onPhoneCode = (code: string) => {
     setPhoneCode(code);
     setForm((prev) => ({ ...prev, phone: phoneLocal ? `${code}5${phoneLocal}` : '' }));
@@ -147,8 +124,8 @@ export default function ProfileSettingsPage() {
   };
   const onPhoneLocal = (raw: string) => {
     const digits = raw.replace(/\D/g, '');
-    if (/[^\d]/.test(raw)) phoneHint.show('أرقام فقط');
-    else if (digits.length > 8) phoneHint.show('الحد الأقصى 8 أرقام');
+    if (/[^\d]/.test(raw)) phoneHint.show(t('profile.errors.digitsOnly'));
+    else if (digits.length > 8) phoneHint.show(t('profile.errors.maxDigits'));
     else phoneHint.clear();
     const local = digits.slice(0, 8);
     setPhoneLocal(local);
@@ -156,14 +133,12 @@ export default function ProfileSettingsPage() {
     setJustSaved(false);
   };
 
-  // Zone dropdown → store both id and name.
   const setZone = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const z = zones.find(zz => zz.id === e.target.value) ?? null;
     setForm((prev) => ({ ...prev, dropoffZoneId: z?.id ?? null, dropoffZone: z?.name ?? '' }));
     setJustSaved(false);
   };
 
-  // Map-pin updater — also captures place metadata from a search.
   const setCoords = (latitude: number, longitude: number, meta?: PlaceMeta) => {
     setForm((prev) => ({
       ...prev,
@@ -183,9 +158,8 @@ export default function ProfileSettingsPage() {
   const selectedZone = zones.find(z => z.id === form.dropoffZoneId) ?? null;
 
   const handleSave = async () => {
-    // A phone, if entered, must be the full 8 digits after "05".
     if (phoneLocal.length > 0 && phoneLocal.length !== 8) {
-      setError('رقم الهاتف غير صحيح — أدخل 8 أرقام بعد 05');
+      setError(t('profile.errors.phoneInvalid'));
       return;
     }
     setSavingState(true);
@@ -197,24 +171,24 @@ export default function ProfileSettingsPage() {
       setSavedSnapshot(updated);
       setJustSaved(true);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'حدث خطأ أثناء الحفظ');
+      setError(err instanceof Error ? err.message : t('profile.errors.saveError'));
     } finally {
       setSavingState(false);
     }
   };
 
   return (
-    <div className="ps-page" dir="rtl">
+    <div className="ps-page" dir={direction}>
       <Topbar />
 
       <div className="ps-shell">
         {loading ? (
-          <div className="ps-loading-card">جارٍ تحميل بياناتك…</div>
+          <div className="ps-loading-card">{t('profile.loading')}</div>
         ) : (
           <div className="ps-layout">
-            {/* ── Sidebar: title + one connected nav list ─────────── */}
-            <nav className="ps-sidebar" aria-label="أقسام الإعدادات">
-              <h1 className="ps-sidebar-title">الإعدادات</h1>
+            {/* ── Sidebar ── */}
+            <nav className="ps-sidebar" aria-label={t('profile.title')}>
+              <h1 className="ps-sidebar-title">{t('profile.title')}</h1>
 
               <div className="ps-navlist">
                 {NAV.map((item) =>
@@ -249,10 +223,11 @@ export default function ProfileSettingsPage() {
               </div>
             </nav>
 
-            {/* ── Active section ─────────────────────────────────── */}
+            {/* ── Active section ── */}
             <section className="ps-panel">
               {tab === 'account' && (
                 <AccountSection
+                  t={t}
                   form={form}
                   email={customer?.email ?? ''}
                   updateName={updateName}
@@ -268,6 +243,7 @@ export default function ProfileSettingsPage() {
 
               {tab === 'address' && (
                 <AddressSection
+                  t={t}
                   form={form}
                   update={update}
                   setCoords={setCoords}
@@ -279,24 +255,21 @@ export default function ProfileSettingsPage() {
               )}
 
               {tab === 'security' && (
-                <SecuritySection onChangePassword={() => setPwOpen(true)} />
+                <SecuritySection t={t} onChangePassword={() => setPwOpen(true)} />
               )}
 
-              {tab === 'preferences' && <PreferencesSection />}
+              {tab === 'preferences' && <PreferencesSection t={t} />}
 
-              {/* Inline feedback */}
               {error && <div className="ps-error">{error}</div>}
-              {justSaved && !dirty && <div className="ps-success">✓ تم حفظ التعديلات بنجاح</div>}
+              {justSaved && !dirty && <div className="ps-success">{t('profile.savebar.success')}</div>}
             </section>
           </div>
         )}
       </div>
 
-      {/* Sticky save bar — only when there are unsaved changes (security &
-          preferences have no savable fields, so nothing to lose there). */}
       {!loading && dirty && (
-        <div className="ps-savebar" role="region" aria-label="حفظ التغييرات">
-          <span className="ps-savebar-text">لديك تغييرات غير محفوظة</span>
+        <div className="ps-savebar" role="region" aria-label={t('profile.savebar.ariaLabel')}>
+          <span className="ps-savebar-text">{t('profile.savebar.unsaved')}</span>
           <div className="ps-savebar-actions">
             <button
               type="button"
@@ -304,7 +277,7 @@ export default function ProfileSettingsPage() {
               onClick={() => { setForm(saved); setError(null); }}
               disabled={savingState}
             >
-              تجاهل
+              {t('profile.savebar.discard')}
             </button>
             <button
               type="button"
@@ -312,7 +285,7 @@ export default function ProfileSettingsPage() {
               onClick={handleSave}
               disabled={savingState}
             >
-              {savingState ? 'جارٍ الحفظ…' : 'حفظ التعديلات'}
+              {savingState ? t('profile.savebar.saving') : t('profile.savebar.save')}
             </button>
           </div>
         </div>
@@ -326,9 +299,10 @@ export default function ProfileSettingsPage() {
 /* ───────────────────────── Account ───────────────────────── */
 
 function AccountSection({
-  form, email, updateName, firstNameHint, lastNameHint,
+  t, form, email, updateName, firstNameHint, lastNameHint,
   phoneCode, phoneLocal, onPhoneCode, onPhoneLocal, phoneHint,
 }: {
+  t: ReturnType<typeof useTranslation<'cart-checkout'>>['t'];
   form: ProfileData;
   email: string;
   updateName: (f: 'firstName' | 'lastName', hint: ReturnType<typeof useFieldHint>) =>
@@ -344,29 +318,29 @@ function AccountSection({
   return (
     <div className="ps-card">
       <div className="ps-card-head">
-        <h2 className="ps-card-title">المعلومات الأساسية</h2>
-        <p className="ps-card-desc">بياناتك الشخصية وطريقة التواصل معك.</p>
+        <h2 className="ps-card-title">{t('profile.account.sectionTitle')}</h2>
+        <p className="ps-card-desc">{t('profile.account.sectionDesc')}</p>
       </div>
 
       <div className="ps-row">
-        <Field label="الاسم الأول">
-          <input placeholder="أدخل الاسم الأول" value={form.firstName} onChange={updateName('firstName', firstNameHint)} />
+        <Field label={t('profile.account.firstName')}>
+          <input placeholder={t('profile.account.firstNamePlaceholder')} value={form.firstName} onChange={updateName('firstName', firstNameHint)} />
           {firstNameHint.hint && <span className="ps-field-hint">{firstNameHint.hint}</span>}
         </Field>
-        <Field label="الاسم الأخير">
-          <input placeholder="أدخل الاسم الأخير" value={form.lastName} onChange={updateName('lastName', lastNameHint)} />
+        <Field label={t('profile.account.lastName')}>
+          <input placeholder={t('profile.account.lastNamePlaceholder')} value={form.lastName} onChange={updateName('lastName', lastNameHint)} />
           {lastNameHint.hint && <span className="ps-field-hint">{lastNameHint.hint}</span>}
         </Field>
       </div>
 
-      <Field label="البريد الإلكتروني" note="مرتبط بحسابك ولا يمكن تعديله من هنا">
+      <Field label={t('profile.account.email')} note={t('profile.account.emailNote')}>
         <input type="email" value={email} disabled readOnly />
       </Field>
 
-      <Field label="رقم الهاتف">
+      <Field label={t('profile.account.phone')}>
         <div className="ps-phone-split" dir="ltr">
           <select
-            title="رمز الدولة"
+            title={t('profile.account.countryCode')}
             className="ps-phone-code"
             value={phoneCode}
             onChange={(e) => onPhoneCode(e.target.value)}
@@ -394,8 +368,9 @@ function AccountSection({
 /* ───────────────────────── Address Book ───────────────────────── */
 
 function AddressSection({
-  form, update, setCoords, clearCoords, zones, setZone, selectedZone,
+  t, form, update, setCoords, clearCoords, zones, setZone, selectedZone,
 }: {
+  t: ReturnType<typeof useTranslation<'cart-checkout'>>['t'];
   form: ProfileData;
   update: (f: keyof ProfileData) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => void;
   setCoords: (lat: number, lng: number, meta?: PlaceMeta) => void;
@@ -409,24 +384,23 @@ function AddressSection({
   return (
     <div className="ps-card">
       <div className="ps-card-head">
-        <h2 className="ps-card-title">عنوان التسليم</h2>
-        <p className="ps-card-desc">اختر المنطقة وحدّد موقعك على الخريطة بدقة، وأضف تعليمات تساعد المندوب على الوصول.</p>
+        <h2 className="ps-card-title">{t('profile.address.sectionTitle')}</h2>
+        <p className="ps-card-desc">{t('profile.address.sectionDesc')}</p>
       </div>
 
-      <Field label="المنطقة">
-        <select className="ps-select" title="المنطقة" value={form.dropoffZoneId ?? ''} onChange={setZone}>
-          <option value="">اختر المنطقة</option>
+      <Field label={t('profile.address.zone')}>
+        <select className="ps-select" title={t('profile.address.zone')} value={form.dropoffZoneId ?? ''} onChange={setZone}>
+          <option value="">{t('profile.address.zoneSelect')}</option>
           {zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
         </select>
       </Field>
 
-      {/* Map pin */}
       <div className="ps-map-block">
         <div className="ps-map-head">
-          <h3 className="ps-map-title">📍 الموقع على الخريطة</h3>
+          <h3 className="ps-map-title">{t('profile.address.mapTitle')}</h3>
           {hasPin && (
             <button type="button" className="ps-link-btn" onClick={clearCoords}>
-              إزالة الموقع
+              {t('profile.address.removePin')}
             </button>
           )}
         </div>
@@ -437,11 +411,11 @@ function AddressSection({
         />
       </div>
 
-      <Field label="تعليمات توصيل إضافية">
+      <Field label={t('profile.address.instructions')}>
         <textarea
           className="ps-textarea"
           rows={3}
-          placeholder="اسم الشارع، رقم العمارة، الطابق، رقم الشقة، أقرب معلم، أو أي تعليمات للمندوب."
+          placeholder={t('profile.address.instructionsPlaceholder')}
           value={form.deliveryDescription}
           onChange={update('deliveryDescription')}
         />
@@ -452,21 +426,26 @@ function AddressSection({
 
 /* ───────────────────────── Security ───────────────────────── */
 
-function SecuritySection({ onChangePassword }: { onChangePassword: () => void }) {
+function SecuritySection({
+  t, onChangePassword,
+}: {
+  t: ReturnType<typeof useTranslation<'cart-checkout'>>['t'];
+  onChangePassword: () => void;
+}) {
   return (
     <div className="ps-card">
       <div className="ps-card-head">
-        <h2 className="ps-card-title">الحساب والأمان</h2>
-        <p className="ps-card-desc">حافظ على أمان حسابك.</p>
+        <h2 className="ps-card-title">{t('profile.security.sectionTitle')}</h2>
+        <p className="ps-card-desc">{t('profile.security.sectionDesc')}</p>
       </div>
 
       <div className="ps-action-row">
         <div className="ps-action-info">
-          <span className="ps-action-label">كلمة المرور</span>
-          <span className="ps-action-sub">يُنصح بتغييرها بشكل دوري</span>
+          <span className="ps-action-label">{t('profile.security.password')}</span>
+          <span className="ps-action-sub">{t('profile.security.passwordSub')}</span>
         </div>
         <button type="button" className="ps-action-btn" onClick={onChangePassword}>
-          🔑 تغيير كلمة المرور
+          {t('profile.security.changePassword')}
         </button>
       </div>
     </div>
@@ -477,8 +456,11 @@ function SecuritySection({ onChangePassword }: { onChangePassword: () => void })
 
 const NOTIF_KEY = 'sl_notif_prefs';
 
-function PreferencesSection() {
-  // Device-local notification preferences (no backend column yet → localStorage).
+function PreferencesSection({
+  t,
+}: {
+  t: ReturnType<typeof useTranslation<'cart-checkout'>>['t'];
+}) {
   const [prefs, setPrefs] = useState({ orderUpdates: true, promos: false });
 
   useEffect(() => {
@@ -499,19 +481,19 @@ function PreferencesSection() {
   return (
     <div className="ps-card">
       <div className="ps-card-head">
-        <h2 className="ps-card-title">تفضيلات الحساب</h2>
-        <p className="ps-card-desc">إدارة إعدادات الإشعارات والتواصل</p>
+        <h2 className="ps-card-title">{t('profile.preferences.sectionTitle')}</h2>
+        <p className="ps-card-desc">{t('profile.preferences.sectionDesc')}</p>
       </div>
 
       <Toggle
-        label="تحديثات الطلبات"
-        sub="تلقي إشعارات حالة الطلب عبر التطبيق والبريد الإلكتروني"
+        label={t('profile.preferences.orderUpdates')}
+        sub={t('profile.preferences.orderUpdatesSub')}
         checked={prefs.orderUpdates}
         onChange={() => toggle('orderUpdates')}
       />
       <Toggle
-        label="العروض والتخفيضات"
-        sub="تلقي عروض ترويجية من المتاجر المحلية"
+        label={t('profile.preferences.promos')}
+        sub={t('profile.preferences.promosSub')}
         checked={prefs.promos}
         onChange={() => toggle('promos')}
       />

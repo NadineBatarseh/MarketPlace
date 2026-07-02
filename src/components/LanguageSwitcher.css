@@ -1,0 +1,33 @@
+.lang-switcher {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-full);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-main);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+
+.lang-switcher:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.lang-switcher__globe {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.lang-switcher__label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}

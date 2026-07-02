@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMerchantAuth } from '../context/MerchantAuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import supabase from '../../lib/supabase';
 import { type PayoutStatus, payoutMeta, fmtMoney, fmtDate } from '../lib/payoutDisplay';
 import './MerchantPayouts.css';
@@ -36,6 +38,8 @@ async function getToken(): Promise<string | null> {
 }
 
 export default function MerchantPayouts() {
+  const { t } = useTranslation('merchant');
+  const { lang, direction } = useLanguage();
   const { merchant } = useMerchantAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -46,18 +50,18 @@ export default function MerchantPayouts() {
     setError('');
     try {
       const token = await getToken();
-      if (!token) { setError('انتهت الجلسة — يرجى تسجيل الدخول من جديد.'); setLoading(false); return; }
+      if (!token) { setError(t('payouts.sessionExpired')); setLoading(false); return; }
       const res = await fetch(`${API_BASE}/api/payments/payout-onboarding/payouts`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const json = await res.json();
-      if (!res.ok) setError(json.error ?? 'تعذّر تحميل الأرباح.');
+      if (!res.ok) setError(json.error ?? t('payouts.loadFailed'));
       else setData(json as PayoutsResponse);
     } catch {
-      setError('تعذّر الاتصال بالخادم.');
+      setError(t('payouts.connectionFailed'));
     }
     setLoading(false);
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!merchant?.shop?.shop_id) { setLoading(false); return; }
@@ -65,10 +69,10 @@ export default function MerchantPayouts() {
   }, [merchant?.shop?.shop_id, load]);
 
   if (loading) {
-    return <div className="mpo-root"><div className="md-page-loading">جاري تحميل الأرباح...</div></div>;
+    return <div className="mpo-root" dir={direction}><div className="md-page-loading">{t('payouts.loading')}</div></div>;
   }
   if (!merchant?.shop) {
-    return <div className="mpo-root"><div className="md-page-empty">لا يوجد متجر مرتبط بحسابك.</div></div>;
+    return <div className="mpo-root" dir={direction}><div className="md-page-empty">{t('payouts.noShop')}</div></div>;
   }
 
   const summary = data?.summary;
@@ -76,52 +80,51 @@ export default function MerchantPayouts() {
   const payouts = data?.payouts ?? [];
   const notOnboarded = data?.onboarding_status !== 'active';
 
+  const numLocale = lang === 'ar' ? 'ar-EG' : 'en-US';
+
   return (
-    <div className="mpo-root">
-      <h1 className="mpo-title">أرباحي</h1>
-      <p className="mpo-subtitle">
-        حصّتك من مبيعات متجرك بعد خصم عمولة المنصّة، وحالة تحويلها إلى حسابك البنكي.
-        تُحوَّل حصّتك تلقائيًا عبر PayTabs لحظة دفع العميل ما دامت بيانات الدفع مكتملة.
-      </p>
+    <div className="mpo-root" dir={direction}>
+      <h1 className="mpo-title">{t('payouts.title')}</h1>
+      <p className="mpo-subtitle">{t('payouts.subtitle')}</p>
 
       {error && <div className="md-page-error md-page-error--spaced">{error}</div>}
 
       {notOnboarded && (
         <div className="mpo-banner">
-          أكمل <strong>بيانات الدفع</strong> (رقم الآيبان) لاستلام أرباحك إلى حسابك البنكي.
+          {t('payouts.onboardingPrefix')} <strong>{t('payouts.payoutDetailsLink')}</strong> {t('payouts.onboardingSuffix')}
         </div>
       )}
 
       {/* Summary cards */}
       <div className="mpo-cards">
         <div className="mpo-card mpo-card--green">
-          <div className="mpo-card-label">محوّلة عبر PayTabs</div>
+          <div className="mpo-card-label">{t('payouts.cardDistributed')}</div>
           <div className="mpo-card-value">{fmtMoney(summary?.distributed_total ?? 0, ccy)}</div>
         </div>
         <div className="mpo-card mpo-card--amber">
-          <div className="mpo-card-label">محتجزة لدى المنصّة</div>
+          <div className="mpo-card-label">{t('payouts.cardHeld')}</div>
           <div className="mpo-card-value">{fmtMoney(summary?.held_total ?? 0, ccy)}</div>
         </div>
       </div>
 
       {/* Payout lines */}
       {payouts.length === 0 ? (
-        <div className="md-page-empty">لا توجد أرباح بعد. ستظهر هنا بعد إتمام أول عملية بيع.</div>
+        <div className="md-page-empty">{t('payouts.empty')}</div>
       ) : (
         <div className="mpo-table-wrap">
           <table className="mpo-table">
             <thead>
               <tr>
-                <th>رقم الطلب</th>
-                <th>المبلغ</th>
-                <th>الحالة</th>
-                <th>التاريخ</th>
+                <th>{t('payouts.colOrderNumber')}</th>
+                <th>{t('payouts.colAmount')}</th>
+                <th>{t('payouts.colStatus')}</th>
+                <th>{t('payouts.colDate')}</th>
               </tr>
             </thead>
             <tbody>
               {payouts.map(p => {
-                const meta = payoutMeta(p.status);
-                const dateLabel = fmtDate(p.paid_at ?? p.created_at);
+                const meta = payoutMeta(p.status, t);
+                const dateLabel = fmtDate(p.paid_at ?? p.created_at, numLocale);
                 return (
                   <tr key={p.id}>
                     <td className="mpo-order">#{p.order_id}</td>

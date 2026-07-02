@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import supabase from '../../lib/supabase';
 import { useMerchantAuth } from '../context/MerchantAuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import './InstagramConnectPage.css';
 
 interface ConnectionStatus {
@@ -12,6 +14,8 @@ interface ConnectionStatus {
 type ImportStatus = 'idle' | 'importing' | 'done' | 'error';
 
 export default function InstagramConnectPage() {
+  const { t } = useTranslation('merchant');
+  const { direction, lang } = useLanguage();
   const { refreshShop } = useMerchantAuth();
   const [status, setStatus] = useState<'loading' | 'connected' | 'disconnected' | 'error'>('loading');
   const [info, setInfo] = useState<ConnectionStatus | null>(null);
@@ -110,7 +114,7 @@ export default function InstagramConnectPage() {
     setImportError(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { setImportStatus('error'); setImportError('انتهت جلستك. أعد تسجيل الدخول.'); return; }
+      if (!session) { setImportStatus('error'); setImportError(t('instagramConnect.sessionExpired')); return; }
 
       const res = await fetch('/api/instagram/import-products', {
         method: 'POST',
@@ -120,7 +124,7 @@ export default function InstagramConnectPage() {
 
       if (!res.ok || !data.ok) {
         setImportStatus('error');
-        setImportError(data.error ?? 'فشل الاستيراد.');
+        setImportError(data.error ?? t('instagramConnect.importFailed'));
         return;
       }
 
@@ -128,12 +132,12 @@ export default function InstagramConnectPage() {
       setImportStatus('done');
     } catch (err: any) {
       setImportStatus('error');
-      setImportError(err.message ?? 'خطأ غير متوقع.');
+      setImportError(err.message ?? t('instagramConnect.unexpectedError'));
     }
   }
 
   return (
-    <div className="igc-page">
+    <div className="igc-page" dir={direction}>
       <div className="igc-header">
         <div className="igc-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -143,9 +147,9 @@ export default function InstagramConnectPage() {
           </svg>
         </div>
         <div>
-          <h1 className="igc-title">ربط حساب انستقرام</h1>
+          <h1 className="igc-title">{t('instagramConnect.title')}</h1>
           <p className="igc-subtitle">
-            اربط حسابك التجاري على انستقرام لاستيراد منتجاتك تلقائياً بواسطة الذكاء الاصطناعي
+            {t('instagramConnect.subtitle')}
           </p>
         </div>
       </div>
@@ -154,7 +158,7 @@ export default function InstagramConnectPage() {
         {status === 'loading' && (
           <div className="igc-state igc-loading">
             <div className="igc-spinner" />
-            <p>جارٍ التحقق من الاتصال…</p>
+            <p>{t('instagramConnect.checkingConnection')}</p>
           </div>
         )}
 
@@ -164,28 +168,28 @@ export default function InstagramConnectPage() {
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <polyline points="20 6 9 17 4 12"/>
               </svg>
-              متصل
+              {t('instagramConnect.connected')}
             </div>
             <div className="igc-account-info">
-              <span className="igc-account-label">الحساب</span>
+              <span className="igc-account-label">{t('instagramConnect.account')}</span>
               <span className="igc-account-name">
-                {info.username ? `@${info.username}` : 'حساب تجاري'}
+                {info.username ? `@${info.username}` : t('instagramConnect.businessAccount')}
               </span>
             </div>
             {info.connected_at && (
               <div className="igc-account-info">
-                <span className="igc-account-label">تاريخ الربط</span>
+                <span className="igc-account-label">{t('instagramConnect.connectedDate')}</span>
                 <span className="igc-account-name">
-                  {new Date(info.connected_at).toLocaleDateString('ar-EG')}
+                  {new Date(info.connected_at).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US')}
                 </span>
               </div>
             )}
             <div className="igc-actions">
               <button type="button" className="igc-btn-primary" onClick={startOAuth} disabled={actionLoading}>
-                إعادة الربط
+                {t('instagramConnect.reconnect')}
               </button>
               <button type="button" className="igc-btn-danger" onClick={disconnect} disabled={actionLoading}>
-                {actionLoading ? 'جارٍ القطع…' : 'قطع الاتصال'}
+                {actionLoading ? t('instagramConnect.disconnecting') : t('instagramConnect.disconnect')}
               </button>
             </div>
 
@@ -197,10 +201,10 @@ export default function InstagramConnectPage() {
                   <polyline points="7 10 12 15 17 10"/>
                   <line x1="12" y1="15" x2="12" y2="3"/>
                 </svg>
-                <span>استيراد المنتجات من المنشورات</span>
+                <span>{t('instagramConnect.importSectionTitle')}</span>
               </div>
               <p className="igc-import-desc">
-                يقوم الذكاء الاصطناعي بفحص آخر منشوراتك واستخراج بيانات المنتجات وحفظها كمسودات تلقائياً.
+                {t('instagramConnect.importSectionDesc')}
               </p>
 
               {importStatus === 'idle' && (
@@ -210,7 +214,7 @@ export default function InstagramConnectPage() {
                     <circle cx="12" cy="12" r="4"/>
                     <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/>
                   </svg>
-                  استيراد من انستقرام
+                  {t('instagramConnect.importFromInstagram')}
                 </button>
               )}
 
@@ -218,8 +222,8 @@ export default function InstagramConnectPage() {
                 <div className="igc-import-loading">
                   <div className="igc-import-spinner" />
                   <div>
-                    <p className="igc-import-loading-title">جارٍ تحليل منشوراتك…</p>
-                    <p className="igc-import-loading-sub">قد يستغرق هذا حتى دقيقة واحدة</p>
+                    <p className="igc-import-loading-title">{t('instagramConnect.analyzingPosts')}</p>
+                    <p className="igc-import-loading-sub">{t('instagramConnect.analyzingPostsSub')}</p>
                   </div>
                 </div>
               )}
@@ -232,13 +236,13 @@ export default function InstagramConnectPage() {
                   <div>
                     <p className="igc-import-result-title">
                       {importResult.count > 0
-                        ? `تم استيراد ${importResult.count} منتج كمسودة`
-                        : 'لا توجد منتجات جديدة'}
+                        ? t('instagramConnect.importedCount', { count: importResult.count })
+                        : t('instagramConnect.noNewProducts')}
                     </p>
                     <p className="igc-import-result-msg">{importResult.message}</p>
                   </div>
                   <button type="button" className="igc-import-retry" onClick={() => setImportStatus('idle')}>
-                    استيراد مجدداً
+                    {t('instagramConnect.importAgain')}
                   </button>
                 </div>
               )}
@@ -249,11 +253,11 @@ export default function InstagramConnectPage() {
                     <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
                   </svg>
                   <div>
-                    <p className="igc-import-result-title">فشل الاستيراد</p>
+                    <p className="igc-import-result-title">{t('instagramConnect.importFailed')}</p>
                     <p className="igc-import-result-msg">{importError}</p>
                   </div>
                   <button type="button" className="igc-import-retry" onClick={() => setImportStatus('idle')}>
-                    إعادة المحاولة
+                    {t('instagramConnect.retry')}
                   </button>
                 </div>
               )}
@@ -270,16 +274,16 @@ export default function InstagramConnectPage() {
                 <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/>
               </svg>
             </div>
-            <h3>لم يتم ربط أي حساب</h3>
-            <p>اربط حسابك التجاري على انستقرام حتى يتمكن الذكاء الاصطناعي من استيراد منتجاتك من منشوراتك.</p>
+            <h3>{t('instagramConnect.noAccountLinked')}</h3>
+            <p>{t('instagramConnect.noAccountLinkedDesc')}</p>
             <ul className="igc-perms">
-              <li>قراءة منشوراتك ومقاطع الريلز</li>
-              <li>استخراج بيانات المنتجات تلقائياً</li>
-              <li>تحليل إحصائيات حسابك</li>
+              <li>{t('instagramConnect.permReadPosts')}</li>
+              <li>{t('instagramConnect.permExtractProducts')}</li>
+              <li>{t('instagramConnect.permAnalyzeStats')}</li>
             </ul>
             <button type="button" className="igc-btn-connect" onClick={startOAuth} disabled={actionLoading}>
               {actionLoading ? (
-                <><div className="igc-btn-spinner" /> جارٍ التوجيه…</>
+                <><div className="igc-btn-spinner" /> {t('instagramConnect.redirecting')}</>
               ) : (
                 <>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -287,7 +291,7 @@ export default function InstagramConnectPage() {
                     <circle cx="12" cy="12" r="4"/>
                     <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/>
                   </svg>
-                  ربط حساب انستقرام
+                  {t('instagramConnect.connectAccount')}
                 </>
               )}
             </button>
@@ -296,8 +300,8 @@ export default function InstagramConnectPage() {
 
         {status === 'error' && (
           <div className="igc-state igc-error">
-            <p>حدث خطأ في التحقق. تأكد من تسجيل الدخول وأعد المحاولة.</p>
-            <button type="button" className="igc-btn-primary" onClick={fetchStatus}>إعادة المحاولة</button>
+            <p>{t('instagramConnect.errorCheckingConnection')}</p>
+            <button type="button" className="igc-btn-primary" onClick={fetchStatus}>{t('instagramConnect.retry')}</button>
           </div>
         )}
       </div>

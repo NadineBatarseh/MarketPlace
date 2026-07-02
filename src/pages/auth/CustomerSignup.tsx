@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import zxcvbn from 'zxcvbn';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
 import PasswordStrengthBar from './PasswordStrengthBar';
@@ -7,6 +8,7 @@ import './Auth.css';
 
 export default function CustomerSignup() {
   const { signup, signInWithGoogle } = useCustomerAuth();
+  const { t } = useTranslation('auth');
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -25,15 +27,15 @@ export default function CustomerSignup() {
     setError('');
 
     if (password !== confirm) {
-      setError('كلمتا المرور غير متطابقتين');
+      setError(t('errors.mismatch'));
       return;
     }
     if (password.length < 6) {
-      setError('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      setError(t('errors.tooShort'));
       return;
     }
     if (zxcvbn(password).score < 2) {
-      setError('كلمة المرور ضعيفة جداً — اختر كلمة مرور أصعب');
+      setError(t('errors.tooWeak'));
       return;
     }
 
@@ -42,7 +44,7 @@ export default function CustomerSignup() {
     setLoading(false);
 
     if (!result.success) {
-      setError(result.error ?? 'حدث خطأ غير متوقع');
+      setError(result.error ?? t('errors.unexpected'));
       return;
     }
 
@@ -51,16 +53,16 @@ export default function CustomerSignup() {
 
   if (submitted) {
     return (
-      <div className="auth-page" dir="rtl">
+      <div className="auth-page">
         <div className="auth-card auth-success-card">
           <div className="auth-success-icon">📧</div>
-          <h2 className="auth-title">تحقق من بريدك الإلكتروني</h2>
+          <h2 className="auth-title">{t('signup.success.title')}</h2>
           <p className="auth-success-msg">
-            أرسلنا رسالة تأكيد إلى <strong>{email}</strong>.<br /><br />
-            افتح الرسالة واضغط على رابط التأكيد لتفعيل حسابك، ثم سجّل الدخول.
+            {t('signup.success.messagePre')} <strong>{email}</strong>.<br /><br />
+            {t('signup.success.messagePost')}
           </p>
           <Link to="/login" className="auth-submit" style={{ display: 'block', textAlign: 'center', textDecoration: 'none' }}>
-            تسجيل الدخول
+            {t('signup.success.login')}
           </Link>
         </div>
       </div>
@@ -68,23 +70,23 @@ export default function CustomerSignup() {
   }
 
   return (
-    <div className="auth-page" dir="rtl">
+    <div className="auth-page">
       <div className="auth-card">
         <img src="/logo.png" alt="سوق لينك" className="auth-logo auth-logo-img" />
-        <h1 className="auth-title">إنشاء حساب عميل</h1>
-        <p className="auth-sub">انضم إلى سوق لينك وابدأ التسوق</p>
+        <h1 className="auth-title">{t('signup.title')}</h1>
+        <p className="auth-sub">{t('signup.subtitle')}</p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
           <div className="auth-field">
-            <label>الاسم الكامل <span className="auth-required-star">*</span></label>
+            <label>{t('signup.nameLabel')} <span className="auth-required-star">{t('shared.required')}</span></label>
             <input
               type="text"
-              placeholder="أدخل اسمك الكامل"
+              placeholder={t('signup.namePlaceholder')}
               value={name}
               onChange={e => {
                 const raw = e.target.value;
                 if (/[0-9]/.test(raw)) {
-                  setNameHint('لا يُسمح بالأرقام في هذا الحقل');
+                  setNameHint(t('shared.noDigitsHint'));
                   if (nameHintTimer.current) clearTimeout(nameHintTimer.current);
                   nameHintTimer.current = setTimeout(() => setNameHint(''), 2000);
                 }
@@ -95,7 +97,7 @@ export default function CustomerSignup() {
             {nameHint && <p className="auth-phone-hint">{nameHint}</p>}
           </div>
           <div className="auth-field">
-            <label>البريد الإلكتروني <span className="auth-required-star">*</span></label>
+            <label>{t('shared.emailLabel')} <span className="auth-required-star">{t('shared.required')}</span></label>
             <input
               type="email"
               placeholder="example@email.com"
@@ -103,14 +105,15 @@ export default function CustomerSignup() {
               onChange={e => setEmail(e.target.value)}
               required
               autoComplete="email"
+              dir="ltr"
             />
           </div>
           <div className="auth-field">
-            <label>كلمة المرور <span className="auth-required-star">*</span></label>
+            <label>{t('shared.passwordLabel')} <span className="auth-required-star">{t('shared.required')}</span></label>
             <div className="auth-input-wrap">
               <input
                 type={showPassword ? 'text' : 'password'}
-                placeholder="6 أحرف على الأقل"
+                placeholder={t('shared.passwordPlaceholder')}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
@@ -133,11 +136,11 @@ export default function CustomerSignup() {
             <PasswordStrengthBar password={password} />
           </div>
           <div className="auth-field">
-            <label>تأكيد كلمة المرور <span className="auth-required-star">*</span></label>
+            <label>{t('shared.confirmPasswordLabel')} <span className="auth-required-star">{t('shared.required')}</span></label>
             <div className="auth-input-wrap">
               <input
                 type={showConfirm ? 'text' : 'password'}
-                placeholder="أعد كتابة كلمة المرور"
+                placeholder={t('shared.confirmPlaceholder2')}
                 value={confirm}
                 onChange={e => setConfirm(e.target.value)}
                 required
@@ -162,10 +165,10 @@ export default function CustomerSignup() {
           {error && <p className="auth-error">{error}</p>}
 
           <button type="submit" className="auth-submit" disabled={loading}>
-            {loading ? 'جارٍ إنشاء الحساب...' : 'إنشاء الحساب'}
+            {loading ? t('signup.loading') : t('signup.submit')}
           </button>
 
-          <div className="auth-divider"><span>أو</span></div>
+          <div className="auth-divider"><span>{t('shared.or')}</span></div>
 
           <button type="button" className="auth-google-btn" onClick={signInWithGoogle}>
             <svg width="18" height="18" viewBox="0 0 48 48">
@@ -174,13 +177,13 @@ export default function CustomerSignup() {
               <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
               <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
             </svg>
-            إنشاء حساب بـ Google
+            {t('signup.withGoogle')}
           </button>
         </form>
 
         <p className="auth-switch">
-          لديك حساب بالفعل؟{' '}
-          <Link to="/login">تسجيل الدخول</Link>
+          {t('shared.hasAccount')}{' '}
+          <Link to="/login">{t('shared.backToLoginLink')}</Link>
         </p>
       </div>
     </div>

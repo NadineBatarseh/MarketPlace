@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import supabase from '../../lib/supabase';
 import { useMerchantAuth } from '../context/MerchantAuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import './InstagramSettingsCard.css';
 
 interface ConnectionStatus {
@@ -19,6 +21,8 @@ async function authHeader() {
 }
 
 export default function InstagramSettingsCard() {
+  const { t } = useTranslation('merchant');
+  const { direction, lang } = useLanguage();
   const { refreshShop } = useMerchantAuth();
   const [expanded, setExpanded] = useState(false);
   const [status, setStatus] = useState<PageStatus>('loading');
@@ -110,14 +114,14 @@ export default function InstagramSettingsCard() {
     setImportError(null);
     try {
       const headers = await authHeader();
-      if (!headers) { setImportStatus('error'); setImportError('انتهت جلستك. أعد تسجيل الدخول.'); return; }
+      if (!headers) { setImportStatus('error'); setImportError(t('instagramSettings.sessionExpired')); return; }
 
       const res = await fetch('/api/instagram/import-products', { method: 'POST', headers });
       const data = await res.json();
 
       if (!res.ok || !data.ok) {
         setImportStatus('error');
-        setImportError(data.error ?? 'فشل الاستيراد.');
+        setImportError(data.error ?? t('instagramSettings.importFailed'));
         return;
       }
 
@@ -125,12 +129,12 @@ export default function InstagramSettingsCard() {
       setImportStatus('done');
     } catch (err: any) {
       setImportStatus('error');
-      setImportError(err.message ?? 'خطأ غير متوقع.');
+      setImportError(err.message ?? t('instagramSettings.unexpectedError'));
     }
   }
 
   return (
-    <div className={`igc-shell${expanded ? ' igc-shell--expanded' : ''}`}>
+    <div className={`igc-shell${expanded ? ' igc-shell--expanded' : ''}`} dir={direction}>
       <button type="button" className="igc-summary" onClick={() => setExpanded((v) => !v)}>
         <div className="igc-summary-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -143,16 +147,16 @@ export default function InstagramSettingsCard() {
           <div className="igc-summary-title-row">
             <span className="igc-summary-title">Instagram Business</span>
             {status === 'loading' ? (
-              <span className="igc-pill igc-pill--idle">جارٍ التحقق…</span>
+              <span className="igc-pill igc-pill--idle">{t('instagramSettings.checking')}</span>
             ) : status === 'connected' ? (
-              <span className="igc-pill igc-pill--on">متصل</span>
+              <span className="igc-pill igc-pill--on">{t('instagramSettings.connected')}</span>
             ) : (
-              <span className="igc-pill igc-pill--off">غير متصل</span>
+              <span className="igc-pill igc-pill--off">{t('instagramSettings.notConnected')}</span>
             )}
           </div>
           <div className="igc-summary-meta">
             {status === 'connected' && info?.username && <span>@{info.username}</span>}
-            {status !== 'connected' && <span>اربط حسابك لاستيراد المنتجات تلقائياً من منشوراتك</span>}
+            {status !== 'connected' && <span>{t('instagramSettings.summaryHint')}</span>}
           </div>
         </div>
         <svg className={`igc-chevron${expanded ? ' igc-chevron--up' : ''}`} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -165,7 +169,7 @@ export default function InstagramSettingsCard() {
           {status === 'loading' && (
             <div className="igc-state igc-loading">
               <div className="igc-spinner" />
-              <p>جارٍ التحقق من الاتصال…</p>
+              <p>{t('instagramSettings.checkingConnection')}</p>
             </div>
           )}
 
@@ -175,24 +179,24 @@ export default function InstagramSettingsCard() {
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
-                متصل
+                {t('instagramSettings.connected')}
               </div>
               <div className="igc-account-info">
-                <span className="igc-account-label">الحساب</span>
-                <span className="igc-account-name">{info.username ? `@${info.username}` : 'حساب تجاري'}</span>
+                <span className="igc-account-label">{t('instagramSettings.account')}</span>
+                <span className="igc-account-name">{info.username ? `@${info.username}` : t('instagramSettings.businessAccount')}</span>
               </div>
               {info.connected_at && (
                 <div className="igc-account-info">
-                  <span className="igc-account-label">تاريخ الربط</span>
-                  <span className="igc-account-name">{new Date(info.connected_at).toLocaleDateString('ar-EG')}</span>
+                  <span className="igc-account-label">{t('instagramSettings.connectedDate')}</span>
+                  <span className="igc-account-name">{new Date(info.connected_at).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US')}</span>
                 </div>
               )}
               <div className="igc-actions">
                 <button type="button" className="igc-btn-primary" onClick={startOAuth} disabled={actionLoading}>
-                  إعادة الربط
+                  {t('instagramSettings.reconnect')}
                 </button>
                 <button type="button" className="igc-btn-danger" onClick={() => setShowDisconnectConfirm(true)} disabled={actionLoading}>
-                  {actionLoading ? 'جارٍ القطع…' : 'قطع الاتصال'}
+                  {actionLoading ? t('instagramSettings.disconnecting') : t('instagramSettings.disconnect')}
                 </button>
               </div>
 
@@ -203,15 +207,15 @@ export default function InstagramSettingsCard() {
                     <polyline points="7 10 12 15 17 10" />
                     <line x1="12" y1="15" x2="12" y2="3" />
                   </svg>
-                  <span>استيراد المنتجات من المنشورات</span>
+                  <span>{t('instagramSettings.importSectionTitle')}</span>
                 </div>
                 <p className="igc-import-desc">
-                  يقوم الذكاء الاصطناعي بفحص آخر منشوراتك واستخراج بيانات المنتجات وحفظها كمسودات تلقائياً.
+                  {t('instagramSettings.importSectionDesc')}
                 </p>
 
                 {importStatus === 'idle' && (
                   <button type="button" className="igc-btn-import" onClick={startImport}>
-                    استيراد من انستقرام
+                    {t('instagramSettings.importFromInstagram')}
                   </button>
                 )}
 
@@ -219,8 +223,8 @@ export default function InstagramSettingsCard() {
                   <div className="igc-import-loading">
                     <div className="igc-import-spinner" />
                     <div>
-                      <p className="igc-import-loading-title">جارٍ تحليل منشوراتك…</p>
-                      <p className="igc-import-loading-sub">قد يستغرق هذا حتى دقيقة واحدة</p>
+                      <p className="igc-import-loading-title">{t('instagramSettings.analyzingPosts')}</p>
+                      <p className="igc-import-loading-sub">{t('instagramSettings.analyzingPostsSub')}</p>
                     </div>
                   </div>
                 )}
@@ -232,12 +236,12 @@ export default function InstagramSettingsCard() {
                     </svg>
                     <div>
                       <p className="igc-import-result-title">
-                        {importResult.count > 0 ? `تم استيراد ${importResult.count} منتج كمسودة` : 'لا توجد منتجات جديدة'}
+                        {importResult.count > 0 ? t('instagramSettings.importedCount', { count: importResult.count }) : t('instagramSettings.noNewProducts')}
                       </p>
                       <p className="igc-import-result-msg">{importResult.message}</p>
                     </div>
                     <button type="button" className="igc-import-retry" onClick={() => setImportStatus('idle')}>
-                      استيراد مجدداً
+                      {t('instagramSettings.importAgain')}
                     </button>
                   </div>
                 )}
@@ -248,11 +252,11 @@ export default function InstagramSettingsCard() {
                       <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
                     </svg>
                     <div>
-                      <p className="igc-import-result-title">فشل الاستيراد</p>
+                      <p className="igc-import-result-title">{t('instagramSettings.importFailed')}</p>
                       <p className="igc-import-result-msg">{importError}</p>
                     </div>
                     <button type="button" className="igc-import-retry" onClick={() => setImportStatus('idle')}>
-                      إعادة المحاولة
+                      {t('instagramSettings.retry')}
                     </button>
                   </div>
                 )}
@@ -269,16 +273,16 @@ export default function InstagramSettingsCard() {
                   <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
                 </svg>
               </div>
-              <h3>لم يتم ربط أي حساب</h3>
-              <p>اربط حسابك التجاري على انستقرام حتى يتمكن الذكاء الاصطناعي من استيراد منتجاتك من منشوراتك.</p>
+              <h3>{t('instagramSettings.noAccountLinked')}</h3>
+              <p>{t('instagramSettings.noAccountLinkedDesc')}</p>
               <ul className="igc-perms">
-                <li>قراءة منشوراتك ومقاطع الريلز</li>
-                <li>استخراج بيانات المنتجات تلقائياً</li>
-                <li>تحليل إحصائيات حسابك</li>
+                <li>{t('instagramSettings.permReadPosts')}</li>
+                <li>{t('instagramSettings.permExtractProducts')}</li>
+                <li>{t('instagramSettings.permAnalyzeStats')}</li>
               </ul>
               <button type="button" className="igc-btn-connect" onClick={startOAuth} disabled={actionLoading}>
                 {actionLoading ? (
-                  <><div className="igc-btn-spinner" /> جارٍ التوجيه…</>
+                  <><div className="igc-btn-spinner" /> {t('instagramSettings.redirecting')}</>
                 ) : (
                   <>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -286,7 +290,7 @@ export default function InstagramSettingsCard() {
                       <circle cx="12" cy="12" r="4" />
                       <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
                     </svg>
-                    ربط حساب انستقرام
+                    {t('instagramSettings.connectAccount')}
                   </>
                 )}
               </button>
@@ -295,8 +299,8 @@ export default function InstagramSettingsCard() {
 
           {status === 'error' && (
             <div className="igc-state igc-error">
-              <p>حدث خطأ في التحقق. تأكد من تسجيل الدخول وأعد المحاولة.</p>
-              <button type="button" className="igc-btn-primary" onClick={fetchStatus}>إعادة المحاولة</button>
+              <p>{t('instagramSettings.errorCheckingConnection')}</p>
+              <button type="button" className="igc-btn-primary" onClick={fetchStatus}>{t('instagramSettings.retry')}</button>
             </div>
           )}
         </div>
@@ -305,14 +309,14 @@ export default function InstagramSettingsCard() {
       {showDisconnectConfirm && (
         <div className="igc-confirm-overlay" onClick={() => setShowDisconnectConfirm(false)}>
           <div className="igc-confirm-box" onClick={(e) => e.stopPropagation()}>
-            <h3>تأكيد قطع الاتصال</h3>
-            <p>سيتم قطع اتصال حساب انستقرام عن متجرك. لن يتم حذف المسودات التي تم استيرادها مسبقاً.</p>
+            <h3>{t('instagramSettings.confirmDisconnectTitle')}</h3>
+            <p>{t('instagramSettings.confirmDisconnectDesc')}</p>
             <div className="igc-confirm-actions">
               <button type="button" className="igc-btn-danger" onClick={() => { setShowDisconnectConfirm(false); disconnect(); }}>
-                تأكيد قطع الاتصال
+                {t('instagramSettings.confirmDisconnectBtn')}
               </button>
               <button type="button" className="igc-btn-primary" onClick={() => setShowDisconnectConfirm(false)}>
-                إلغاء
+                {t('instagramSettings.cancel')}
               </button>
             </div>
           </div>

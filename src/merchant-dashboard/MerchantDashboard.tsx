@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLanguage } from '../context/LanguageContext';
 import { useMerchantAuth } from './context/MerchantAuthContext';
 import MerchantHome from './pages/MerchantHome';
 import MerchantReviews from './pages/MerchantReviews';
@@ -52,6 +54,8 @@ function SidebarItem({
 }
 
 export default function MerchantDashboard() {
+  const { t } = useTranslation('merchant');
+  const { direction, lang } = useLanguage();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { merchant, logout, isLoading } = useMerchantAuth();
@@ -103,7 +107,7 @@ export default function MerchantDashboard() {
       <div className="md-not-logged-in">
         <div className="md-nli-box">
           <div className="md-nli-icon">⏳</div>
-          <h2>جاري التحقق من الجلسة...</h2>
+          <h2>{t('dashboard.verifyingSession')}</h2>
         </div>
       </div>
     );
@@ -114,17 +118,17 @@ export default function MerchantDashboard() {
       <div className="md-not-logged-in">
         <div className="md-nli-box">
           <div className="md-nli-icon">🏪</div>
-          <h2>لوحة تحكم التاجر</h2>
-          <p>سجّل دخولك للوصول إلى لوحة التحكم وإدارة متجرك</p>
+          <h2>{t('dashboard.notLoggedInTitle')}</h2>
+          <p>{t('dashboard.notLoggedInSubtitle')}</p>
           <button
             type="button"
             className="md-nli-login-btn"
             onClick={() => setShowLoginModal(true)}
           >
-            تسجيل الدخول
+            {t('dashboard.login')}
           </button>
           <button type="button" className="md-nli-home-btn" onClick={() => navigate('/')}>
-            العودة للرئيسية
+            {t('dashboard.backHome')}
           </button>
         </div>
 
@@ -139,8 +143,8 @@ export default function MerchantDashboard() {
   }
 
   const shop = merchant.shop;
-  const displayInitial = (shop?.name ?? merchant.displayName ?? 'م').charAt(0);
-  const today = new Date().toLocaleDateString('ar-EG', {
+  const displayInitial = (shop?.name ?? merchant.displayName ?? (lang === 'ar' ? 'م' : 'M')).charAt(0);
+  const today = new Date().toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US', {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -177,14 +181,14 @@ export default function MerchantDashboard() {
   };
 
   return (
-    <div className="md-root">
+    <div className="md-root" dir={direction}>
       {/* Top bar */}
       <header className="md-topbar">
         <div className="md-topbar-left">
           <button
             type="button"
             className="md-topbar-burger"
-            aria-label="القائمة"
+            aria-label={t('dashboard.menuAria')}
             aria-expanded={sidebarOpen}
             onClick={() => setSidebarOpen(v => !v)}
           >
@@ -195,8 +199,8 @@ export default function MerchantDashboard() {
             </svg>
           </button>
           <div className="md-topbar-brand" onClick={handleGoToStore}>
-            <img src="/logo.png" alt="سوق لينك" className="md-topbar-logo" />
-            <div className="md-topbar-brand-text">سوق <span>لينك</span></div>
+            <img src="/logo.png" alt="Souq Link" className="md-topbar-logo" />
+            <div className="md-topbar-brand-text">{t('dashboard.brandWord1')} <span>{t('dashboard.brandWord2')}</span></div>
           </div>
         </div>
 
@@ -204,7 +208,7 @@ export default function MerchantDashboard() {
           <button
             type="button"
             className="md-topbar-bell"
-            aria-label="الرسائل"
+            aria-label={t('dashboard.messagesAria')}
             style={{ position: 'relative' }}
             onClick={() => { setCurrentPage('inbox'); setUnreadMsgCount(0); }}
           >
@@ -247,7 +251,7 @@ export default function MerchantDashboard() {
                     <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
                     <polyline points="9 22 9 12 15 12 15 22" />
                   </svg>
-                  إعدادات المتجر
+                  {t('dashboard.storeSettings')}
                 </button>
                 <button
                   type="button"
@@ -258,7 +262,7 @@ export default function MerchantDashboard() {
                     <circle cx="12" cy="8" r="4" />
                     <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
                   </svg>
-                  إعدادات الحساب
+                  {t('dashboard.accountSettings')}
                 </button>
                 <button
                   type="button"
@@ -269,7 +273,7 @@ export default function MerchantDashboard() {
                     <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                     <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                   </svg>
-                  تغيير كلمة المرور
+                  {t('dashboard.changePassword')}
                 </button>
                 <button
                   type="button"
@@ -281,7 +285,7 @@ export default function MerchantDashboard() {
                     <polyline points="16 17 21 12 16 7" />
                     <line x1="21" y1="12" x2="9" y2="12" />
                   </svg>
-                  تسجيل الخروج
+                  {t('dashboard.logout')}
                 </button>
               </div>
             )}
@@ -303,7 +307,7 @@ export default function MerchantDashboard() {
         >
           {/* Greeting */}
           <div className="md-sidebar-greeting">
-            <div className="md-sidebar-greeting-name">مرحباً، <strong>{shop?.name ?? merchant.displayName}</strong></div>
+            <div className="md-sidebar-greeting-name">{t('dashboard.greeting')} <strong>{shop?.name ?? merchant.displayName}</strong></div>
             <div className="md-sidebar-greeting-date">{today}</div>
           </div>
 
@@ -316,7 +320,7 @@ export default function MerchantDashboard() {
                   <polyline points="9 22 9 12 15 12 15 22" />
                 </svg>
               }
-              label="الرئيسية"
+              label={t('dashboard.nav.home')}
               active={currentPage === 'home'}
               onClick={() => setCurrentPage('home')}
             />
@@ -328,7 +332,7 @@ export default function MerchantDashboard() {
                   <rect x="9" y="3" width="6" height="14" rx="1" />
                 </svg>
               }
-              label="الطلبات"
+              label={t('dashboard.nav.orders')}
               active={currentPage === 'orders'}
               onClick={() => setCurrentPage('orders')}
             />
@@ -339,7 +343,7 @@ export default function MerchantDashboard() {
                   <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
               }
-              label="التقييمات"
+              label={t('dashboard.nav.reviews')}
               active={currentPage === 'reviews'}
               onClick={() => setCurrentPage('reviews')}
             />
@@ -351,7 +355,7 @@ export default function MerchantDashboard() {
                   <line x1="2" y1="10" x2="22" y2="10" />
                 </svg>
               }
-              label="الفواتير"
+              label={t('dashboard.nav.billing')}
               active={currentPage === 'billing'}
               onClick={() => setCurrentPage('billing')}
             />
@@ -362,7 +366,7 @@ export default function MerchantDashboard() {
                   <path d="M3 10h18M7 15h2M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
                 </svg>
               }
-              label="بيانات الدفع"
+              label={t('dashboard.nav.payoutDetails')}
               active={currentPage === 'payoutDetails'}
               onClick={() => setCurrentPage('payoutDetails')}
             />
@@ -375,7 +379,7 @@ export default function MerchantDashboard() {
                   <path d="M18 12a2 2 0 0 0 0 4h4v-4z" />
                 </svg>
               }
-              label="أرباحي"
+              label={t('dashboard.nav.payouts')}
               active={currentPage === 'payouts'}
               onClick={() => setCurrentPage('payouts')}
             />
@@ -386,7 +390,7 @@ export default function MerchantDashboard() {
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                 </svg>
               }
-              label="الرسائل"
+              label={t('dashboard.nav.inbox')}
               active={currentPage === 'inbox'}
               badge={unreadMsgCount}
               onClick={() => { setCurrentPage('inbox'); setUnreadMsgCount(0); }}
@@ -403,7 +407,7 @@ export default function MerchantDashboard() {
                   <line x1="9" y1="17" x2="13" y2="17" />
                 </svg>
               }
-              label="المسودات"
+              label={t('dashboard.nav.drafts')}
               active={currentPage === 'drafts'}
               onClick={() => setCurrentPage('drafts')}
             />
@@ -415,7 +419,7 @@ export default function MerchantDashboard() {
                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                 </svg>
               }
-              label="إدارة المنتجات"
+              label={t('dashboard.nav.editPage')}
               active={currentPage === 'editPage'}
               onClick={() => setCurrentPage('editPage')}
             />
@@ -428,7 +432,7 @@ export default function MerchantDashboard() {
                   <line x1="12" y1="3" x2="12" y2="15" />
                 </svg>
               }
-              label="رفع بالجملة"
+              label={t('dashboard.nav.bulkUpload')}
               active={currentPage === 'bulkUpload'}
               onClick={() => setCurrentPage('bulkUpload')}
             />
@@ -441,7 +445,7 @@ export default function MerchantDashboard() {
                   <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/>
                 </svg>
               }
-              label="ربط انستقرام"
+              label={t('dashboard.nav.instagramConnect')}
               active={currentPage === 'instagramConnect'}
               onClick={() => setCurrentPage('instagramConnect')}
             />
@@ -453,7 +457,7 @@ export default function MerchantDashboard() {
               <div className="md-sidebar-user-avatar">{displayInitial}</div>
               <div className="md-sidebar-user-info">
                 <div className="md-sidebar-user-name">{shop?.name ?? merchant.displayName}</div>
-                <div className="md-sidebar-user-role">SOUQ LINK Merchant</div>
+                <div className="md-sidebar-user-role">{t('dashboard.roleLabel')}</div>
               </div>
             </div>
             <button type="button" className="md-sidebar-logout" onClick={handleLogout}>
@@ -462,7 +466,7 @@ export default function MerchantDashboard() {
                 <polyline points="16 17 21 12 16 7" />
                 <line x1="21" y1="12" x2="9" y2="12" />
               </svg>
-              تسجيل الخروج
+              {t('dashboard.logout')}
             </button>
           </div>
         </aside>

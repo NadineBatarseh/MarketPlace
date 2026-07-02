@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useMerchantAuth } from '../context/MerchantAuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import supabase from '../../lib/supabase';
+
+const ALL_PRODUCTS_KEY = '__all__';
 
 interface Reply {
   id: string;
@@ -22,8 +26,8 @@ interface Review {
   reply: Reply | null;
 }
 
-function formatDate(iso: string) {
-  return new Intl.DateTimeFormat('ar-EG', {
+function formatDate(iso: string, numLocale: string) {
+  return new Intl.DateTimeFormat(numLocale, {
     year: 'numeric', month: 'long', day: 'numeric',
   }).format(new Date(iso));
 }
@@ -37,13 +41,14 @@ function Stars({ count }: { count: number }) {
 }
 
 function ProductChip({ review }: { review: Review }) {
+  const { t } = useTranslation('merchant');
   const navigate = useNavigate();
   return (
     <button
       type="button"
       className="mr-product-chip"
       onClick={() => navigate(`/product/${review.product_id}`)}
-      title="عرض المنتج"
+      title={t('reviews.viewProduct')}
     >
       {review.productImage ? (
         <img src={review.productImage} alt={review.productTitle} className="mr-product-chip-img" />
@@ -57,9 +62,11 @@ function ProductChip({ review }: { review: Review }) {
 }
 
 export default function MerchantReviews() {
+  const { t } = useTranslation('merchant');
+  const { lang, direction } = useLanguage();
   const { merchant } = useMerchantAuth();
   const [reviews, setReviews] = useState<Review[]>([]);
-  const [productFilter, setProductFilter] = useState('الكل');
+  const [productFilter, setProductFilter] = useState(ALL_PRODUCTS_KEY);
   const [replyText, setReplyText] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -130,9 +137,9 @@ export default function MerchantReviews() {
         review_text: r.review_text,
         image_urls: Array.isArray(r.image_urls) ? r.image_urls : [],
         user_id: r.user_id,
-        customerName: nameMap[r.user_id] ?? `عميل #${r.user_id.slice(0, 6)}`,
+        customerName: nameMap[r.user_id] ?? t('reviews.customerFallback', { id: r.user_id.slice(0, 6) }),
         product_id: r.product_id,
-        productTitle: productMap[r.product_id] ?? 'منتج',
+        productTitle: productMap[r.product_id] ?? t('reviews.productFallback'),
         productImage: productImageMap[r.product_id] ?? null,
         reply: Array.isArray(r.review_replies) && r.review_replies.length > 0
           ? r.review_replies[0]
@@ -141,7 +148,7 @@ export default function MerchantReviews() {
 
       setReviews(mapped);
     } catch (err: unknown) {
-      setError('تعذّر تحميل المراجعات');
+      setError(t('reviews.loadFailed'));
       console.error(err);
     }
     setLoading(false);
@@ -160,7 +167,7 @@ export default function MerchantReviews() {
       }, { onConflict: 'review_id' });
 
     if (insertErr) {
-      alert('تعذّر إرسال الرد — ' + insertErr.message);
+      alert(t('reviews.replyFailed') + ' — ' + insertErr.message);
       return;
     }
 
@@ -175,26 +182,28 @@ export default function MerchantReviews() {
     setReplyText(prev => ({ ...prev, [reviewId]: '' }));
   };
 
-  const products = ['الكل', ...Array.from(new Set(reviews.map(r => r.productTitle)))];
-  const filtered = reviews.filter(r => productFilter === 'الكل' || r.productTitle === productFilter);
+  const numLocale = lang === 'ar' ? 'ar-EG' : 'en-US';
+  const productTitles = Array.from(new Set(reviews.map(r => r.productTitle)));
+  const filtered = reviews.filter(r => productFilter === ALL_PRODUCTS_KEY || r.productTitle === productFilter);
   const unreplied = filtered.filter(r => !r.reply);
   const replied = filtered.filter(r => !!r.reply);
 
-  if (loading) return <div className="mr-root"><div className="md-page-loading">جاري تحميل المراجعات...</div></div>;
-  if (!merchant?.shop) return <div className="mr-root"><div className="md-page-empty">لا يوجد متجر مرتبط بحسابك.</div></div>;
+  if (loading) return <div className="mr-root" dir={direction}><div className="md-page-loading">{t('reviews.loading')}</div></div>;
+  if (!merchant?.shop) return <div className="mr-root" dir={direction}><div className="md-page-empty">{t('reviews.noShop')}</div></div>;
 
   return (
-    <div className="mr-root">
+    <div className="mr-root" dir={direction}>
       <div className="mr-header">
-        <h1 className="mr-title">المراجعات والتقييمات</h1>
+        <h1 className="mr-title">{t('reviews.title')}</h1>
         <div className="mr-filter">
-          <label htmlFor="mr-product-filter">تصفية حسب المنتج:</label>
+          <label htmlFor="mr-product-filter">{t('reviews.filterLabel')}</label>
           <select
             id="mr-product-filter"
             value={productFilter}
             onChange={e => setProductFilter(e.target.value)}
           >
-            {products.map(p => <option key={p} value={p}>{p}</option>)}
+            <option value={ALL_PRODUCTS_KEY}>{t('reviews.filterAll')}</option>
+            {productTitles.map(pt => <option key={pt} value={pt}>{pt}</option>)}
           </select>
         </div>
       </div>
@@ -205,12 +214,12 @@ export default function MerchantReviews() {
         {/* Unreplied */}
         <div>
           <h2 className="mr-col-title unreplied">
-            💬 غير مردود عليها
+            💬 {t('reviews.unrepliedTitle')}
             <span className="mr-count-badge">{unreplied.length}</span>
           </h2>
 
           {unreplied.length === 0 ? (
-            <div className="mr-empty">لا توجد مراجعات غير مردود عليها ✅</div>
+            <div className="mr-empty">{t('reviews.emptyUnreplied')} ✅</div>
           ) : (
             unreplied.map(review => (
               <div key={review.id} className="mr-review-card">
@@ -221,24 +230,24 @@ export default function MerchantReviews() {
                   </div>
                   <ProductChip review={review} />
                 </div>
-                <div className="mr-date">{formatDate(review.created_at)}</div>
+                <div className="mr-date">{formatDate(review.created_at, numLocale)}</div>
                 <p className="mr-comment">{review.review_text}</p>
                 {review.image_urls.length > 0 && (
                   <div className="mr-review-photos">
                     {review.image_urls.map((url, idx) => (
-                      <img key={idx} src={url} alt={`صورة ${idx + 1}`} className="mr-review-photo" />
+                      <img key={idx} src={url} alt={t('reviews.photoAlt', { index: idx + 1 })} className="mr-review-photo" />
                     ))}
                   </div>
                 )}
 
                 <div className="mr-reply-form">
                   <textarea
-                    placeholder="اكتب ردك هنا..."
+                    placeholder={t('reviews.replyPlaceholder')}
                     value={replyText[review.id] ?? ''}
                     onChange={e => setReplyText(prev => ({ ...prev, [review.id]: e.target.value }))}
                   />
                   <button type="button" className="mr-reply-send-btn" onClick={() => sendReply(review.id)}>
-                    إرسال الرد
+                    {t('reviews.sendReply')}
                   </button>
                 </div>
               </div>
@@ -249,12 +258,12 @@ export default function MerchantReviews() {
         {/* Replied */}
         <div>
           <h2 className="mr-col-title replied">
-            ✅ تم الرد عليها
+            ✅ {t('reviews.repliedTitle')}
             <span className="mr-count-badge">{replied.length}</span>
           </h2>
 
           {replied.length === 0 ? (
-            <div className="mr-empty">لا توجد مراجعات مردود عليها بعد</div>
+            <div className="mr-empty">{t('reviews.emptyReplied')}</div>
           ) : (
             replied.map(review => (
               <div key={review.id} className="mr-review-card">
@@ -265,18 +274,18 @@ export default function MerchantReviews() {
                   </div>
                   <ProductChip review={review} />
                 </div>
-                <div className="mr-date">{formatDate(review.created_at)}</div>
+                <div className="mr-date">{formatDate(review.created_at, numLocale)}</div>
                 <p className="mr-comment">{review.review_text}</p>
                 {review.image_urls.length > 0 && (
                   <div className="mr-review-photos">
                     {review.image_urls.map((url, idx) => (
-                      <img key={idx} src={url} alt={`صورة ${idx + 1}`} className="mr-review-photo" />
+                      <img key={idx} src={url} alt={t('reviews.photoAlt', { index: idx + 1 })} className="mr-review-photo" />
                     ))}
                   </div>
                 )}
 
                 <div className="mr-replied-box">
-                  <div className="mr-replied-label">ردك:</div>
+                  <div className="mr-replied-label">{t('reviews.yourReplyLabel')}</div>
                   <div className="mr-replied-text">{review.reply!.reply_text}</div>
                 </div>
               </div>

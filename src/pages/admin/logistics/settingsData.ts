@@ -1,3 +1,5 @@
+import type { TFunction } from 'i18next';
+
 export type SettingType =
   | 'count' | 'minutes' | 'ratio' | 'currency' | 'km' | 'volume' | 'coefficient';
 
@@ -30,246 +32,254 @@ export interface CategoryDef {
   formulaVars?: string;
 }
 
-export const CATEGORIES: CategoryDef[] = [
-  { key: 'batch',      label: 'إعدادات الدفعة',   icon: '▦' },
-  { key: 'flow',       label: 'إعدادات التدفق',    icon: '⟲' },
-  {
-    key: 'scoring',
-    label: 'أوزان التقييم',
-    icon: '⊞',
-    formula: 'Score = W_n × N̂ + W_u × Û − W_d × D̂',
-    formulaVars: 'N̂ = عدد الشحنات  ·  Û = الأولوية  ·  D̂ = مدة المسار',
-  },
-  { key: 'route',      label: 'إعدادات المسار',    icon: '◎' },
-  { key: 'assignment', label: 'تعيين السائق',       icon: '🚗' },
-];
+// Labels/units/explanations come from the `admin` i18n namespace — these module-level
+// functions take `t` as a parameter since there's no hook context at this scope.
+export function getCategories(t: TFunction): CategoryDef[] {
+  return [
+    { key: 'batch', label: t('logisticsSettings.categories.batch'), icon: '▦' },
+    { key: 'flow', label: t('logisticsSettings.categories.flow'), icon: '⟲' },
+    {
+      key: 'scoring',
+      label: t('logisticsSettings.categories.scoring'),
+      icon: '⊞',
+      formula: 'Score = W_n × N̂ + W_u × Û − W_d × D̂',
+      formulaVars: t('logisticsSettings.categories.scoringFormulaVars'),
+    },
+    { key: 'route', label: t('logisticsSettings.categories.route'), icon: '◎' },
+    { key: 'assignment', label: t('logisticsSettings.categories.assignment'), icon: '🚗' },
+  ];
+}
 
-export const WEIGHT_GROUPS: Record<string, { label: string; keys: string[] }> = {
-  batch_score_weights: {
-    label: 'أوزان تقييم الدفعات',
-    keys: ['W_N', 'W_U', 'W_D'],
-  },
-};
+export function getWeightGroups(t: TFunction): Record<string, { label: string; keys: string[] }> {
+  return {
+    batch_score_weights: {
+      label: t('logisticsSettings.weightGroups.batchScoreWeights'),
+      keys: ['W_N', 'W_U', 'W_D'],
+    },
+  };
+}
 
-export const SETTINGS_DEFINITIONS: SettingDef[] = [
-  // ── 1. إعدادات الدفعة ──────────────────────────────────────────────────────
-  {
-    key: 'MAX_VOLUME',
-    label: 'أقصى حجم في الدفعة',
-    unit: 'وحدة حجم',
-    type: 'volume',
-    defaultValue: 100,
-    min: 1,
-    max: 10000,
-    step: 1,
-    explanation: 'أقصى سعة يمكن لمركبة السائق حملها في رحلة واحدة.',
-    category: 'batch',
-  },
-  {
-    key: 'MAX_STOPS',
-    label: 'أقصى محطات في الدفعة',
-    unit: 'محطة',
-    type: 'count',
-    defaultValue: 20,
-    min: 1,
-    max: 100,
-    step: 1,
-    explanation: 'الحد الأقصى لعدد محطات الاستلام أو التسليم في دفعة واحدة.',
-    category: 'batch',
-  },
-  {
-    key: 'MIN_BATCH_THRESHOLD',
-    label: 'الحد الأدنى للدفعة',
-    unit: 'شحنة',
-    type: 'count',
-    defaultValue: 5,
-    min: 1,
-    max: 50,
-    step: 1,
-    explanation: 'أدنى عدد شحنات مطلوب لإرسال الدفعة. إذا كان العدد أقل تُؤجَّل للدورة التالية.',
-    category: 'batch',
-  },
+export function getSettingsDefinitions(t: TFunction): SettingDef[] {
+  return [
+    // ── 1. Batch settings ──────────────────────────────────────────────────
+    {
+      key: 'MAX_VOLUME',
+      label: t('logisticsSettings.settings.MAX_VOLUME.label'),
+      unit: t('logisticsSettings.settings.MAX_VOLUME.unit'),
+      type: 'volume',
+      defaultValue: 100,
+      min: 1,
+      max: 10000,
+      step: 1,
+      explanation: t('logisticsSettings.settings.MAX_VOLUME.explanation'),
+      category: 'batch',
+    },
+    {
+      key: 'MAX_STOPS',
+      label: t('logisticsSettings.settings.MAX_STOPS.label'),
+      unit: t('logisticsSettings.settings.MAX_STOPS.unit'),
+      type: 'count',
+      defaultValue: 20,
+      min: 1,
+      max: 100,
+      step: 1,
+      explanation: t('logisticsSettings.settings.MAX_STOPS.explanation'),
+      category: 'batch',
+    },
+    {
+      key: 'MIN_BATCH_THRESHOLD',
+      label: t('logisticsSettings.settings.MIN_BATCH_THRESHOLD.label'),
+      unit: t('logisticsSettings.settings.MIN_BATCH_THRESHOLD.unit'),
+      type: 'count',
+      defaultValue: 5,
+      min: 1,
+      max: 50,
+      step: 1,
+      explanation: t('logisticsSettings.settings.MIN_BATCH_THRESHOLD.explanation'),
+      category: 'batch',
+    },
 
-  // ── 2. إعدادات التدفق ──────────────────────────────────────────────────────
-  {
-    key: 'CYCLE_INTERVAL_MINUTES',
-    label: 'فترة دورة التجميع',
-    unit: 'دقيقة',
-    type: 'minutes',
-    defaultValue: 30,
-    min: 5,
-    max: 240,
-    step: 5,
-    explanation: 'كم مرة تعمل دورة التجميع وتُجمّع الشحنات المتاحة.',
-    category: 'flow',
-  },
-  {
-    key: 'MAX_FLOW_WAITING_MINUTES',
-    label: 'أقصى وقت انتظار التدفق',
-    unit: 'دقيقة',
-    type: 'minutes',
-    defaultValue: 120,
-    min: 10,
-    max: 7200,
-    step: 10,
-    explanation: 'إذا انتظرت شحنات تدفق ما بمعدل يتجاوز هذا الوقت، تُرسَل الدفعة قسراً بغض النظر عن حجمها.',
-    category: 'flow',
-  },
-  {
-    key: 'MAX_DISTANCE_KM',
-    label: 'أقصى مسافة بين المناطق',
-    unit: 'كم',
-    type: 'km',
-    defaultValue: 50,
-    min: 1,
-    max: 500,
-    step: 5,
-    explanation: 'أقصى مسافة مسموح بها بين منطقتين في نفس المسار.',
-    category: 'flow',
-  },
+    // ── 2. Flow settings ───────────────────────────────────────────────────
+    {
+      key: 'CYCLE_INTERVAL_MINUTES',
+      label: t('logisticsSettings.settings.CYCLE_INTERVAL_MINUTES.label'),
+      unit: t('logisticsSettings.settings.CYCLE_INTERVAL_MINUTES.unit'),
+      type: 'minutes',
+      defaultValue: 30,
+      min: 5,
+      max: 240,
+      step: 5,
+      explanation: t('logisticsSettings.settings.CYCLE_INTERVAL_MINUTES.explanation'),
+      category: 'flow',
+    },
+    {
+      key: 'MAX_FLOW_WAITING_MINUTES',
+      label: t('logisticsSettings.settings.MAX_FLOW_WAITING_MINUTES.label'),
+      unit: t('logisticsSettings.settings.MAX_FLOW_WAITING_MINUTES.unit'),
+      type: 'minutes',
+      defaultValue: 120,
+      min: 10,
+      max: 7200,
+      step: 10,
+      explanation: t('logisticsSettings.settings.MAX_FLOW_WAITING_MINUTES.explanation'),
+      category: 'flow',
+    },
+    {
+      key: 'MAX_DISTANCE_KM',
+      label: t('logisticsSettings.settings.MAX_DISTANCE_KM.label'),
+      unit: t('logisticsSettings.settings.MAX_DISTANCE_KM.unit'),
+      type: 'km',
+      defaultValue: 50,
+      min: 1,
+      max: 500,
+      step: 5,
+      explanation: t('logisticsSettings.settings.MAX_DISTANCE_KM.explanation'),
+      category: 'flow',
+    },
 
-  // ── 3. أوزان التقييم ───────────────────────────────────────────────────────
-  {
-    key: 'W_N',
-    label: 'وزن عدد الشحنات (W_n)',
-    unit: 'نسبة',
-    type: 'ratio',
-    defaultValue: 0.35,
-    min: 0,
-    max: 1,
-    step: 0.01,
-    explanation: 'تأثير عدد الشحنات على تقييم الدفعة. قيمة أعلى = عدد أكبر يرفع الأولوية.',
-    category: 'scoring',
-    weightGroup: 'batch_score_weights',
-  },
-  {
-    key: 'W_U',
-    label: 'وزن الأولوية (W_u)',
-    unit: 'نسبة',
-    type: 'ratio',
-    defaultValue: 0.45,
-    min: 0,
-    max: 1,
-    step: 0.01,
-    explanation: 'تأثير الأولوية على ترتيب الدفعات. قيمة أعلى = الأكثر إلحاحاً يُرسَل أولاً.',
-    category: 'scoring',
-    weightGroup: 'batch_score_weights',
-  },
-  {
-    key: 'W_D',
-    label: 'وزن مدة المسار (W_d)',
-    unit: 'نسبة',
-    type: 'ratio',
-    defaultValue: 0.20,
-    min: 0,
-    max: 1,
-    step: 0.01,
-    explanation: 'عقوبة المسارات الطويلة. قيمة أعلى = المسارات الأطول تُخفَّض أولويتها أكثر.',
-    category: 'scoring',
-    weightGroup: 'batch_score_weights',
-  },
-  {
-    key: 'BASE_PENALTY',
-    label: 'عقوبة النهاية المسدودة',
-    unit: 'نقاط',
-    type: 'ratio',
-    defaultValue: 0.20,
-    min: 0,
-    max: 1,
-    step: 0.01,
-    explanation: 'العقوبة المطروحة من تقييم الدفعة عند غياب طلب في منطقة الوجهة. penalty = BASE_PENALTY × (1 − Û)',
-    category: 'scoring',
-  },
+    // ── 3. Scoring weights ─────────────────────────────────────────────────
+    {
+      key: 'W_N',
+      label: t('logisticsSettings.settings.W_N.label'),
+      unit: t('logisticsSettings.settings.W_N.unit'),
+      type: 'ratio',
+      defaultValue: 0.35,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      explanation: t('logisticsSettings.settings.W_N.explanation'),
+      category: 'scoring',
+      weightGroup: 'batch_score_weights',
+    },
+    {
+      key: 'W_U',
+      label: t('logisticsSettings.settings.W_U.label'),
+      unit: t('logisticsSettings.settings.W_U.unit'),
+      type: 'ratio',
+      defaultValue: 0.45,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      explanation: t('logisticsSettings.settings.W_U.explanation'),
+      category: 'scoring',
+      weightGroup: 'batch_score_weights',
+    },
+    {
+      key: 'W_D',
+      label: t('logisticsSettings.settings.W_D.label'),
+      unit: t('logisticsSettings.settings.W_D.unit'),
+      type: 'ratio',
+      defaultValue: 0.20,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      explanation: t('logisticsSettings.settings.W_D.explanation'),
+      category: 'scoring',
+      weightGroup: 'batch_score_weights',
+    },
+    {
+      key: 'BASE_PENALTY',
+      label: t('logisticsSettings.settings.BASE_PENALTY.label'),
+      unit: t('logisticsSettings.settings.BASE_PENALTY.unit'),
+      type: 'ratio',
+      defaultValue: 0.20,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      explanation: t('logisticsSettings.settings.BASE_PENALTY.explanation'),
+      category: 'scoring',
+    },
 
-  // ── 4. إعدادات المسار ──────────────────────────────────────────────────────
-  {
-    key: 'COST_PER_KM',
-    label: 'التكلفة لكل كيلومتر',
-    unit: '₪/كم',
-    type: 'currency',
-    defaultValue: 2.5,
-    min: 0,
-    max: 100,
-    step: 0.1,
-    explanation: 'التكلفة المحسوبة لكل كيلومتر. تُستخدم لمقارنة تمديد المسار مقابل إرسال سائق جديد.',
-    category: 'route',
-  },
-  {
-    key: 'ROAD_FACTOR',
-    label: 'معامل تعديل المسافة',
-    unit: 'معامل',
-    type: 'coefficient',
-    defaultValue: 1.3,
-    min: 1.0,
-    max: 2.0,
-    step: 0.01,
-    explanation: 'نسبة المسافة الفعلية على الطريق إلى المسافة المستقيمة. يعوّض عن التعرجات والمنعطفات.',
-    category: 'route',
-  },
-  {
-    key: 'INTRA_CITY_MIN_TIME_BUFFER_MINUTES',
-    label: 'أدنى وقت للإضافة أثناء الرحلة',
-    unit: 'دقيقة',
-    type: 'minutes',
-    defaultValue: 15,
-    min: 5,
-    max: 120,
-    step: 5,
-    explanation: 'أدنى وقت متبقٍ للوصول للمنطقة ب حتى يُسمح بإضافة شحنات جديدة أثناء الرحلة.',
-    category: 'route',
-  },
-  // ── 5. تعيين السائق ───────────────────────────────────────────────────────
-  {
-    key: 'DRIVERS_PER_ROUND',
-    label: 'سائقون لكل جولة',
-    unit: 'سائق',
-    type: 'count',
-    defaultValue: 3,
-    min: 1,
-    max: 10,
-    step: 1,
-    explanation: 'عدد السائقين الذين يُرسَل إليهم إشعار الدفعة في كل جولة تعيين.',
-    category: 'assignment',
-  },
-  {
-    key: 'MAX_ASSIGNMENT_ROUNDS',
-    label: 'أقصى عدد جولات التعيين',
-    unit: 'جولة',
-    type: 'count',
-    defaultValue: 3,
-    min: 1,
-    max: 10,
-    step: 1,
-    explanation: 'إذا رفض جميع السائقين أو انتهت المهلة في كل الجولات، تُحال الدفعة للمشرف.',
-    category: 'assignment',
-  },
-  {
-    key: 'ASSIGNMENT_TIMEOUT_SECONDS',
-    label: 'مهلة انتظار قبول السائق',
-    unit: 'ثانية',
-    type: 'count',
-    defaultValue: 300,
-    min: 30,
-    max: 1800,
-    step: 30,
-    explanation: 'المدة الزمنية التي ينتظرها النظام لقبول السائق في كل جولة قبل الانتقال للجولة التالية.',
-    category: 'assignment',
-  },
-];
+    // ── 4. Route settings ──────────────────────────────────────────────────
+    {
+      key: 'COST_PER_KM',
+      label: t('logisticsSettings.settings.COST_PER_KM.label'),
+      unit: t('logisticsSettings.settings.COST_PER_KM.unit'),
+      type: 'currency',
+      defaultValue: 2.5,
+      min: 0,
+      max: 100,
+      step: 0.1,
+      explanation: t('logisticsSettings.settings.COST_PER_KM.explanation'),
+      category: 'route',
+    },
+    {
+      key: 'ROAD_FACTOR',
+      label: t('logisticsSettings.settings.ROAD_FACTOR.label'),
+      unit: t('logisticsSettings.settings.ROAD_FACTOR.unit'),
+      type: 'coefficient',
+      defaultValue: 1.3,
+      min: 1.0,
+      max: 2.0,
+      step: 0.01,
+      explanation: t('logisticsSettings.settings.ROAD_FACTOR.explanation'),
+      category: 'route',
+    },
+    {
+      key: 'INTRA_CITY_MIN_TIME_BUFFER_MINUTES',
+      label: t('logisticsSettings.settings.INTRA_CITY_MIN_TIME_BUFFER_MINUTES.label'),
+      unit: t('logisticsSettings.settings.INTRA_CITY_MIN_TIME_BUFFER_MINUTES.unit'),
+      type: 'minutes',
+      defaultValue: 15,
+      min: 5,
+      max: 120,
+      step: 5,
+      explanation: t('logisticsSettings.settings.INTRA_CITY_MIN_TIME_BUFFER_MINUTES.explanation'),
+      category: 'route',
+    },
+    // ── 5. Driver assignment ────────────────────────────────────────────────
+    {
+      key: 'DRIVERS_PER_ROUND',
+      label: t('logisticsSettings.settings.DRIVERS_PER_ROUND.label'),
+      unit: t('logisticsSettings.settings.DRIVERS_PER_ROUND.unit'),
+      type: 'count',
+      defaultValue: 3,
+      min: 1,
+      max: 10,
+      step: 1,
+      explanation: t('logisticsSettings.settings.DRIVERS_PER_ROUND.explanation'),
+      category: 'assignment',
+    },
+    {
+      key: 'MAX_ASSIGNMENT_ROUNDS',
+      label: t('logisticsSettings.settings.MAX_ASSIGNMENT_ROUNDS.label'),
+      unit: t('logisticsSettings.settings.MAX_ASSIGNMENT_ROUNDS.unit'),
+      type: 'count',
+      defaultValue: 3,
+      min: 1,
+      max: 10,
+      step: 1,
+      explanation: t('logisticsSettings.settings.MAX_ASSIGNMENT_ROUNDS.explanation'),
+      category: 'assignment',
+    },
+    {
+      key: 'ASSIGNMENT_TIMEOUT_SECONDS',
+      label: t('logisticsSettings.settings.ASSIGNMENT_TIMEOUT_SECONDS.label'),
+      unit: t('logisticsSettings.settings.ASSIGNMENT_TIMEOUT_SECONDS.unit'),
+      type: 'count',
+      defaultValue: 300,
+      min: 30,
+      max: 1800,
+      step: 30,
+      explanation: t('logisticsSettings.settings.ASSIGNMENT_TIMEOUT_SECONDS.explanation'),
+      category: 'assignment',
+    },
+  ];
+}
 
 export type SettingsValues = Record<string, number>;
 
-export function getDefaultValues(): SettingsValues {
+export function getDefaultValues(definitions: SettingDef[]): SettingsValues {
   return Object.fromEntries(
-    SETTINGS_DEFINITIONS.map(s => [s.key, s.defaultValue])
+    definitions.map(s => [s.key, s.defaultValue])
   );
 }
 
-export function getWeightGroupSum(group: string, values: SettingsValues): number {
-  const keys = WEIGHT_GROUPS[group]?.keys ?? [];
+export function getWeightGroupSum(group: string, values: SettingsValues, weightGroups: Record<string, { label: string; keys: string[] }>): number {
+  const keys = weightGroups[group]?.keys ?? [];
   return keys.reduce((sum, k) => sum + (Number(values[k]) || 0), 0);
 }
 
-export function isWeightGroupValid(group: string, values: SettingsValues): boolean {
-  return Math.abs(getWeightGroupSum(group, values) - 1) < 0.001;
+export function isWeightGroupValid(group: string, values: SettingsValues, weightGroups: Record<string, { label: string; keys: string[] }>): boolean {
+  return Math.abs(getWeightGroupSum(group, values, weightGroups) - 1) < 0.001;
 }

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   Star, StarHalf, ShoppingCart, Heart, Share2, ChevronLeft, ChevronRight,
   Plus, Minus, Truck, CreditCard, ShieldCheck, X, Camera,
@@ -102,6 +103,7 @@ function parseColorEntry(raw: string): { name: string; hex: string } {
 const ProductDetailPage: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { t } = useTranslation('customer');
   const { toggleFavorite, isFavorited, isInCart, addToCart: addToCartCtx } = useShop();
 
   // Data states
@@ -292,7 +294,7 @@ const ProductDetailPage: React.FC = () => {
   }, []);
 
   const handleLogin = async () => {
-    if (!loginEmail.trim()) { setLoginError('يرجى إدخال بريد إلكتروني صحيح'); return; }
+    if (!loginEmail.trim()) { setLoginError(t('pdp.login.errors.emailInvalid')); return; }
     setLoginLoading(true);
     setLoginError(null);
 
@@ -305,10 +307,10 @@ const ProductDetailPage: React.FC = () => {
 
     setLoginLoading(false);
 
-    if (error) { setLoginError('حدث خطأ أثناء التحقق، حاول مجدداً'); return; }
-    if (!data) { setLoginError('هذا البريد الإلكتروني غير مسجل'); return; }
+    if (error) { setLoginError(t('pdp.login.errors.fetchError')); return; }
+    if (!data) { setLoginError(t('pdp.login.errors.notRegistered')); return; }
     if (data.role !== 'customer') {
-      setLoginError('يجب عليك التسجيل كعميل لتتمكن من إضافة تقييم');
+      setLoginError(t('pdp.login.errors.notCustomer'));
       return;
     }
 
@@ -321,8 +323,8 @@ const ProductDetailPage: React.FC = () => {
 
   const submitReview = async () => {
     if (!currentUser || userRole !== 'customer') return;
-    if (reviewRating === 0) { setReviewError('يرجى اختيار تقييم بالنجوم'); return; }
-    if (!reviewText.trim()) { setReviewError('يرجى كتابة تقييمك'); return; }
+    if (reviewRating === 0) { setReviewError(t('pdp.reviews.error.noRating')); return; }
+    if (!reviewText.trim()) { setReviewError(t('pdp.reviews.error.noText')); return; }
 
     setReviewSubmitting(true);
     setReviewError(null);
@@ -382,7 +384,7 @@ const ProductDetailPage: React.FC = () => {
       }
       setReviews((revs ?? []).map((r: any) => ({
         ...r,
-        customerName: nameMap[r.user_id] ?? `عميل #${r.user_id.slice(0, 6)}`,
+        customerName: nameMap[r.user_id] ?? t('pdp.customer', { id: r.user_id.slice(0, 6) }),
         reply: replyMap[r.id] ?? null,
       })));
 
@@ -392,7 +394,7 @@ const ProductDetailPage: React.FC = () => {
       setReviewPhotos([]);
       setReviewPhotoPreviews([]);
     } catch (e: any) {
-      setReviewError(e?.message ?? 'حدث خطأ أثناء إرسال التقييم');
+      setReviewError(e?.message ?? t('pdp.reviews.error.submitFailed'));
     } finally {
       setReviewSubmitting(false);
     }
@@ -415,7 +417,7 @@ const ProductDetailPage: React.FC = () => {
     {
       label: 'Gmail',
       icon: '✉️',
-      href: `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(product?.title ?? 'منتج من سوق لينك')}&body=${encodeURIComponent(shareText)}`,
+      href: `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(product?.title ?? t('pdp.product.share'))}&body=${encodeURIComponent(shareText)}`,
     },
   ];
 
@@ -441,8 +443,8 @@ const ProductDetailPage: React.FC = () => {
   };
 
   const toggleFav = () => {
-    if (!currentUser) { showCartMsg('يجب تسجيل الدخول أو إنشاء حساب أولاً'); return; }
-    if (userRole !== 'customer') { showCartMsg('متاح للعملاء فقط'); return; }
+    if (!currentUser) { showCartMsg(t('pdp.cart.loginRequired')); return; }
+    if (userRole !== 'customer') { showCartMsg(t('pdp.cart.customersOnly')); return; }
     if (!product) return;
     toggleFavorite({
       id: product.id,
@@ -456,11 +458,11 @@ const ProductDetailPage: React.FC = () => {
   const [showCartConfirm, setShowCartConfirm] = useState(false);
 
   const addToCart = () => {
-    if (!currentUser) { showCartMsg('يجب تسجيل الدخول أو إنشاء حساب أولاً'); return; }
-    if (userRole !== 'customer') { showCartMsg('متاح للعملاء فقط'); return; }
+    if (!currentUser) { showCartMsg(t('pdp.cart.loginRequired')); return; }
+    if (userRole !== 'customer') { showCartMsg(t('pdp.cart.customersOnly')); return; }
     if (!product) return;
-    if (hasColors && !selectedColor) { showCartMsg('يرجى اختيار اللون أولاً'); return; }
-    if (hasSizes && !selectedSize) { showCartMsg('يرجى اختيار المقاس أولاً'); return; }
+    if (hasColors && !selectedColor) { showCartMsg(t('pdp.cart.chooseColor')); return; }
+    if (hasSizes && !selectedSize) { showCartMsg(t('pdp.cart.chooseSize')); return; }
     if (isInCart(product.id, selectedColor ? parseColorEntry(selectedColor).name : undefined, selectedSize ?? undefined)) {
       setShowCartConfirm(true);
       return;
@@ -474,17 +476,17 @@ const ProductDetailPage: React.FC = () => {
       color: selectedColor ? parseColorEntry(selectedColor).name : undefined,
       size: selectedSize ?? undefined,
     });
-    showCartMsg('✓ تمت الإضافة إلى السلة');
+    showCartMsg(t('pdp.cart.added'));
   };
 
   // "Buy now": run the same guards/variant checks as add-to-cart, ensure the
   // item is in the cart, then take the customer straight to the cart page.
   const handleBuyNow = () => {
-    if (!currentUser) { showCartMsg('يجب تسجيل الدخول أو إنشاء حساب أولاً'); return; }
-    if (userRole !== 'customer') { showCartMsg('متاح للعملاء فقط'); return; }
+    if (!currentUser) { showCartMsg(t('pdp.cart.loginRequired')); return; }
+    if (userRole !== 'customer') { showCartMsg(t('pdp.cart.customersOnly')); return; }
     if (!product) return;
-    if (hasColors && !selectedColor) { showCartMsg('يرجى اختيار اللون أولاً'); return; }
-    if (hasSizes && !selectedSize) { showCartMsg('يرجى اختيار المقاس أولاً'); return; }
+    if (hasColors && !selectedColor) { showCartMsg(t('pdp.cart.chooseColor')); return; }
+    if (hasSizes && !selectedSize) { showCartMsg(t('pdp.cart.chooseSize')); return; }
     const color = selectedColor ? parseColorEntry(selectedColor).name : undefined;
     const size = selectedSize ?? undefined;
     if (!isInCart(product.id, color, size)) {
@@ -535,7 +537,7 @@ const ProductDetailPage: React.FC = () => {
           if (firstErr) throw firstErr;
 
           if (!first) {
-            setError("لا توجد منتجات متاحة حالياً");
+            setError(t('pdp.noProducts'));
             setLoadingData(false);
             return;
           }
@@ -629,7 +631,7 @@ const ProductDetailPage: React.FC = () => {
 
         setReviews((revs ?? []).map((r: any) => ({
           ...r,
-          customerName: nameMap[r.user_id] ?? `عميل #${r.user_id.slice(0, 6)}`,
+          customerName: nameMap[r.user_id] ?? t('pdp.customer', { id: r.user_id.slice(0, 6) }),
           reply: replyMap[r.id] ?? null,
         })));
 
@@ -662,7 +664,7 @@ const ProductDetailPage: React.FC = () => {
         setAttributes(attrsData ?? []);
 
       } catch (e: any) {
-        setError(e?.message ?? "حدث خطأ أثناء جلب البيانات");
+        setError(e?.message ?? t('pdp.fetchError'));
       } finally {
         setLoadingData(false);
       }
@@ -675,7 +677,7 @@ const ProductDetailPage: React.FC = () => {
     return (
       <div className="pdp-status-screen">
         <span className="pdp-status-dot" />
-        جاري تحميل البيانات...
+        {t('pdp.loading')}
       </div>
     );
   }
@@ -703,7 +705,7 @@ const ProductDetailPage: React.FC = () => {
           <img
             className="lightbox-img"
             src={lightboxUrl}
-            alt="صورة مكبّرة"
+            alt={t('pdp.lightbox.alt')}
             onClick={e => e.stopPropagation()}
           />
         </div>
@@ -714,24 +716,25 @@ const ProductDetailPage: React.FC = () => {
         <div className="login-overlay" onClick={() => setShowLoginModal(false)}>
           <div className="login-modal" onClick={e => e.stopPropagation()}>
             <div className="login-head">
-              <h3 className="login-title">تسجيل الدخول</h3>
+              <h3 className="login-title">{t('pdp.login.title')}</h3>
               <button type="button" className="login-close" onClick={() => setShowLoginModal(false)}>
                 <X size={20} />
               </button>
             </div>
-            <p className="login-hint">أدخل بريدك الإلكتروني للتحقق من حسابك.</p>
+            <p className="login-hint">{t('pdp.login.hint')}</p>
             <input
               type="email"
               className="login-input"
-              placeholder="example@email.com"
+              placeholder={t('pdp.login.placeholder')}
               value={loginEmail}
               onChange={e => setLoginEmail(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleLogin()}
+              dir="ltr"
               autoFocus
             />
             {loginError && <p className="login-error">{loginError}</p>}
             <button type="button" className="login-submit" onClick={handleLogin} disabled={loginLoading}>
-              {loginLoading ? 'جاري التحقق...' : 'دخول'}
+              {loginLoading ? t('pdp.login.verifying') : t('pdp.login.enter')}
             </button>
           </div>
         </div>
@@ -741,7 +744,7 @@ const ProductDetailPage: React.FC = () => {
         <div className="pdp-shell">
           {/* BREADCRUMBS */}
           <nav className="pdp-breadcrumb">
-            <a href="#" onClick={(e) => { e.preventDefault(); navigate('/home'); }}>الرئيسية</a>
+            <a href="#" onClick={(e) => { e.preventDefault(); navigate('/home'); }}>{t('pdp.breadcrumb.home')}</a>
             <ChevronLeft size={14} />
             <span className="pdp-bc-current">{safeText(product?.title)}</span>
           </nav>
@@ -752,7 +755,7 @@ const ProductDetailPage: React.FC = () => {
               {/* Gallery */}
               <div className="pdp-gallery">
                 {discountValue !== null && (
-                  <span className="pdp-discount-tag">{`وفر ${discountValue}%`}</span>
+                  <span className="pdp-discount-tag">{t('pdp.discount.save', { pct: discountValue })}</span>
                 )}
                 <div className="pdp-main-image">
                   <img src={mainImage} alt={safeText(product?.title)} />
@@ -783,7 +786,7 @@ const ProductDetailPage: React.FC = () => {
                           onClick={() => handleImageChange(idx, img)}
                           className={`pdp-thumb${activeThumb === idx ? ' is-active' : ''}`}
                         >
-                          <img src={img} alt={`صورة ${idx + 1}`} />
+                          <img src={img} alt={t('pdp.thumb.imageAlt', { n: idx + 1 })} />
                         </button>
                       ))}
                     </div>
@@ -807,7 +810,7 @@ const ProductDetailPage: React.FC = () => {
                   >
                     {safeText(shopName)}
                   </button>
-                  <span className="pdp-trust-pill">موثوق</span>
+                  <span className="pdp-trust-pill">{t('pdp.trust.verified')}</span>
                 </div>
 
                 <h1 className="pdp-title">{safeText(product?.title)}</h1>
@@ -829,7 +832,7 @@ const ProductDetailPage: React.FC = () => {
                     <span className="pdp-price-old">{product.price} ₪</span>
                   )}
                   {discountValue !== null && (
-                    <span className="pdp-price-save">{`وفر ${discountValue}%`}</span>
+                    <span className="pdp-price-save">{t('pdp.discount.save', { pct: discountValue })}</span>
                   )}
                 </div>
 
@@ -842,10 +845,10 @@ const ProductDetailPage: React.FC = () => {
                   <span className="pdp-stock-text">
                     {stockState === 'in'
                       ? (stockQty !== null && stockQty <= 10
-                          ? `متوفر في المخزون — تبقى ${stockQty} قطع`
-                          : 'متوفر في المخزون')
+                          ? t('pdp.stock.inStockLow', { count: stockQty })
+                          : t('pdp.stock.inStock'))
                       : stockState === 'out'
-                        ? 'غير متوفر حالياً'
+                        ? t('pdp.stock.outOfStock')
                         : NOT_FOUND}
                   </span>
                 </div>
@@ -856,9 +859,9 @@ const ProductDetailPage: React.FC = () => {
                     {hasColors && (
                       <div className="pdp-variant-block">
                         <span className="pdp-variant-label">
-                          اللون:{' '}
+                          {t('pdp.variants.color')}{' '}
                           <span className="pdp-variant-value">
-                            {selectedColor ? parseColorEntry(selectedColor).name : 'اختر اللون'}
+                            {selectedColor ? parseColorEntry(selectedColor).name : t('pdp.variants.chooseColor')}
                           </span>
                         </span>
                         <div className="pdp-swatches">
@@ -884,8 +887,8 @@ const ProductDetailPage: React.FC = () => {
                     {hasSizes && (
                       <div className="pdp-variant-block">
                         <span className="pdp-variant-label">
-                          المقاس:{' '}
-                          <span className="pdp-variant-value">{selectedSize ?? 'اختر المقاس'}</span>
+                          {t('pdp.variants.size')}{' '}
+                          <span className="pdp-variant-value">{selectedSize ?? t('pdp.variants.chooseSize')}</span>
                         </span>
                         <div className="pdp-sizes">
                           {sizesToShow.map(size => {
@@ -897,7 +900,7 @@ const ProductDetailPage: React.FC = () => {
                                 type="button"
                                 disabled={!available}
                                 onClick={() => available && setSelectedSize(size)}
-                                title={!available ? 'نفد المخزون' : size}
+                                title={!available ? t('pdp.variants.outOfStock') : size}
                                 className={`pdp-size-chip${active ? ' is-active' : ''}${!available ? ' is-unavailable' : ''}`}
                               >
                                 {size}
@@ -906,7 +909,7 @@ const ProductDetailPage: React.FC = () => {
                           })}
                         </div>
                         {hasColors && !selectedColor && (
-                          <p className="pdp-variant-hint">اختر اللون أولاً لمعرفة المقاسات المتاحة</p>
+                          <p className="pdp-variant-hint">{t('pdp.variants.chooseSizeHint')}</p>
                         )}
                       </div>
                     )}
@@ -916,12 +919,12 @@ const ProductDetailPage: React.FC = () => {
                 {/* Actions */}
                 <div className="pdp-actions">
                   <div className="pdp-qty-row">
-                    <span>الكمية:</span>
+                    <span>{t('pdp.qty.label')}</span>
                     <div className="pdp-qty">
                       <button type="button" onClick={() => updateQty(-1)} className="pdp-qty-btn">
                         <Minus size={16} />
                       </button>
-                      <input value={qty} readOnly aria-label="الكمية" className="pdp-qty-value" />
+                      <input value={qty} readOnly aria-label={t('pdp.qty.aria')} className="pdp-qty-value" />
                       <button type="button" onClick={() => updateQty(1)} className="pdp-qty-btn">
                         <Plus size={16} />
                       </button>
@@ -935,7 +938,7 @@ const ProductDetailPage: React.FC = () => {
                       disabled={stockState === 'out'}
                       className="pdp-btn-primary"
                     >
-                      <ShoppingCart size={18} /> أضف إلى السلة
+                      <ShoppingCart size={18} /> {t('pdp.actions.addToCart')}
                     </button>
                     <button
                       type="button"
@@ -943,13 +946,13 @@ const ProductDetailPage: React.FC = () => {
                       disabled={stockState === 'out'}
                       className="pdp-btn-secondary"
                     >
-                      شراء الآن
+                      {t('pdp.actions.buyNow')}
                     </button>
                     <div className="pdp-icon-actions">
                       <button
                         type="button"
                         onClick={toggleFav}
-                        title="أضف للمفضلة"
+                        title={t('pdp.actions.addFav')}
                         className={`pdp-icon-btn${isFav ? ' is-active' : ''}`}
                       >
                         <Heart size={18} className={isFav ? 'fill-current' : ''} />
@@ -957,7 +960,7 @@ const ProductDetailPage: React.FC = () => {
                       <div className="pdp-share-wrap" ref={shareRef}>
                         <button
                           type="button"
-                          title="مشاركة"
+                          title={t('pdp.actions.share')}
                           onClick={() => setShowShareMenu(prev => !prev)}
                           className="pdp-icon-btn pdp-icon-btn--share"
                           style={{ width: '100%' }}
@@ -991,24 +994,24 @@ const ProductDetailPage: React.FC = () => {
                   <div className="pdp-trust-item">
                     <div className="pdp-trust-icon"><Truck size={18} /></div>
                     <div>
-                      <p className="pdp-trust-title">توصيل سريع</p>
-                      <p className="pdp-trust-sub">توصيل سريع وآمن إلى باب منزلك</p>
+                      <p className="pdp-trust-title">{t('pdp.trustStrip.fastDelivery')}</p>
+                      <p className="pdp-trust-sub">{t('pdp.trustStrip.fastDeliverySub')}</p>
                     </div>
                   </div>
                   <div className="pdp-trust-divider" />
                   <div className="pdp-trust-item">
                     <div className="pdp-trust-icon"><ShieldCheck size={18} /></div>
                     <div>
-                      <p className="pdp-trust-title">دفع آمن</p>
-                      <p className="pdp-trust-sub">دفع آمن ومشفّر — بياناتك محمية</p>
+                      <p className="pdp-trust-title">{t('pdp.trustStrip.securePay')}</p>
+                      <p className="pdp-trust-sub">{t('pdp.trustStrip.securePaySub')}</p>
                     </div>
                   </div>
                   <div className="pdp-trust-divider" />
                   <div className="pdp-trust-item">
                     <div className="pdp-trust-icon"><CreditCard size={18} /></div>
                     <div>
-                      <p className="pdp-trust-title">الشحن</p>
-                      <p className="pdp-trust-sub">يتم حسابه عند إتمام الدفع</p>
+                      <p className="pdp-trust-title">{t('pdp.trustStrip.shipping')}</p>
+                      <p className="pdp-trust-sub">{t('pdp.trustStrip.shippingSub')}</p>
                     </div>
                   </div>
                 </div>
@@ -1020,17 +1023,17 @@ const ProductDetailPage: React.FC = () => {
           <section className="pdp-tabs-panel">
             <div className="pdp-tab-list">
               {[
-                { key: 'desc', label: 'الوصف' },
-                { key: 'specs', label: 'المواصفات' },
-                { key: 'reviews', label: `التقييمات (${reviewsCount})` },
-              ].map(t => (
+                { key: 'desc', label: t('pdp.tabs.desc') },
+                { key: 'specs', label: t('pdp.tabs.specs') },
+                { key: 'reviews', label: t('pdp.tabs.reviews', { count: reviewsCount }) },
+              ].map(tab => (
                 <button
-                  key={t.key}
+                  key={tab.key}
                   type="button"
-                  onClick={() => setActiveTab(t.key)}
-                  className={`pdp-tab${activeTab === t.key ? ' is-active' : ''}`}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`pdp-tab${activeTab === tab.key ? ' is-active' : ''}`}
                 >
-                  {t.label}
+                  {tab.label}
                 </button>
               ))}
             </div>
@@ -1044,7 +1047,7 @@ const ProductDetailPage: React.FC = () => {
               {/* Specifications */}
               {activeTab === 'specs' && (
                 attributes.length === 0 ? (
-                  <p className="pdp-specs-empty">المواصفات غير متوفرة حالياً</p>
+                  <p className="pdp-specs-empty">{t('pdp.specs.empty')}</p>
                 ) : (
                   <table className="pdp-spec-table">
                     <tbody>
@@ -1067,7 +1070,7 @@ const ProductDetailPage: React.FC = () => {
                     <div className="rv-summary-card">
                       <span className="rv-score">{ratingAvg !== null ? ratingAvg.toFixed(1) : '—'}</span>
                       <div className="pdp-stars">{renderStars(ratingAvg ?? 0, 22)}</div>
-                      <span className="rv-total">بناءً على {reviewsCount} تقييم</span>
+                      <span className="rv-total">{t('pdp.reviews.basedOn', { count: reviewsCount })}</span>
                     </div>
                     <div className="rv-dist">
                       {[5, 4, 3, 2, 1].map(star => {
@@ -1089,23 +1092,23 @@ const ProductDetailPage: React.FC = () => {
                   <div className="rv-main">
                     {/* Review form / auth states */}
                     {authLoading ? (
-                      <p className="rv-auth-msg">جاري التحقق من حسابك...</p>
+                      <p className="rv-auth-msg">{t('pdp.reviews.authLoading')}</p>
                     ) : !currentUser ? (
                       <p className="rv-auth-msg">
-                        يجب تسجيل الدخول لإضافة تقييم —{' '}
+                        {t('pdp.reviews.loginRequired')}{' '}
                         <button type="button" className="pdp-link-btn" onClick={() => setShowLoginModal(true)}>
-                          تسجيل الدخول
+                          {t('pdp.reviews.loginLink')}
                         </button>
                       </p>
                     ) : userRole !== 'customer' ? (
-                      <p className="rv-auth-msg">فقط العملاء يمكنهم إضافة تقييم.</p>
+                      <p className="rv-auth-msg">{t('pdp.reviews.customersOnly')}</p>
                     ) : reviewSuccess ? (
-                      <p className="rv-success-msg">✅ تم إرسال تقييمك بنجاح، شكراً لك!</p>
+                      <p className="rv-success-msg">{t('pdp.reviews.success')}</p>
                     ) : (
                       <div className="review-form">
-                        <h4 className="review-form-title">أضف تقييمك</h4>
+                        <h4 className="review-form-title">{t('pdp.reviews.formTitle')}</h4>
                         <div className="review-stars-row">
-                          <span>تقييمك:</span>
+                          <span>{t('pdp.reviews.yourRating')}</span>
                           <div className="review-stars">
                             {[1, 2, 3, 4, 5].map(star => (
                               <button
@@ -1123,14 +1126,14 @@ const ProductDetailPage: React.FC = () => {
                         </div>
                         <textarea
                           className="review-textarea"
-                          placeholder="اكتب تقييمك هنا..."
+                          placeholder={t('pdp.reviews.placeholder')}
                           value={reviewText}
                           onChange={e => setReviewText(e.target.value)}
                           rows={4}
                         />
                         <div>
                           <label htmlFor="review-photo-input" className="review-photo-label">
-                            <Camera size={16} /> أضف صور (اختياري)
+                            <Camera size={16} /> {t('pdp.reviews.addPhotos')}
                           </label>
                           <input
                             id="review-photo-input"
@@ -1149,7 +1152,7 @@ const ProductDetailPage: React.FC = () => {
                             <div className="review-photo-grid">
                               {reviewPhotoPreviews.map((src, idx) => (
                                 <div key={idx} className="review-photo-thumb">
-                                  <img src={src} alt={`معاينة ${idx + 1}`} />
+                                  <img src={src} alt={t('pdp.reviews.previewAlt', { n: idx + 1 })} />
                                   <button
                                     type="button"
                                     className="review-photo-delete"
@@ -1167,14 +1170,14 @@ const ProductDetailPage: React.FC = () => {
                         </div>
                         {reviewError && <p className="review-error">{reviewError}</p>}
                         <button type="button" onClick={submitReview} disabled={reviewSubmitting} className="review-submit">
-                          {reviewSubmitting ? 'جاري الإرسال...' : 'إرسال التقييم'}
+                          {reviewSubmitting ? t('pdp.reviews.submitting') : t('pdp.reviews.submit')}
                         </button>
                       </div>
                     )}
 
                     {/* Reviews list */}
                     {reviews.length === 0 ? (
-                      <p className="rv-empty">لا توجد تقييمات بعد — كن أول من يقيّم هذا المنتج!</p>
+                      <p className="rv-empty">{t('pdp.reviews.empty')}</p>
                     ) : (
                       <div className="rv-list">
                         {reviews.map(r => (
@@ -1198,7 +1201,7 @@ const ProductDetailPage: React.FC = () => {
                                   <img
                                     key={idx}
                                     src={url}
-                                    alt={`صورة ${idx + 1}`}
+                                    alt={t('pdp.reviews.imageAlt', { n: idx + 1 })}
                                     className="rv-photo"
                                     onClick={() => setLightboxUrl(url)}
                                   />
@@ -1207,7 +1210,7 @@ const ProductDetailPage: React.FC = () => {
                             )}
                             {r.reply && (
                               <div className="rv-reply">
-                                <span className="rv-reply-label">رد المتجر:</span>
+                                <span className="rv-reply-label">{t('pdp.reviews.storeReply')}</span>
                                 <p className="rv-reply-text">{r.reply.reply_text}</p>
                               </div>
                             )}
@@ -1235,7 +1238,7 @@ const ProductDetailPage: React.FC = () => {
               color: selectedColor ? parseColorEntry(selectedColor).name : undefined,
               size: selectedSize ?? undefined,
             });
-            showCartMsg('✓ تمت إضافة قطعة أخرى إلى السلة');
+            showCartMsg(t('pdp.cart.addedAnother'));
             setShowCartConfirm(false);
           }}
           onCancel={() => setShowCartConfirm(false)}

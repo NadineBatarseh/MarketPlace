@@ -1,3 +1,6 @@
+import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../context/LanguageContext';
+
 interface Props {
   title?: string;
   message: React.ReactNode;
@@ -8,9 +11,9 @@ interface Props {
   icon?: React.ReactNode;
   /** Colour of the confirm button. Defaults to danger red (#DC2626). */
   confirmColor?: string;
-  /** When true, shows "يمكن التراجع عن هذا الإجراء لاحقاً" instead of the irreversible note. */
+  /** When true, shows the reversible note instead of the irreversible note. */
   reversible?: boolean;
-  /** When true, hides the reversibility note entirely (neither variant is shown). */
+  /** When true, hides the reversibility note entirely. */
   hideReversibilityNote?: boolean;
   loading?: boolean;
   error?: string;
@@ -19,11 +22,11 @@ interface Props {
 }
 
 export default function ConfirmDialog({
-  title = 'تأكيد الإجراء',
+  title,
   message,
   warning,
-  confirmLabel = 'تأكيد',
-  cancelLabel = 'إلغاء',
+  confirmLabel,
+  cancelLabel,
   icon = '🗑️',
   confirmColor = '#DC2626',
   reversible = false,
@@ -33,7 +36,12 @@ export default function ConfirmDialog({
   onConfirm,
   onCancel,
 }: Props) {
-  const loadingColor = confirmColor + 'AA'; // ~67% opacity tint
+  const { t } = useTranslation('common');
+  const { direction: dir } = useLanguage();
+  const resolvedTitle = title ?? t('confirmDialog.defaultTitle');
+  const resolvedConfirmLabel = confirmLabel ?? t('confirmDialog.defaultConfirm');
+  const resolvedCancelLabel = cancelLabel ?? t('confirmDialog.defaultCancel');
+  const loadingColor = confirmColor + 'AA';
 
   return (
     <div
@@ -44,7 +52,7 @@ export default function ConfirmDialog({
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         zIndex: 9999,
         fontFamily: "'Tajawal', sans-serif",
-        direction: 'rtl',
+        direction: dir,
       }}
     >
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');`}</style>
@@ -66,7 +74,7 @@ export default function ConfirmDialog({
 
         {/* Title */}
         <h3 style={{ margin: '0 0 10px', fontSize: 16, fontWeight: 800, color: '#0F2B4E' }}>
-          {title}
+          {resolvedTitle}
         </h3>
 
         {/* Main message */}
@@ -92,9 +100,7 @@ export default function ConfirmDialog({
         {/* Reversibility note */}
         {!hideReversibilityNote && (
           <p style={{ margin: '0 0 20px', fontSize: 11, color: '#94A3B8' }}>
-            {reversible
-              ? 'يمكن التراجع عن هذا الإجراء لاحقاً.'
-              : 'هذا الإجراء لا يمكن التراجع عنه.'}
+            {reversible ? t('confirmDialog.reversible') : t('confirmDialog.irreversible')}
           </p>
         )}
 
@@ -119,7 +125,7 @@ export default function ConfirmDialog({
               opacity: loading ? 0.6 : 1,
             }}
           >
-            {cancelLabel}
+            {resolvedCancelLabel}
           </button>
 
           <button
@@ -135,7 +141,7 @@ export default function ConfirmDialog({
               transition: 'background 0.15s',
             }}
           >
-            {loading ? 'جاري التنفيذ...' : confirmLabel}
+            {loading ? t('confirmDialog.executing') : resolvedConfirmLabel}
           </button>
         </div>
       </div>

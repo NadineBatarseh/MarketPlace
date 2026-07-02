@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import supabase from '../../lib/supabase';
 import { MerchantShop } from '../context/MerchantAuthContext';
 
@@ -19,6 +20,7 @@ export interface UsePublishReadinessResult {
 const MIN_DESCRIPTION_LEN = 20;
 
 export function usePublishReadiness(shop: MerchantShop | null): UsePublishReadinessResult {
+  const { t } = useTranslation('merchant');
   const [productCount, setProductCount] = useState<number | null>(null);
 
   useEffect(() => {
@@ -41,44 +43,44 @@ export function usePublishReadiness(shop: MerchantShop | null): UsePublishReadin
   const checks: PublishCheck[] = [
     {
       id: 'logo',
-      label: 'شعار المتجر',
+      label: t('publishReadiness.logoLabel'),
       passed: !!shop.shopLogo,
-      hint: 'ارفع صورة شعار من إعدادات المتجر',
+      hint: t('publishReadiness.logoHint'),
       action: 'shopSettings',
     },
     {
       id: 'name',
-      label: 'اسم المتجر',
+      label: t('publishReadiness.nameLabel'),
       passed: shop.name.trim().length > 0,
-      hint: 'أدخل اسم المتجر في إعدادات المتجر',
+      hint: t('publishReadiness.nameHint'),
       action: 'shopSettings',
     },
     {
       id: 'description',
-      label: `وصف المتجر (${MIN_DESCRIPTION_LEN} حرف على الأقل)`,
+      label: t('publishReadiness.descriptionLabel', { minLen: MIN_DESCRIPTION_LEN }),
       passed: (shop.description?.trim().length ?? 0) >= MIN_DESCRIPTION_LEN,
-      hint: `أضف وصفاً مفصّلاً عن متجرك (${MIN_DESCRIPTION_LEN} أحرف أو أكثر)`,
+      hint: t('publishReadiness.descriptionHint', { minLen: MIN_DESCRIPTION_LEN }),
       action: 'shopSettings',
     },
     {
       id: 'location',
-      label: 'المنطقة / المدينة',
+      label: t('publishReadiness.locationLabel'),
       passed: (shop.location?.trim().length ?? 0) > 0,
-      hint: 'أدخل المنطقة أو المدينة في إعدادات المتجر',
+      hint: t('publishReadiness.locationHint'),
       action: 'shopSettings',
     },
     {
       id: 'social',
-      label: 'رابط تواصل اجتماعي (إنستقرام أو فيسبوك أو واتساب)',
+      label: t('publishReadiness.socialLabel'),
       passed: !!(shop.instagram?.trim() || shop.facebook?.trim() || shop.whatsapp?.trim()),
-      hint: 'أضف رابط إنستقرام أو فيسبوك أو رقم واتساب في إعدادات المتجر',
+      hint: t('publishReadiness.socialHint'),
       action: 'shopSettings',
     },
     {
       id: 'products',
-      label: 'منتج واحد على الأقل',
+      label: t('publishReadiness.productsLabel'),
       passed: (productCount ?? 0) >= 1,
-      hint: 'أضف منتجاً واحداً على الأقل من صفحة إدارة المنتجات',
+      hint: t('publishReadiness.productsHint'),
       action: 'editPage',
     },
   ];

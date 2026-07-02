@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import ProductListTemplate from '../components/ProductListTemplate';
 import ProductRow from '../components/ProductRow';
 import QuantitySelector from '../components/QuantitySelector';
@@ -19,6 +20,7 @@ const VALID_COUPONS: Record<string, number> = {
 };
 
 export default function Cart() {
+  const { t } = useTranslation('cart-checkout');
   const { cartItems, removeFromCart, updateCartQty, clearCart } = useShop();
   const navigate = useNavigate();
 
@@ -43,7 +45,7 @@ export default function Cart() {
       setAppliedCoupon(code);
       setCouponError('');
     } else {
-      setCouponError('كود الخصم غير صحيح');
+      setCouponError(t('cart.coupon.invalid'));
       setAppliedCoupon('');
     }
   };
@@ -51,31 +53,31 @@ export default function Cart() {
   /* ── Order Summary Panel ── */
   const sidePanel = (
     <div className="pt-summary">
-      <h3 className="pt-summary-title">ملخص الطلب</h3>
+      <h3 className="pt-summary-title">{t('cart.summary.title')}</h3>
 
       <div className="pt-summary-row">
-        <span>عدد المنتجات</span>
-        <span>{totalItems} قطعة</span>
+        <span>{t('cart.summary.itemCount')}</span>
+        <span>{totalItems} {t('cart.summary.itemUnit')}</span>
       </div>
 
       <div className="pt-summary-row">
-        <span>المجموع الجزئي</span>
+        <span>{t('cart.summary.subtotal')}</span>
         <span>{subtotal.toFixed(2)} ₪</span>
       </div>
 
       <div className="pt-summary-row">
-        <span>رسوم الشحن</span>
+        <span>{t('cart.summary.shipping')}</span>
         <span>{SHIPPING_COST} ₪</span>
       </div>
 
       <div className="pt-summary-row">
-        <span>الضريبة (10%)</span>
+        <span>{t('cart.summary.tax')}</span>
         <span>{tax.toFixed(2)} ₪</span>
       </div>
 
       {couponDiscount > 0 && (
         <div className="pt-summary-row pt-summary-discount">
-          <span>خصم الكوبون ({appliedCoupon})</span>
+          <span>{t('cart.summary.couponDiscount', { code: appliedCoupon })}</span>
           <span>−{couponDiscount} ₪</span>
         </div>
       )}
@@ -83,7 +85,7 @@ export default function Cart() {
       <div className="pt-summary-divider" />
 
       <div className="pt-summary-row pt-summary-total">
-        <span>الإجمالي</span>
+        <span>{t('cart.summary.total')}</span>
         <span>{total.toFixed(2)} ₪</span>
       </div>
 
@@ -93,7 +95,7 @@ export default function Cart() {
         onClick={() => navigate('/checkout')}
         disabled={activeItems.length === 0}
       >
-        المتابعة للدفع &larr;
+        {t('cart.summary.checkout')}
       </button>
     </div>
   );
@@ -105,24 +107,24 @@ export default function Cart() {
         <input
           className="pt-coupon-input"
           type="text"
-          placeholder="أدخل كود الخصم..."
+          placeholder={t('cart.coupon.placeholder')}
           value={couponCode}
           onChange={(e) => setCouponCode(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && applyCoupon()}
         />
         <button type="button" className="pt-btn-coupon" onClick={applyCoupon}>
-          تطبيق الكوبون
+          {t('cart.coupon.apply')}
         </button>
         {couponError && (
           <span className="pt-coupon-error">{couponError}</span>
         )}
         {appliedCoupon && !couponError && (
-          <span className="pt-coupon-success">✓ تم تطبيق الكوبون بنجاح</span>
+          <span className="pt-coupon-success">{t('cart.coupon.success')}</span>
         )}
       </div>
 
       <button type="button" className="pt-btn-clear" onClick={() => setShowClearConfirm(true)}>
-        مسح السلة
+        {t('cart.actions.clear')}
       </button>
     </div>
   );
@@ -135,9 +137,9 @@ export default function Cart() {
         <div className="pt-page">
           <div className="pt-empty">
             <div className="pt-empty-icon">🛒</div>
-            <h2>سلة التسوق فارغة</h2>
-            <p>لم تقم بإضافة أي منتجات بعد</p>
-            <a href="/store" className="pt-btn-shop">تصفح المنتجات</a>
+            <h2>{t('cart.empty.title')}</h2>
+            <p>{t('cart.empty.subtitle')}</p>
+            <a href="/store" className="pt-btn-shop">{t('cart.empty.browse')}</a>
           </div>
         </div>
       </>
@@ -147,9 +149,14 @@ export default function Cart() {
   return (
     <>
       <ProductListTemplate
-        title="سلة التسوق"
+        title={t('cart.title')}
         itemCount={cartItems.length}
-        columns={['المنتج', 'السعر', 'الكمية', 'المجموع']}
+        columns={[
+          t('cart.columns.product'),
+          t('cart.columns.price'),
+          t('cart.columns.qty'),
+          t('cart.columns.total'),
+        ]}
         sidePanel={sidePanel}
         bottomBar={bottomBar}
       >
@@ -165,7 +172,7 @@ export default function Cart() {
           >
             {item.isDeleted ? (
               <td className="pt-cell pt-cell-deleted-msg" colSpan={3}>
-                <span className="pt-deleted-badge">⚠️ تم حذف هذا المنتج من قبل التاجر — لا يمكن شراؤه</span>
+                <span className="pt-deleted-badge">⚠️ {t('cart.item.deleted')}</span>
               </td>
             ) : (
               <>
@@ -191,9 +198,9 @@ export default function Cart() {
 
       {pendingRemove && (
         <CartConfirmModal
-          message={`هل أنت متأكد أنك تريد حذف "${pendingRemove.name}" من السلة؟`}
-          confirmLabel="حذف"
-          cancelLabel="إلغاء"
+          message={t('cart.confirm.removeItem', { name: pendingRemove.name })}
+          confirmLabel={t('cart.confirm.delete')}
+          cancelLabel={t('cart.confirm.cancel')}
           confirmDanger
           onConfirm={() => { removeFromCart(pendingRemove.id); setPendingRemove(null); }}
           onCancel={() => setPendingRemove(null)}
@@ -202,9 +209,9 @@ export default function Cart() {
 
       {showClearConfirm && (
         <CartConfirmModal
-          message="هل أنت متأكد أنك تريد حذف جميع المنتجات من السلة؟"
-          confirmLabel="مسح الكل"
-          cancelLabel="إلغاء"
+          message={t('cart.confirm.clearCart')}
+          confirmLabel={t('cart.confirm.clearAll')}
+          cancelLabel={t('cart.confirm.cancel')}
           confirmDanger
           onConfirm={() => { clearCart(); setShowClearConfirm(false); }}
           onCancel={() => setShowClearConfirm(false)}

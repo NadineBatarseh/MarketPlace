@@ -32,6 +32,7 @@ import { ShopProvider } from "./context/ShopContext";
 import { CustomerAuthProvider } from "./context/CustomerAuthContext";
 import { MerchantAuthProvider } from "./merchant-dashboard/context/MerchantAuthContext";
 import { AuthProvider } from "./context/AuthContext";
+import { LanguageProvider } from "./context/LanguageContext";
 import MerchantDashboard from "./merchant-dashboard/MerchantDashboard";
 // @ts-ignore
 import ChatBot from "./components/chatbot/ChatBot";
@@ -69,6 +70,7 @@ function RootRedirect() {
 
 export default function App() {
   return (
+    <LanguageProvider>
     <AuthProvider>
     <MerchantAuthProvider>
       <CustomerAuthProvider>
@@ -126,5 +128,6 @@ export default function App() {
       </CustomerAuthProvider>
     </MerchantAuthProvider>
     </AuthProvider>
+    </LanguageProvider>
   );
 }
