@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import supabase from '../../lib/supabase';
+import { useLanguage } from '../../context/LanguageContext';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import AdminMessageModal from '../../components/AdminMessageModal';
 import { archiveShop, restoreShop } from '../../lib/adminArchive';
@@ -40,23 +43,29 @@ interface ShopEnriched extends Shop {
   merchant: MerchantInfo | null;
 }
 
-const STORE_TYPE_LABELS: Record<string, string> = {
-  retail:      'بيع بالتجزئة',
-  wholesale:   'بيع بالجملة',
-  food:        'أغذية ومشروبات',
-  fashion:     'ملابس وأزياء',
-  electronics: 'إلكترونيات',
-  handmade:    'منتجات يدوية',
-  other:       'أخرى',
-};
+function getStoreTypeLabels(t: TFunction): Record<string, string> {
+  return {
+    retail:      t('shops.storeType.retail'),
+    wholesale:   t('shops.storeType.wholesale'),
+    food:        t('shops.storeType.food'),
+    fashion:     t('shops.storeType.fashion'),
+    electronics: t('shops.storeType.electronics'),
+    handmade:    t('shops.storeType.handmade'),
+    other:       t('shops.storeType.other'),
+  };
+}
 
-const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; border: string }> = {
-  published: { label: 'منشور',        bg: '#F0FDF4', text: '#15803D', border: '#86EFAC' },
-  pending:   { label: 'قيد المراجعة', bg: '#FFFBEB', text: '#B45309', border: '#FCD34D' },
-  suspended: { label: 'موقوف',        bg: '#FEF2F2', text: '#DC2626', border: '#FCA5A5' },
-};
+function getStatusConfig(t: TFunction): Record<string, { label: string; bg: string; text: string; border: string }> {
+  return {
+    published: { label: t('shops.status.published'), bg: '#F0FDF4', text: '#15803D', border: '#86EFAC' },
+    pending:   { label: t('shops.status.pending'), bg: '#FFFBEB', text: '#B45309', border: '#FCD34D' },
+    suspended: { label: t('shops.status.suspended'), bg: '#FEF2F2', text: '#DC2626', border: '#FCA5A5' },
+  };
+}
 
 function StatusBadge({ status }: { status: string }) {
+  const { t } = useTranslation('admin');
+  const STATUS_CONFIG = getStatusConfig(t);
   const raw = status.replace(/^'|'$/g, '');
   const cfg = STATUS_CONFIG[raw] ?? { label: raw, bg: '#F8FAFC', text: '#64748B', border: '#CBD5E1' };
   return (
@@ -113,6 +122,7 @@ function ShopAvatar({ logo, name }: { logo: string | null; name: string }) {
 }
 
 function DocImage({ label, path, bucket }: { label: string; path: string; bucket: string }) {
+  const { t } = useTranslation('admin');
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const isPdf = /\.pdf$/i.test(path);
@@ -133,7 +143,7 @@ function DocImage({ label, path, bucket }: { label: string; path: string; bucket
     <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'center' }}>
       <div
         onClick={openFull}
-        title={url ? 'فتح بالحجم الكامل' : undefined}
+        title={url ? t('couriers.openFullSize') : undefined}
         style={{
           width: 130, height: 88, borderRadius: 8, border: '1.5px solid #E2E8F0',
           background: '#F8FAFC', overflow: 'hidden', cursor: url ? 'zoom-in' : 'default',
@@ -141,13 +151,13 @@ function DocImage({ label, path, bucket }: { label: string; path: string; bucket
         }}
       >
         {failed ? (
-          <span style={{ fontSize: 11, color: '#CBD5E1' }}>تعذّر التحميل</span>
+          <span style={{ fontSize: 11, color: '#CBD5E1' }}>{t('couriers.loadFailed')}</span>
         ) : isPdf ? (
           <span style={{ fontSize: 30 }}>📄</span>
         ) : url ? (
           <img src={url} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
-          <span style={{ fontSize: 11, color: '#94A3B8' }}>جاري التحميل…</span>
+          <span style={{ fontSize: 11, color: '#94A3B8' }}>{t('couriers.loadingEllipsis')}</span>
         )}
       </div>
       <span style={{ fontSize: 11, color: '#475569', fontWeight: 600 }}>{label}</span>
@@ -169,6 +179,11 @@ const tdStyle: React.CSSProperties = {
 type StatusFilter = 'all' | 'published' | 'pending' | 'suspended';
 
 export default function ShopsPage() {
+  const { t } = useTranslation('admin');
+  const { direction, lang } = useLanguage();
+  const numLocale = lang === 'ar' ? 'ar-EG' : 'en-US';
+  const STORE_TYPE_LABELS = getStoreTypeLabels(t);
+  const STATUS_CONFIG = getStatusConfig(t);
   const [shops, setShops]               = useState<ShopEnriched[]>([]);
   const [loading, setLoading]           = useState(true);
   const [error, setError]               = useState('');
@@ -211,7 +226,7 @@ export default function ShopsPage() {
       supabase.from('products').select('shop_id').eq('isPublish', true),
     ]);
 
-    if (sErr) { setError('تعذّر تحميل البيانات: ' + sErr.message); setLoading(false); return; }
+    if (sErr) { setError(t('shops.loadError', { error: sErr.message })); setLoading(false); return; }
 
     // Fetch owner info via server endpoint (uses service-role key, bypasses merchants RLS)
     const merchantIds = [...new Set(
@@ -259,7 +274,7 @@ export default function ShopsPage() {
     }));
 
     setLoading(false);
-  }, []);
+  }, [t]);
 
   async function handleArchive() {
     if (!archiveTarget) return;
@@ -274,7 +289,7 @@ export default function ShopsPage() {
         setArchiving(false);
         return;
       }
-      setArchiveError('فشل الحذف: ' + (res.error ?? ''));
+      setArchiveError(t('shops.deleteFailed', { error: res.error ?? '' }));
       setArchiving(false);
       return;
     }
@@ -294,7 +309,7 @@ export default function ShopsPage() {
     setRestoring(true);
     setRestoreError('');
     const res = await restoreShop(restoreTarget.shop_id);
-    if (!res.ok) { setRestoreError('فشل الاستعادة: ' + (res.error ?? '')); setRestoring(false); return; }
+    if (!res.ok) { setRestoreError(t('shops.restoreFailed', { error: res.error ?? '' })); setRestoring(false); return; }
     setShops(prev => prev.map(s => s.shop_id === restoreTarget.shop_id ? { ...s, is_archived: false } : s));
     setRestoreTarget(null);
     setRestoring(false);
@@ -306,7 +321,7 @@ export default function ShopsPage() {
     setSuspendError('');
     const newStatus = suspendTarget.status === 'suspended' ? 'published' : 'suspended';
     const { error: err } = await supabase.from('shops').update({ status: newStatus }).eq('shop_id', suspendTarget.shop_id);
-    if (err) { setSuspendError('فشل تحديث الحالة: ' + err.message); setSuspending(false); return; }
+    if (err) { setSuspendError(t('shops.updateStatusFailed', { error: err.message })); setSuspending(false); return; }
     setShops(prev => prev.map(s => s.shop_id === suspendTarget.shop_id ? { ...s, status: newStatus } : s));
     setSuspendTarget(null);
     setSuspending(false);
@@ -346,7 +361,7 @@ export default function ShopsPage() {
       (s.merchant?.phone_number ?? '').includes(search));
 
   return (
-    <div style={{ fontFamily: "'Tajawal', sans-serif", direction: 'rtl', color: '#0F2B4E' }}>
+    <div style={{ fontFamily: "'Tajawal', sans-serif", direction, color: '#0F2B4E' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
         .admin-stat-card {
@@ -391,27 +406,27 @@ export default function ShopsPage() {
           onClick={() => setDocsTarget(null)}
         >
           <div
-            style={{ background: '#fff', borderRadius: 14, padding: 28, minWidth: 300, maxWidth: 480, width: '90vw', direction: 'rtl', fontFamily: "'Tajawal', sans-serif" }}
+            style={{ background: '#fff', borderRadius: 14, padding: 28, minWidth: 300, maxWidth: 480, width: '90vw', direction, fontFamily: "'Tajawal', sans-serif" }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 16, color: '#0F2B4E' }}>
-              وثائق صاحب المتجر — {docsTarget.name}
+              {t('shops.ownerDocsTitle', { name: docsTarget.name })}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, justifyContent: 'center' }}>
               {docsTarget.merchant?.id_front_url && (
-                <DocImage label="💳 الهوية الشخصية (أمامي)" path={docsTarget.merchant.id_front_url} bucket="merchant-id-docs" />
+                <DocImage label={`💳 ${t('shops.personalIdFront')}`} path={docsTarget.merchant.id_front_url} bucket="merchant-id-docs" />
               )}
               {docsTarget.merchant?.id_back_url && (
-                <DocImage label="💳 الهوية الشخصية (خلفي)" path={docsTarget.merchant.id_back_url} bucket="merchant-id-docs" />
+                <DocImage label={`💳 ${t('shops.personalIdBack')}`} path={docsTarget.merchant.id_back_url} bucket="merchant-id-docs" />
               )}
               {!docsTarget.merchant?.id_front_url && !docsTarget.merchant?.id_back_url && (
-                <p style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center' }}>لا توجد وثائق مرفقة</p>
+                <p style={{ color: '#94A3B8', fontSize: 13, textAlign: 'center' }}>{t('shops.noDocsAttached')}</p>
               )}
             </div>
             <button
               onClick={() => setDocsTarget(null)}
               style={{ marginTop: 20, width: '100%', padding: '10px', borderRadius: 8, border: 'none', background: '#F1F5F9', color: '#0F2B4E', cursor: 'pointer', fontSize: 13, fontFamily: 'inherit', fontWeight: 700 }}>
-              إغلاق
+              {t('shops.close')}
             </button>
           </div>
         </div>
@@ -419,18 +434,18 @@ export default function ShopsPage() {
 
       {archiveTarget && (
         <ConfirmDialog
-          title="تأكيد حذف المتجر"
+          title={t('shops.confirmDeleteTitle')}
           icon="🗑️"
-          message={<>هل أنت متأكد من حذف المتجر <strong>{archiveTarget.name}</strong>؟ لن يظهر للعملاء أو في القوائم الرئيسية، ويمكن استعادته لاحقًا من سلة المحذوفات.</>}
+          message={t('shops.confirmDeleteMessage', { name: archiveTarget.name })}
           warning={
             archiveBlock
-              ? `تعذّر الحذف: يحتوي هذا المتجر على ${archiveBlock.activeCount} طلب نشط. تأكيد الحذف الآن سيتم رغم وجود طلبات نشطة.`
+              ? t('shops.deleteBlockedWarning', { count: archiveBlock.activeCount })
               : archiveTarget.product_count > 0
-                ? `يحتوي هذا المتجر على ${archiveTarget.product_count} منتج منشور — لن تظهر للعملاء بعد الحذف.`
+                ? t('shops.hasProductsWarning', { count: archiveTarget.product_count })
                 : undefined
           }
           confirmColor="#DC2626"
-          confirmLabel={archiveBlock ? 'حذف رغم الطلبات النشطة' : 'حذف'}
+          confirmLabel={archiveBlock ? t('shops.deleteDespiteActive') : t('shops.delete')}
           reversible
           loading={archiving}
           error={archiveError}
@@ -441,11 +456,11 @@ export default function ShopsPage() {
 
       {restoreTarget && (
         <ConfirmDialog
-          title="تأكيد استعادة المتجر"
+          title={t('shops.confirmRestoreTitle')}
           icon="♻️"
-          message={<>هل تريد استعادة المتجر <strong>{restoreTarget.name}</strong> من سلة المحذوفات؟</>}
+          message={t('shops.confirmRestoreMessage', { name: restoreTarget.name })}
           confirmColor="#16a34a"
-          confirmLabel="استعادة"
+          confirmLabel={t('shops.restore')}
           reversible
           loading={restoring}
           error={restoreError}
@@ -464,15 +479,15 @@ export default function ShopsPage() {
 
       {suspendTarget && (
         <ConfirmDialog
-          title={suspendTarget.status === 'suspended' ? 'تأكيد إعادة النشر' : 'تأكيد إيقاف النشر'}
+          title={suspendTarget.status === 'suspended' ? t('shops.confirmRepublishTitle') : t('shops.confirmSuspendTitle')}
           message={
             suspendTarget.status === 'suspended'
-              ? <>هل تريد إعادة نشر المتجر <strong>{suspendTarget.name}</strong>؟</>
-              : <>هل تريد إيقاف نشر المتجر <strong>{suspendTarget.name}</strong>؟</>
+              ? t('shops.confirmRepublishMessage', { name: suspendTarget.name })
+              : t('shops.confirmSuspendMessage', { name: suspendTarget.name })
           }
           icon={suspendTarget.status === 'suspended' ? '✅' : '🚫'}
           confirmColor={suspendTarget.status === 'suspended' ? '#16a34a' : '#B45309'}
-          confirmLabel={suspendTarget.status === 'suspended' ? 'إعادة النشر' : 'إيقاف النشر'}
+          confirmLabel={suspendTarget.status === 'suspended' ? t('shops.republish') : t('shops.suspend')}
           reversible
           loading={suspending}
           error={suspendError}
@@ -483,10 +498,10 @@ export default function ShopsPage() {
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>المتاجر</h2>
+        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{t('shops.title')}</h2>
         <button onClick={load} disabled={loading}
           style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #E2E8F0', background: '#fff', color: '#0F2B4E', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit' }}>
-          ↻ تحديث
+          ↻ {t('shops.refresh')}
         </button>
       </div>
 
@@ -494,22 +509,22 @@ export default function ShopsPage() {
       <div className="admin-stats-strip">
         {[
           {
-            label: 'الإجمالي', sub: 'إجمالي المتاجر', value: statusCounts.all,
+            label: t('shops.stats.total'), sub: t('shops.stats.totalSub'), value: statusCounts.all,
             iconBg: '#eff6ff', iconColor: '#2563eb',
             icon: <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
           },
           {
-            label: 'منشورة', sub: 'متاحة للعملاء', value: statusCounts.published,
+            label: t('shops.status.published'), sub: t('shops.stats.publishedSub'), value: statusCounts.published,
             iconBg: '#f0fdf4', iconColor: '#16a34a',
             icon: <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
           },
           {
-            label: 'قيد المراجعة', sub: 'بانتظار الموافقة', value: statusCounts.pending,
+            label: t('shops.status.pending'), sub: t('shops.stats.pendingSub'), value: statusCounts.pending,
             iconBg: '#fffbeb', iconColor: '#d97706',
             icon: <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
           },
           {
-            label: 'موقوفة', sub: 'إيقاف مؤقت', value: statusCounts.suspended,
+            label: t('shops.status.suspended'), sub: t('shops.stats.suspendedSub'), value: statusCounts.suspended,
             iconBg: '#fef2f2', iconColor: '#dc2626',
             icon: <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>,
           },
@@ -541,7 +556,7 @@ export default function ShopsPage() {
                 color:       active ? (cfg ? cfg.text   : '#fff')   : '#64748B',
                 cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: active ? 700 : 400,
               }}>
-              {s === 'all' ? 'الكل' : STATUS_CONFIG[s].label}
+              {s === 'all' ? t('shops.all') : STATUS_CONFIG[s].label}
               <span style={{ marginRight: 5, fontFamily: 'monospace', opacity: 0.8 }}>{statusCounts[s]}</span>
             </button>
           );
@@ -557,9 +572,9 @@ export default function ShopsPage() {
               background: '#fff', cursor: 'pointer', outline: 'none',
             }}
           >
-            <option value="all">كل الأنواع</option>
-            {storeTypes.filter(t => t !== 'all').map(t => (
-              <option key={t} value={t}>{STORE_TYPE_LABELS[t] ?? t}</option>
+            <option value="all">{t('shops.allTypes')}</option>
+            {storeTypes.filter(ty => ty !== 'all').map(ty => (
+              <option key={ty} value={ty}>{STORE_TYPE_LABELS[ty] ?? ty}</option>
             ))}
           </select>
         )}
@@ -567,7 +582,7 @@ export default function ShopsPage() {
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="بحث بالمتجر أو المالك أو الهاتف..."
+          placeholder={t('shops.searchPlaceholder')}
           style={{
             marginRight: 'auto', padding: '6px 12px', borderRadius: 8,
             border: '1.5px solid #E2E8F0', fontSize: 12, fontFamily: 'inherit',
@@ -578,7 +593,7 @@ export default function ShopsPage() {
         {/* Deleted items (soft-deleted) — kept separate from the main status filters */}
         <button
           onClick={() => setShowArchived(v => !v)}
-          title="عرض العناصر المحذوفة"
+          title={t('shops.showDeletedItems')}
           style={{
             display: 'flex', alignItems: 'center', gap: 5,
             padding: '5px 13px', borderRadius: 20, border: '1.5px solid',
@@ -587,7 +602,7 @@ export default function ShopsPage() {
             color:       showArchived ? '#fff' : '#64748B',
             cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: showArchived ? 700 : 400,
           }}>
-          🗑️ سلة المحذوفات
+          🗑️ {t('shops.trashBin')}
           {archivedCount > 0 && (
             <span style={{ fontFamily: 'monospace', opacity: 0.8 }}>{archivedCount}</span>
           )}
@@ -595,7 +610,7 @@ export default function ShopsPage() {
       </div>
 
       <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 10 }}>
-        {visible.length} متجر
+        {t('shops.shopCount', { count: visible.length })}
       </div>
 
       {error && (
@@ -605,24 +620,24 @@ export default function ShopsPage() {
       )}
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8', fontSize: 14 }}>جاري التحميل...</div>
+        <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8', fontSize: 14 }}>{t('shops.loading')}</div>
       ) : visible.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8', fontSize: 14 }}>لا توجد متاجر</div>
+        <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8', fontSize: 14 }}>{t('shops.noShops')}</div>
       ) : (
         <div className="adm-scroll" style={{ overflowX: 'auto', borderRadius: 10, border: '1.5px solid #E2E8F0', background: '#fff' }}>
           <table className="adm-rtable" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                <th style={{ ...thStyle, width: '18%' }}>المتجر</th>
-                <th style={{ ...thStyle, width: '18%' }}>صاحب المتجر</th>
-                <th style={{ ...thStyle, width: '10%' }}>النوع</th>
-                <th style={{ ...thStyle, width: '10%' }}>الموقع</th>
-                <th style={{ ...thStyle, width: '8%' }}>الحالة</th>
-                <th style={{ ...thStyle, width: '6%', textAlign: 'center' }}>المنتجات</th>
-                <th style={{ ...thStyle, width: '9%' }}>التقييم</th>
-                <th style={{ ...thStyle, width: '7%', textAlign: 'center' }}>التواصل</th>
-                <th style={{ ...thStyle, width: '8%' }}>تاريخ الإنشاء</th>
-                <th style={{ ...thStyle, width: '6%', textAlign: 'center' }}>إجراءات</th>
+                <th style={{ ...thStyle, width: '18%' }}>{t('shops.table.shop')}</th>
+                <th style={{ ...thStyle, width: '18%' }}>{t('shops.table.owner')}</th>
+                <th style={{ ...thStyle, width: '10%' }}>{t('shops.table.type')}</th>
+                <th style={{ ...thStyle, width: '10%' }}>{t('shops.table.location')}</th>
+                <th style={{ ...thStyle, width: '8%' }}>{t('shops.table.status')}</th>
+                <th style={{ ...thStyle, width: '6%', textAlign: 'center' }}>{t('shops.table.products')}</th>
+                <th style={{ ...thStyle, width: '9%' }}>{t('shops.table.rating')}</th>
+                <th style={{ ...thStyle, width: '7%', textAlign: 'center' }}>{t('shops.table.contact')}</th>
+                <th style={{ ...thStyle, width: '8%' }}>{t('shops.table.createdAt')}</th>
+                <th style={{ ...thStyle, width: '6%', textAlign: 'center' }}>{t('shops.table.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -639,7 +654,7 @@ export default function ShopsPage() {
                       onMouseLeave={e => { if (!isOwnerExpanded) e.currentTarget.style.background = '#fff'; }}
                     >
                       {/* Shop name + logo */}
-                      <td style={tdStyle} data-label="المتجر">
+                      <td style={tdStyle} data-label={t('shops.table.shop')}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                           <ShopAvatar logo={shop.shopLogo} name={shop.name} />
                           <div style={{ minWidth: 0 }}>
@@ -657,7 +672,7 @@ export default function ShopsPage() {
                       </td>
 
                       {/* Owner name — click to expand details */}
-                      <td style={tdStyle} data-label="صاحب المتجر">
+                      <td style={tdStyle} data-label={t('shops.table.owner')}>
                         {m?.owner_name ? (
                           <button
                             onClick={() => setExpandedOwnerId(prev => prev === shop.shop_id ? null : shop.shop_id)}
@@ -687,7 +702,7 @@ export default function ShopsPage() {
                       </td>
 
                       {/* Store type */}
-                      <td style={tdStyle} data-label="النوع">
+                      <td style={tdStyle} data-label={t('shops.table.type')}>
                         {shop.Type_of_store
                           ? <span style={{ background: '#F1F5F9', color: '#334155', borderRadius: 5, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>
                               {STORE_TYPE_LABELS[shop.Type_of_store] ?? shop.Type_of_store}
@@ -696,7 +711,7 @@ export default function ShopsPage() {
                       </td>
 
                       {/* Location */}
-                      <td style={tdStyle} data-label="الموقع">
+                      <td style={tdStyle} data-label={t('shops.table.location')}>
                         {shop.shop_lat && shop.shop_lng ? (
                           <a
                             href={`https://www.google.com/maps?q=${shop.shop_lat},${shop.shop_lng}`}
@@ -706,7 +721,7 @@ export default function ShopsPage() {
                             <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" style={{ flexShrink: 0 }}>
                               <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
                             </svg>
-                            <span style={{ fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{shop.location ?? 'عرض الخريطة'}</span>
+                            <span style={{ fontSize: 11, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{shop.location ?? t('shops.viewMap')}</span>
                           </a>
                         ) : shop.location ? (
                           <span style={{ fontSize: 11, color: '#475569', display: 'flex', alignItems: 'center', gap: 3 }}>
@@ -721,10 +736,10 @@ export default function ShopsPage() {
                       </td>
 
                       {/* Status */}
-                      <td style={tdStyle} data-label="الحالة"><StatusBadge status={shop.status} /></td>
+                      <td style={tdStyle} data-label={t('shops.table.status')}><StatusBadge status={shop.status} /></td>
 
                       {/* Product count */}
-                      <td style={{ ...tdStyle, textAlign: 'center' }} data-label="المنتجات">
+                      <td style={{ ...tdStyle, textAlign: 'center' }} data-label={t('shops.table.products')}>
                         <span style={{
                           background: shop.product_count > 0 ? '#EFF6FF' : '#F8FAFC',
                           color:      shop.product_count > 0 ? '#1D4ED8' : '#94A3B8',
@@ -736,20 +751,20 @@ export default function ShopsPage() {
                       </td>
 
                       {/* Rating */}
-                      <td style={tdStyle} data-label="التقييم">
+                      <td style={tdStyle} data-label={t('shops.table.rating')}>
                         <div>
                           <Stars rating={shop.avg_rating} />
                           {shop.review_count > 0 && (
-                            <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 2 }}>{shop.review_count} تقييم</div>
+                            <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 2 }}>{t('shops.reviewCount', { count: shop.review_count })}</div>
                           )}
                         </div>
                       </td>
 
                       {/* Social links */}
-                      <td style={{ ...tdStyle, textAlign: 'center' }} data-label="التواصل">
+                      <td style={{ ...tdStyle, textAlign: 'center' }} data-label={t('shops.table.contact')}>
                         <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'center' }}>
                           {shop.whatsapp && (
-                            <a href={`https://wa.me/${shop.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" title="واتساب" style={{ color: '#16a34a', display: 'flex' }}>
+                            <a href={`https://wa.me/${shop.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" title={t('shops.whatsapp')} style={{ color: '#16a34a', display: 'flex' }}>
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
                                 <path d="M12 0C5.373 0 0 5.373 0 12c0 2.127.558 4.126 1.535 5.856L.057 23.428a.5.5 0 0 0 .609.61l5.638-1.474A11.942 11.942 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.882a9.875 9.875 0 0 1-5.031-1.375l-.36-.214-3.733.976.999-3.648-.235-.374A9.857 9.857 0 0 1 2.118 12C2.118 6.533 6.533 2.118 12 2.118c5.468 0 9.882 4.415 9.882 9.882 0 5.467-4.414 9.882-9.882 9.882z"/>
@@ -757,14 +772,14 @@ export default function ShopsPage() {
                             </a>
                           )}
                           {shop.facebook && (
-                            <a href={shop.facebook.startsWith('http') ? shop.facebook : `https://facebook.com/${shop.facebook}`} target="_blank" rel="noreferrer" title="فيسبوك" style={{ color: '#1877F2', display: 'flex' }}>
+                            <a href={shop.facebook.startsWith('http') ? shop.facebook : `https://facebook.com/${shop.facebook}`} target="_blank" rel="noreferrer" title={t('shops.facebook')} style={{ color: '#1877F2', display: 'flex' }}>
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047V9.41c0-3.025 1.791-4.697 4.533-4.697 1.312 0 2.686.236 2.686.236v2.97h-1.513c-1.491 0-1.956.93-1.956 1.886v2.267h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z"/>
                               </svg>
                             </a>
                           )}
                           {shop.instagram && (
-                            <a href={shop.instagram.startsWith('http') ? shop.instagram : `https://instagram.com/${shop.instagram}`} target="_blank" rel="noreferrer" title="إنستغرام" style={{ color: '#E1306C', display: 'flex' }}>
+                            <a href={shop.instagram.startsWith('http') ? shop.instagram : `https://instagram.com/${shop.instagram}`} target="_blank" rel="noreferrer" title={t('shops.instagram')} style={{ color: '#E1306C', display: 'flex' }}>
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/>
                               </svg>
@@ -777,14 +792,14 @@ export default function ShopsPage() {
                       </td>
 
                       {/* Created at */}
-                      <td style={{ ...tdStyle, fontSize: 11, color: '#64748B', whiteSpace: 'nowrap' }} data-label="تاريخ الإنشاء">
-                        {new Date(shop.created_at).toLocaleDateString('ar-EG', {
+                      <td style={{ ...tdStyle, fontSize: 11, color: '#64748B', whiteSpace: 'nowrap' }} data-label={t('shops.table.createdAt')}>
+                        {new Date(shop.created_at).toLocaleDateString(numLocale, {
                           year: 'numeric', month: 'short', day: 'numeric',
                         })}
                       </td>
 
                       {/* Actions */}
-                      <td style={{ ...tdStyle, textAlign: 'center' }} data-label="إجراءات">
+                      <td style={{ ...tdStyle, textAlign: 'center' }} data-label={t('shops.table.actions')}>
                         <div style={{ position: 'relative', display: 'inline-block' }}
                           ref={openMenuId === shop.shop_id ? menuRef : null}>
                           <button
@@ -794,7 +809,7 @@ export default function ShopsPage() {
                               setMenuPos({ top: r.bottom + 4, left: r.left });
                               setOpenMenuId(shop.shop_id);
                             }}
-                            title="المزيد من الإجراءات"
+                            title={t('couriers.moreActions')}
                             style={{
                               width: 32, height: 32, borderRadius: 8,
                               border: '1.5px solid #E2E8F0',
@@ -824,7 +839,7 @@ export default function ShopsPage() {
                                   <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                                     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
                                   </svg>
-                                  {isOwnerExpanded ? 'إخفاء بيانات المالك' : 'بيانات المالك'}
+                                  {isOwnerExpanded ? t('shops.hideOwnerInfo') : t('shops.ownerInfo')}
                                 </button>
                               )}
 
@@ -838,7 +853,7 @@ export default function ShopsPage() {
                                   <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
                                   </svg>
-                                  وثائق المالك
+                                  {t('shops.ownerDocs')}
                                 </button>
                               )}
 
@@ -850,7 +865,7 @@ export default function ShopsPage() {
                                   style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', border: 'none', background: 'none', color: '#B45309', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: 700, textAlign: 'right' }}
                                   onMouseEnter={e => (e.currentTarget.style.background = '#FFFBEB')}
                                   onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                                  <span>🚫</span> إيقاف النشر
+                                  <span>🚫</span> {t('shops.suspend')}
                                 </button>
                               )}
                               {shop.status === 'suspended' && (
@@ -859,7 +874,7 @@ export default function ShopsPage() {
                                   style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', border: 'none', background: 'none', color: '#15803D', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: 700, textAlign: 'right' }}
                                   onMouseEnter={e => (e.currentTarget.style.background = '#F0FDF4')}
                                   onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                                  <span>✅</span> إعادة النشر
+                                  <span>✅</span> {t('shops.republish')}
                                 </button>
                               )}
 
@@ -871,7 +886,7 @@ export default function ShopsPage() {
                                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                                 </svg>
-                                إرسال رسالة
+                                {t('couriers.sendMessage')}
                               </button>
 
                               <div style={{ height: 1, background: '#F1F5F9', margin: '2px 0' }} />
@@ -882,7 +897,7 @@ export default function ShopsPage() {
                                   style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', border: 'none', background: 'none', color: '#15803D', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: 700, textAlign: 'right' }}
                                   onMouseEnter={e => (e.currentTarget.style.background = '#F0FDF4')}
                                   onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                                  <span>♻️</span> استعادة
+                                  <span>♻️</span> {t('shops.restore')}
                                 </button>
                               ) : (
                                 <button
@@ -890,7 +905,7 @@ export default function ShopsPage() {
                                   style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', border: 'none', background: 'none', color: '#DC2626', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: 700, textAlign: 'right' }}
                                   onMouseEnter={e => (e.currentTarget.style.background = '#FEF2F2')}
                                   onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                                  <span>🗑️</span> حذف
+                                  <span>🗑️</span> {t('shops.delete')}
                                 </button>
                               )}
                             </div>
@@ -905,11 +920,11 @@ export default function ShopsPage() {
                         <td colSpan={10} style={{ padding: '0 10px 12px', background: '#F8FAFC', borderBottom: '1px solid #F1F5F9' }}>
                           <div className="shop-owner-panel">
                             <div>
-                              <div className="owner-info-label">اسم المالك</div>
+                              <div className="owner-info-label">{t('shops.detail.ownerName')}</div>
                               <div className="owner-info-value">{m.owner_name ?? '—'}</div>
                             </div>
                             <div>
-                              <div className="owner-info-label">رقم الهاتف</div>
+                              <div className="owner-info-label">{t('couriers.detail.phone')}</div>
                               <div className="owner-info-value">
                                 {m.phone_number
                                   ? <a href={`tel:${m.phone_number}`} style={{ color: '#0F2B4E', textDecoration: 'none' }}>{m.phone_number}</a>
@@ -917,7 +932,7 @@ export default function ShopsPage() {
                               </div>
                             </div>
                             <div>
-                              <div className="owner-info-label">البريد الإلكتروني</div>
+                              <div className="owner-info-label">{t('couriers.detail.email')}</div>
                               <div className="owner-info-value" style={{ fontSize: 12 }}>
                                 {m.owner_email
                                   ? <a href={`mailto:${m.owner_email}`} style={{ color: '#2563eb', textDecoration: 'none' }}>{m.owner_email}</a>
@@ -926,12 +941,12 @@ export default function ShopsPage() {
                             </div>
                             {hasDocs && (
                               <div className="shop-owner-docs">
-                                <span style={{ fontSize: 11, color: '#94A3B8', fontWeight: 700, alignSelf: 'flex-start', marginTop: 4, marginLeft: 4 }}>وثائق الهوية:</span>
+                                <span style={{ fontSize: 11, color: '#94A3B8', fontWeight: 700, alignSelf: 'flex-start', marginTop: 4, marginLeft: 4 }}>{t('shops.detail.idDocs')}:</span>
                                 {m.id_front_url && (
-                                  <DocImage label="💳 هوية (أمامي)" path={m.id_front_url} bucket="merchant-id-docs" />
+                                  <DocImage label={`💳 ${t('couriers.detail.idFront')}`} path={m.id_front_url} bucket="merchant-id-docs" />
                                 )}
                                 {m.id_back_url && (
-                                  <DocImage label="💳 هوية (خلفي)" path={m.id_back_url} bucket="merchant-id-docs" />
+                                  <DocImage label={`💳 ${t('couriers.detail.idBack')}`} path={m.id_back_url} bucket="merchant-id-docs" />
                                 )}
                               </div>
                             )}

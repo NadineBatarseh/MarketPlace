@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import supabase from '../../lib/supabase';
+import { useLanguage } from '../../context/LanguageContext';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import AdminMessageModal from '../../components/AdminMessageModal';
 import { archiveCourier, restoreCourier } from '../../lib/adminArchive';
@@ -29,18 +32,22 @@ interface CourierWithBatches extends Courier {
   type_of_vehicle: string | null;
 }
 
-const STATUS_CONFIG = {
-  available: { label: 'متاح',      bg: '#F0FDF4', text: '#15803D', border: '#86EFAC' },
-  on_route:  { label: 'في الطريق / مشغول', bg: '#EFF6FF', text: '#1D4ED8', border: '#93C5FD' },
-  offline:   { label: 'غير متصل', bg: '#F8FAFC', text: '#64748B', border: '#CBD5E1' },
-};
+function getStatusConfig(t: TFunction) {
+  return {
+    available: { label: t('couriers.status.available'), bg: '#F0FDF4', text: '#15803D', border: '#86EFAC' },
+    on_route:  { label: t('couriers.status.on_route'), bg: '#EFF6FF', text: '#1D4ED8', border: '#93C5FD' },
+    offline:   { label: t('couriers.status.offline'), bg: '#F8FAFC', text: '#64748B', border: '#CBD5E1' },
+  };
+}
 
-const VEHICLE_LABELS: Record<string, string> = {
-  motorcycle: 'دراجة نارية',
-  car:        'سيارة',
-  van:        'فان',
-  bicycle:    'دراجة هوائية',
-};
+function getVehicleLabels(t: TFunction): Record<string, string> {
+  return {
+    motorcycle: t('couriers.vehicle.motorcycle'),
+    car:        t('couriers.vehicle.car'),
+    van:        t('couriers.vehicle.van'),
+    bicycle:    t('couriers.vehicle.bicycle'),
+  };
+}
 
 // ── Performance indicator (نشاط جيد / وقت انتظار مرتفع) ──────────────────────
 // Operational monitoring only — never used for payroll/salary calculation.
@@ -59,20 +66,21 @@ interface PerformanceBadgeConfig {
   label: string;
 }
 
-function getPerformanceBadge(waitingRatioPct: number): PerformanceBadgeConfig {
+function getPerformanceBadge(waitingRatioPct: number, t: TFunction): PerformanceBadgeConfig {
   if (waitingRatioPct <= 40) {
-    return { bg: '#F0FDF4', text: '#15803D', border: '#86EFAC', icon: '✓', label: 'نشاط جيد' };
+    return { bg: '#F0FDF4', text: '#15803D', border: '#86EFAC', icon: '✓', label: t('couriers.performance.good') };
   }
   if (waitingRatioPct <= 70) {
-    return { bg: '#FFFBEB', text: '#B45309', border: '#FCD34D', icon: '⚠️', label: 'وقت انتظار مرتفع' };
+    return { bg: '#FFFBEB', text: '#B45309', border: '#FCD34D', icon: '⚠️', label: t('couriers.performance.highWait') };
   }
-  return { bg: '#FEF2F2', text: '#B91C1C', border: '#FCA5A5', icon: '⚠️', label: 'وقت انتظار مرتفع جداً' };
+  return { bg: '#FEF2F2', text: '#B91C1C', border: '#FCA5A5', icon: '⚠️', label: t('couriers.performance.veryHighWait') };
 }
 
 function PerformanceBadge({ minutes }: { minutes: CourierTodayMinutes | undefined }) {
+  const { t } = useTranslation('admin');
   if (!minutes || minutes.totalDutyMinutes <= 0) return null;
   const ratio = Math.round((minutes.availableWaitingMinutes / minutes.totalDutyMinutes) * 100);
-  const cfg = getPerformanceBadge(ratio);
+  const cfg = getPerformanceBadge(ratio, t);
   return (
     <div
       style={{
@@ -90,24 +98,24 @@ function PerformanceBadge({ minutes }: { minutes: CourierTodayMinutes | undefine
         <span>{cfg.icon}</span>{cfg.label}
       </span>
       <span style={{ color: cfg.text, fontSize: 9.5, fontWeight: 600, opacity: 0.85, whiteSpace: 'nowrap' }}>
-        نسبة الانتظار {ratio}%
+        {t('couriers.performance.waitRatio', { ratio })}
       </span>
     </div>
   );
 }
 
-async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+async function reverseGeocode(lat: number, lng: number, lang: string): Promise<string | null> {
   try {
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=ar`,
-      { headers: { 'Accept-Language': 'ar' } }
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=${lang}`,
+      { headers: { 'Accept-Language': lang } }
     );
     if (!res.ok) return null;
     const json = await res.json();
     const a = json.address ?? {};
     const street = a.road ?? a.neighbourhood ?? a.suburb ?? '';
     const city   = a.city ?? a.town ?? a.village ?? a.county ?? '';
-    if (street && city) return `${street}، ${city}`;
+    if (street && city) return `${street}, ${city}`;
     return city || street || json.display_name?.split(',')[0] || null;
   } catch {
     return null;
@@ -115,6 +123,8 @@ async function reverseGeocode(lat: number, lng: number): Promise<string | null> 
 }
 
 function StatusBadge({ status }: { status: Courier['status'] }) {
+  const { t } = useTranslation('admin');
+  const STATUS_CONFIG = getStatusConfig(t);
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.offline;
   return (
     <span style={{
@@ -137,6 +147,7 @@ function Dot({ status }: { status: Courier['status'] }) {
 }
 
 function DocImage({ label, path, bucket }: { label: string; path: string; bucket: string }) {
+  const { t } = useTranslation('admin');
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const isPdf = /\.pdf$/i.test(path);
@@ -157,7 +168,7 @@ function DocImage({ label, path, bucket }: { label: string; path: string; bucket
     <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'center' }}>
       <div
         onClick={openFull}
-        title={url ? 'فتح بالحجم الكامل' : undefined}
+        title={url ? t('couriers.openFullSize') : undefined}
         style={{
           width: 130, height: 88, borderRadius: 8, border: '1.5px solid #E2E8F0',
           background: '#F8FAFC', overflow: 'hidden', cursor: url ? 'zoom-in' : 'default',
@@ -165,13 +176,13 @@ function DocImage({ label, path, bucket }: { label: string; path: string; bucket
         }}
       >
         {failed ? (
-          <span style={{ fontSize: 11, color: '#CBD5E1' }}>تعذّر التحميل</span>
+          <span style={{ fontSize: 11, color: '#CBD5E1' }}>{t('couriers.loadFailed')}</span>
         ) : isPdf ? (
           <span style={{ fontSize: 30 }}>📄</span>
         ) : url ? (
           <img src={url} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
-          <span style={{ fontSize: 11, color: '#94A3B8' }}>جاري التحميل…</span>
+          <span style={{ fontSize: 11, color: '#94A3B8' }}>{t('couriers.loadingEllipsis')}</span>
         )}
       </div>
       <span style={{ fontSize: 11, color: '#475569', fontWeight: 600 }}>{label}</span>
@@ -200,6 +211,10 @@ const tdStyle: React.CSSProperties = {
 };
 
 export default function CouriersPage() {
+  const { t } = useTranslation('admin');
+  const { direction, lang } = useLanguage();
+  const STATUS_CONFIG = getStatusConfig(t);
+  const VEHICLE_LABELS = getVehicleLabels(t);
   const [couriers, setCouriers]         = useState<CourierWithBatches[]>([]);
   const [loading, setLoading]           = useState(true);
   const [error, setError]               = useState('');
@@ -235,7 +250,7 @@ export default function CouriersPage() {
       supabase.from('batches').select('assigned_to').in('status', ['assigned', 'in_transit']),
     ]);
 
-    if (cErr) { setError('تعذّر تحميل البيانات: ' + cErr.message); setLoading(false); return; }
+    if (cErr) { setError(t('couriers.loadError', { error: cErr.message })); setLoading(false); return; }
 
     // Enrich with personal info from delivery_applications via Users
     const userIds = (courierRows ?? []).map((c: any) => c.user_id).filter(Boolean);
@@ -276,7 +291,8 @@ export default function CouriersPage() {
     setLoading(false);
     geocodeAll(loaded);
     loadPerformance(loaded.map((c) => c.id));
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t]);
 
   async function loadPerformance(courierIds: string[]) {
     if (!courierIds.length) { setPerfStats({}); return; }
@@ -302,7 +318,7 @@ export default function CouriersPage() {
         if (prev[c.id] !== undefined) return prev;
         return { ...prev, [c.id]: '' };
       });
-      const addr = await reverseGeocode(c.location.lat, c.location.lng);
+      const addr = await reverseGeocode(c.location.lat, c.location.lng, lang);
       setAddresses(prev => ({ ...prev, [c.id]: addr }));
       await new Promise(r => setTimeout(r, 350));
     }
@@ -321,7 +337,7 @@ export default function CouriersPage() {
         setArchiving(false);
         return;
       }
-      setArchiveError('فشل الحذف: ' + (res.error ?? ''));
+      setArchiveError(t('couriers.deleteFailed', { error: res.error ?? '' }));
       setArchiving(false);
       return;
     }
@@ -341,7 +357,7 @@ export default function CouriersPage() {
     setRestoring(true);
     setRestoreError('');
     const res = await restoreCourier(restoreTarget.id);
-    if (!res.ok) { setRestoreError('فشل الاستعادة: ' + (res.error ?? '')); setRestoring(false); return; }
+    if (!res.ok) { setRestoreError(t('couriers.restoreFailed', { error: res.error ?? '' })); setRestoring(false); return; }
     setCouriers(prev => prev.map(c => c.id === restoreTarget.id ? { ...c, is_archived: false } : c));
     setRestoreTarget(null);
     setRestoring(false);
@@ -372,12 +388,13 @@ export default function CouriersPage() {
         const loc = updated.location as { lat: number; lng: number } | null;
         if (loc?.lat && loc?.lng && updated.id) {
           setAddresses(prev => ({ ...prev, [updated.id!]: '' }));
-          const addr = await reverseGeocode(loc.lat, loc.lng);
+          const addr = await reverseGeocode(loc.lat, loc.lng, lang);
           setAddresses(prev => ({ ...prev, [updated.id!]: addr }));
         }
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const activeCouriers = couriers.filter(c => !c.is_archived);
@@ -397,7 +414,7 @@ export default function CouriersPage() {
                  (c.phone_number ?? '').includes(search));
 
   return (
-    <div style={{ fontFamily: "'Tajawal', sans-serif", direction: 'rtl', color: '#0F2B4E' }}>
+    <div style={{ fontFamily: "'Tajawal', sans-serif", direction, color: '#0F2B4E' }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
         .admin-stat-card {
@@ -446,18 +463,18 @@ export default function CouriersPage() {
 
       {archiveTarget && (
         <ConfirmDialog
-          title="تأكيد حذف المندوب"
+          title={t('couriers.confirmDeleteTitle')}
           icon="🗑️"
-          message={<>هل أنت متأكد من حذف المندوب <strong>{archiveTarget.name}</strong>؟ لن يظهر في القوائم الرئيسية، ويمكن استعادته لاحقًا من سلة المحذوفات.</>}
+          message={t('couriers.confirmDeleteMessage', { name: archiveTarget.name })}
           warning={
             archiveBlock
-              ? `تعذّر الحذف: لدى هذا المندوب ${archiveBlock.activeCount} دفعة نشطة. تأكيد الحذف الآن سيتم رغم وجود دفعات نشطة.`
+              ? t('couriers.deleteBlockedWarning', { count: archiveBlock.activeCount })
               : archiveTarget.activeBatches > 0
-                ? `لدى هذا المندوب ${archiveTarget.activeBatches} دفعة نشطة حالياً.`
+                ? t('couriers.hasActiveBatchesWarning', { count: archiveTarget.activeBatches })
                 : undefined
           }
           confirmColor="#DC2626"
-          confirmLabel={archiveBlock ? 'حذف رغم الدفعات النشطة' : 'حذف'}
+          confirmLabel={archiveBlock ? t('couriers.deleteDespiteActive') : t('couriers.delete')}
           reversible
           loading={archiving}
           error={archiveError}
@@ -468,11 +485,11 @@ export default function CouriersPage() {
 
       {restoreTarget && (
         <ConfirmDialog
-          title="تأكيد استعادة المندوب"
+          title={t('couriers.confirmRestoreTitle')}
           icon="♻️"
-          message={<>هل تريد استعادة المندوب <strong>{restoreTarget.name}</strong> من سلة المحذوفات؟</>}
+          message={t('couriers.confirmRestoreMessage', { name: restoreTarget.name })}
           confirmColor="#16a34a"
-          confirmLabel="استعادة"
+          confirmLabel={t('couriers.restore')}
           reversible
           loading={restoring}
           error={restoreError}
@@ -483,15 +500,15 @@ export default function CouriersPage() {
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>المناديب</h2>
+        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{t('couriers.title')}</h2>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, color: '#64748B' }}>
             <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} />
-            تحديث تلقائي كل 15 ث
+            {t('couriers.autoRefresh15s')}
           </label>
           <button onClick={load} disabled={loading}
             style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #E2E8F0', background: '#fff', color: '#0F2B4E', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit' }}>
-            ↻ تحديث
+            ↻ {t('couriers.refresh')}
           </button>
         </div>
       </div>
@@ -500,22 +517,22 @@ export default function CouriersPage() {
       <div className="admin-stats-strip">
         {[
           {
-            label: 'الإجمالي', sub: 'إجمالي المناديب', value: counts.all,
+            label: t('couriers.stats.total'), sub: t('couriers.stats.totalSub'), value: counts.all,
             iconBg: '#eff6ff', iconColor: '#2563eb',
             icon: <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
           },
           {
-            label: 'متاح', sub: 'جاهز للتوصيل', value: counts.available,
+            label: t('couriers.status.available'), sub: t('couriers.stats.availableSub'), value: counts.available,
             iconBg: '#f0fdf4', iconColor: '#16a34a',
             icon: <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>,
           },
           {
-            label: 'في الطريق', sub: 'نشط الآن', value: counts.on_route,
+            label: t('couriers.stats.onRoute'), sub: t('couriers.stats.onRouteSub'), value: counts.on_route,
             iconBg: '#eff6ff', iconColor: '#2563eb',
             icon: <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
           },
           {
-            label: 'غير متصل', sub: 'خارج الخدمة', value: counts.offline,
+            label: t('couriers.status.offline'), sub: t('couriers.stats.offlineSub'), value: counts.offline,
             iconBg: '#f1f5f9', iconColor: '#64748b',
             icon: <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>,
           },
@@ -547,7 +564,7 @@ export default function CouriersPage() {
                 color:       active ? (cfg ? cfg.text  : '#fff')   : '#64748B',
                 cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: active ? 700 : 400,
               }}>
-              {s === 'all' ? 'الكل' : STATUS_CONFIG[s].label}
+              {s === 'all' ? t('couriers.all') : STATUS_CONFIG[s].label}
               <span style={{ marginRight: 5, fontFamily: 'monospace', opacity: 0.8 }}>{counts[s]}</span>
             </button>
           );
@@ -555,7 +572,7 @@ export default function CouriersPage() {
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="بحث بالاسم أو الهاتف أو البريد..."
+          placeholder={t('couriers.searchPlaceholder')}
           style={{
             marginRight: 'auto', padding: '6px 12px', borderRadius: 8,
             border: '1.5px solid #E2E8F0', fontSize: 12, fontFamily: 'inherit',
@@ -566,7 +583,7 @@ export default function CouriersPage() {
         {/* Deleted items (soft-deleted) — kept separate from the main status filters */}
         <button
           onClick={() => setShowArchived(v => !v)}
-          title="عرض العناصر المحذوفة"
+          title={t('couriers.showDeletedItems')}
           style={{
             display: 'flex', alignItems: 'center', gap: 5,
             padding: '5px 13px', borderRadius: 20, border: '1.5px solid',
@@ -575,7 +592,7 @@ export default function CouriersPage() {
             color:       showArchived ? '#fff' : '#64748B',
             cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: showArchived ? 700 : 400,
           }}>
-          🗑️ سلة المحذوفات
+          🗑️ {t('couriers.trashBin')}
           {archivedCount > 0 && (
             <span style={{ fontFamily: 'monospace', opacity: 0.8 }}>{archivedCount}</span>
           )}
@@ -589,22 +606,22 @@ export default function CouriersPage() {
       )}
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8', fontSize: 14 }}>جاري التحميل...</div>
+        <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8', fontSize: 14 }}>{t('couriers.loading')}</div>
       ) : visible.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8', fontSize: 14 }}>لا يوجد مناديب</div>
+        <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8', fontSize: 14 }}>{t('couriers.noCouriers')}</div>
       ) : (
         <div className="adm-scroll" style={{ overflowX: 'auto', borderRadius: 10, border: '1.5px solid #E2E8F0', background: '#fff' }}>
           <table className="adm-rtable" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                <th style={thStyle}>المندوب</th>
-                <th style={thStyle}>الحالة</th>
-                <th style={thStyle}>المنطقة الرئيسية</th>
-                <th style={thStyle}>الدفعات النشطة</th>
-                <th style={thStyle}>الطاقة</th>
-                <th style={thStyle}>ساعات اليوم</th>
-                <th style={thStyle}>آخر موقع</th>
-                <th style={{ ...thStyle, textAlign: 'center' }}>إجراءات</th>
+                <th style={thStyle}>{t('couriers.table.courier')}</th>
+                <th style={thStyle}>{t('couriers.table.status')}</th>
+                <th style={thStyle}>{t('couriers.table.homeZone')}</th>
+                <th style={thStyle}>{t('couriers.table.activeBatches')}</th>
+                <th style={thStyle}>{t('couriers.table.capacity')}</th>
+                <th style={thStyle}>{t('couriers.table.hoursToday')}</th>
+                <th style={thStyle}>{t('couriers.table.lastLocation')}</th>
+                <th style={{ ...thStyle, textAlign: 'center' }}>{t('couriers.table.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -627,7 +644,7 @@ export default function CouriersPage() {
                       onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = '#fff'; }}
                     >
                       {/* Name + vehicle badge */}
-                      <td style={tdStyle} data-label="المندوب">
+                      <td style={tdStyle} data-label={t('couriers.table.courier')}>
                         <div style={{ display: 'flex', alignItems: 'center' }}>
                           <Dot status={courier.status} />
                           <div>
@@ -647,41 +664,41 @@ export default function CouriersPage() {
                       </td>
 
                       {/* Status */}
-                      <td style={tdStyle} data-label="الحالة"><StatusBadge status={courier.status} /></td>
+                      <td style={tdStyle} data-label={t('couriers.table.status')}><StatusBadge status={courier.status} /></td>
 
                       {/* Zone */}
-                      <td style={tdStyle} data-label="المنطقة الرئيسية">
+                      <td style={tdStyle} data-label={t('couriers.table.homeZone')}>
                         {courier.home_base_zone
                           ? <span style={{ background: '#F1F5F9', color: '#0F2B4E', borderRadius: 5, padding: '2px 8px', fontSize: 12, fontWeight: 600 }}>{courier.home_base_zone}</span>
                           : <span style={{ color: '#CBD5E1' }}>—</span>}
                       </td>
 
                       {/* Active batches */}
-                      <td style={tdStyle} data-label="الدفعات النشطة">
+                      <td style={tdStyle} data-label={t('couriers.table.activeBatches')}>
                         {courier.activeBatches > 0
                           ? <span style={{ background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #93C5FD', borderRadius: 5, padding: '2px 10px', fontSize: 12, fontWeight: 700 }}>{courier.activeBatches}</span>
                           : <span style={{ color: '#CBD5E1', fontSize: 12 }}>0</span>}
                       </td>
 
                       {/* Max volume */}
-                      <td style={{ ...tdStyle, fontFamily: 'monospace' }} data-label="الطاقة">
-                        {courier.max_volume != null ? `${courier.max_volume} وحدة` : <span style={{ color: '#CBD5E1' }}>—</span>}
+                      <td style={{ ...tdStyle, fontFamily: 'monospace' }} data-label={t('couriers.table.capacity')}>
+                        {courier.max_volume != null ? t('couriers.volumeUnit', { volume: courier.max_volume }) : <span style={{ color: '#CBD5E1' }}>—</span>}
                       </td>
 
                       {/* Hours today */}
-                      <td style={tdStyle} data-label="ساعات اليوم">
+                      <td style={tdStyle} data-label={t('couriers.table.hoursToday')}>
                         <div style={{ fontFamily: 'monospace' }}>
                           {courier.hours_driven_today != null
-                            ? `${courier.hours_driven_today.toFixed(1)} س`
+                            ? t('couriers.hoursUnit', { hours: courier.hours_driven_today.toFixed(1) })
                             : <span style={{ color: '#CBD5E1' }}>—</span>}
                         </div>
                         <PerformanceBadge minutes={perfStats[courier.id]} />
                       </td>
 
                       {/* Location */}
-                      <td style={tdStyle} data-label="آخر موقع">
+                      <td style={tdStyle} data-label={t('couriers.table.lastLocation')}>
                         {!hasLoc ? (
-                          <span style={{ color: '#CBD5E1', fontSize: 12 }}>غير معروف</span>
+                          <span style={{ color: '#CBD5E1', fontSize: 12 }}>{t('couriers.unknown')}</span>
                         ) : (
                           <a href={mapsUrl} target="_blank" rel="noreferrer"
                             style={{ color: '#2563eb', textDecoration: 'none', display: 'flex', alignItems: 'flex-start', gap: 5 }}>
@@ -690,7 +707,7 @@ export default function CouriersPage() {
                             </svg>
                             <span style={{ fontSize: 12, lineHeight: 1.4 }}>
                               {addr === ''
-                                ? <span style={{ color: '#94A3B8' }}>جاري التحديد...</span>
+                                ? <span style={{ color: '#94A3B8' }}>{t('couriers.locating')}</span>
                                 : addr
                                 ? addr
                                 : <span style={{ fontFamily: 'monospace', fontSize: 11 }}>
@@ -702,13 +719,13 @@ export default function CouriersPage() {
                       </td>
 
                       {/* Actions */}
-                      <td style={{ ...tdStyle, textAlign: 'center' }} data-label="إجراءات">
+                      <td style={{ ...tdStyle, textAlign: 'center' }} data-label={t('couriers.table.actions')}>
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'center', alignItems: 'center' }}>
                           {/* Expand personal info toggle */}
                           {hasPersonal && (
                             <button
                               className={`courier-expand-btn${isExpanded ? ' active' : ''}`}
-                              title={isExpanded ? 'إخفاء المعلومات الشخصية' : 'عرض المعلومات الشخصية'}
+                              title={isExpanded ? t('couriers.hidePersonalInfo') : t('couriers.showPersonalInfo')}
                               onClick={() => setExpandedId(prev => prev === courier.id ? null : courier.id)}
                             >
                               <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -727,7 +744,7 @@ export default function CouriersPage() {
                                 setMenuPos({ top: r.bottom + 4, left: r.left });
                                 setOpenMenuId(courier.id);
                               }}
-                              title="المزيد من الإجراءات"
+                              title={t('couriers.moreActions')}
                               style={{
                                 width: 32, height: 32, borderRadius: 8,
                                 border: '1.5px solid #E2E8F0',
@@ -755,7 +772,7 @@ export default function CouriersPage() {
                                   <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                                     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                                   </svg>
-                                  إرسال رسالة
+                                  {t('couriers.sendMessage')}
                                 </button>
                                 <div style={{ height: 1, background: '#F1F5F9', margin: '2px 0' }} />
                                 {courier.is_archived ? (
@@ -764,7 +781,7 @@ export default function CouriersPage() {
                                     style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', border: 'none', background: 'none', color: '#15803D', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: 700, textAlign: 'right' }}
                                     onMouseEnter={e => (e.currentTarget.style.background = '#F0FDF4')}
                                     onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                                    <span>♻️</span> استعادة
+                                    <span>♻️</span> {t('couriers.restore')}
                                   </button>
                                 ) : (
                                   <button
@@ -772,7 +789,7 @@ export default function CouriersPage() {
                                     style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', border: 'none', background: 'none', color: '#DC2626', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: 700, textAlign: 'right' }}
                                     onMouseEnter={e => (e.currentTarget.style.background = '#FEF2F2')}
                                     onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                                    <span>🗑️</span> حذف
+                                    <span>🗑️</span> {t('couriers.delete')}
                                   </button>
                                 )}
                               </div>
@@ -787,17 +804,17 @@ export default function CouriersPage() {
                       <tr key={`${courier.id}-detail`}>
                         <td colSpan={8} style={{ padding: '0 14px 14px', background: '#F8FAFC', borderBottom: '1px solid #F1F5F9' }}>
                           <div className="courier-detail-panel">
-                            <InfoRow label="البريد الإلكتروني" value={
+                            <InfoRow label={t('couriers.detail.email')} value={
                               courier.email
                                 ? <a href={`mailto:${courier.email}`} style={{ color: '#2563eb', textDecoration: 'none' }}>{courier.email}</a>
                                 : null
                             } />
-                            <InfoRow label="رقم الهاتف" value={
+                            <InfoRow label={t('couriers.detail.phone')} value={
                               courier.phone_number
                                 ? <a href={`tel:${courier.phone_number}`} style={{ color: '#0F2B4E', textDecoration: 'none' }}>{courier.phone_number}</a>
                                 : null
                             } />
-                            <InfoRow label="نوع المركبة" value={
+                            <InfoRow label={t('couriers.detail.vehicleType')} value={
                               courier.type_of_vehicle
                                 ? <span style={{ background: '#F1F5F9', color: '#334155', borderRadius: 5, padding: '2px 8px', fontSize: 12, fontWeight: 600 }}>
                                     {VEHICLE_LABELS[courier.type_of_vehicle] ?? courier.type_of_vehicle}
@@ -806,18 +823,18 @@ export default function CouriersPage() {
                             } />
                             {hasDocs && (
                               <div className="courier-detail-docs">
-                                <span style={{ fontSize: 11, color: '#94A3B8', fontWeight: 700, marginLeft: 4, alignSelf: 'flex-start', marginTop: 4 }}>الوثائق:</span>
+                                <span style={{ fontSize: 11, color: '#94A3B8', fontWeight: 700, marginLeft: 4, alignSelf: 'flex-start', marginTop: 4 }}>{t('couriers.detail.documents')}:</span>
                                 {courier.id_front_url && (
-                                  <DocImage label="💳 هوية (أمامي)" path={courier.id_front_url} bucket="delivery-applications" />
+                                  <DocImage label={`💳 ${t('couriers.detail.idFront')}`} path={courier.id_front_url} bucket="delivery-applications" />
                                 )}
                                 {courier.id_back_url && (
-                                  <DocImage label="💳 هوية (خلفي)" path={courier.id_back_url} bucket="delivery-applications" />
+                                  <DocImage label={`💳 ${t('couriers.detail.idBack')}`} path={courier.id_back_url} bucket="delivery-applications" />
                                 )}
                                 {courier.license_front_url && (
-                                  <DocImage label="🚗 رخصة (أمامي)" path={courier.license_front_url} bucket="delivery-applications" />
+                                  <DocImage label={`🚗 ${t('couriers.detail.licenseFront')}`} path={courier.license_front_url} bucket="delivery-applications" />
                                 )}
                                 {courier.license_back_url && (
-                                  <DocImage label="🚗 رخصة (خلفي)" path={courier.license_back_url} bucket="delivery-applications" />
+                                  <DocImage label={`🚗 ${t('couriers.detail.licenseBack')}`} path={courier.license_back_url} bucket="delivery-applications" />
                                 )}
                               </div>
                             )}

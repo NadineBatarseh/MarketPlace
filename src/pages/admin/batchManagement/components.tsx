@@ -169,7 +169,7 @@ export function MoveShipmentsModal({ batchId, shipmentIds, onClose, onSuccess }:
 
       {zonePairs.length > 0 && (
         <div style={{ fontSize: 12, color: '#64748B', marginBottom: 12 }}>
-          {t('batchManagement.routes')}: <strong>{zonePairs.map(p => `${p.from} ← ${p.to}`).join('، ')}</strong> · {t('batchManagement.totalSelectedVolume')}: <strong>{movingVolume}</strong> {t('batchManagement.unit')}
+          {t('batchManagement.routes')}: <strong>{zonePairs.map(p => `${p.from} ← ${p.to}`).join(', ')}</strong> · {t('batchManagement.totalSelectedVolume')}: <strong>{movingVolume}</strong> {t('batchManagement.unit')}
         </div>
       )}
 
@@ -201,7 +201,7 @@ export function MoveShipmentsModal({ batchId, shipmentIds, onClose, onSuccess }:
                   </div>
                   {!d.eligible && (
                     <div style={{ fontSize: 11, color: '#DC2626', marginTop: 3 }}>
-                      {d.blocked_reasons.map(r => BLOCKED_REASON_LABELS[r] ?? r).join('، ')}
+                      {d.blocked_reasons.map(r => BLOCKED_REASON_LABELS[r] ?? r).join(', ')}
                     </div>
                   )}
                 </div>
@@ -415,6 +415,7 @@ export function ChangeDriverModal({ batchId, batchStatus, currentCourier, courie
   batchId: string; batchStatus: string; currentCourier: { id: string; name: string } | null;
   couriers: { id: string; name: string; status: string }[]; onClose: () => void; onSuccess: () => void;
 }) {
+  const { t } = useTranslation('admin');
   const [courierId, setCourierId] = useState('');
   const [reasonCode, setReasonCode] = useState<BatchAdminReasonCode | ''>('');
   const [reason, setReason] = useState('');
@@ -440,8 +441,8 @@ export function ChangeDriverModal({ batchId, batchStatus, currentCourier, courie
     if (!res.ok) {
       setError(
         res.error_code === 'driver_already_departed'
-          ? 'السائق الحالي خرج بالفعل لتنفيذ المهمة — يلزم تأكيد ذلك أولاً'
-          : (res.error ?? 'فشل تغيير السائق'),
+          ? t('batchManagement.driverAlreadyDeparted')
+          : (res.error ?? t('batchManagement.changeDriverError')),
       );
       return;
     }
@@ -452,15 +453,17 @@ export function ChangeDriverModal({ batchId, batchStatus, currentCourier, courie
     return (
       <ConfirmDialog
         icon={driverDeparted ? '⚠️' : '🚗'}
-        title="تأكيد تغيير السائق"
+        title={t('batchManagement.confirmChangeDriverTitle')}
         message={
           driverDeparted
-            ? <>يوجد سائق معيّن (<strong>{currentCourier?.name}</strong>) أكّد خروجه لتنفيذ هذه المهمة، والتجميعة قيد التوصيل الآن. هل ما زلت متأكداً من أنك تريد تغييره إلى <strong>{newCourierName}</strong>؟</>
-            : <>هل أنت متأكد من تغيير السائق{currentCourier ? <> من <strong>{currentCourier.name}</strong></> : ''} إلى <strong>{newCourierName}</strong>؟</>
+            ? t('batchManagement.confirmChangeDriverDeparted', { currentName: currentCourier?.name, newName: newCourierName })
+            : currentCourier
+              ? t('batchManagement.confirmChangeDriverFrom', { currentName: currentCourier.name, newName: newCourierName })
+              : t('batchManagement.confirmChangeDriver', { newName: newCourierName })
         }
-        warning={driverDeparted ? 'السائق الحالي يحمل الشحنات فعلياً — تأكد من التواصل معه لتنسيق تسليم/استرجاع الشحنات قبل المتابعة.' : undefined}
-        confirmLabel="نعم، تغيير السائق"
-        cancelLabel="رجوع"
+        warning={driverDeparted ? t('batchManagement.driverDepartedWarning') : undefined}
+        confirmLabel={t('batchManagement.yesChangeDriver')}
+        cancelLabel={t('batchManagement.back')}
         confirmColor={driverDeparted ? '#DC2626' : '#15803D'}
         hideReversibilityNote
         loading={submitting}
@@ -472,25 +475,25 @@ export function ChangeDriverModal({ batchId, batchStatus, currentCourier, courie
   }
 
   return (
-    <ModalShell title={currentCourier ? 'تغيير السائق' : 'تعيين سائق'} icon="🚗" onClose={onClose} width={460}>
+    <ModalShell title={currentCourier ? t('batchManagement.changeDriverTitle') : t('batchManagement.assignDriverTitle')} icon="🚗" onClose={onClose} width={460}>
       <ErrorBox error={error} />
 
       {currentCourier && (
         <div style={{ fontSize: 12, color: '#64748B', marginBottom: 12 }}>
-          السائق الحالي: <strong style={{ color: '#0F2B4E' }}>{currentCourier.name}</strong>
+          {t('batchManagement.currentDriver')}: <strong style={{ color: '#0F2B4E' }}>{currentCourier.name}</strong>
         </div>
       )}
 
       {driverDeparted && (
         <div style={{ padding: '10px 12px', background: '#FEF2F2', border: '1.5px solid #FCA5A5', borderRadius: 8, marginBottom: 14, fontSize: 12, color: '#DC2626', fontWeight: 700 }}>
-          ⚠ السائق "{currentCourier?.name}" خرج بالفعل لتنفيذ هذه المهمة — التجميعة قيد التوصيل الآن. ستحتاج لتأكيد ذلك في الخطوة التالية.
+          ⚠ {t('batchManagement.driverDepartedNotice', { name: currentCourier?.name })}
         </div>
       )}
 
       <div style={{ marginBottom: 12 }}>
-        <label style={labelStyle}>{currentCourier ? 'السائق الجديد' : 'السائق'} *</label>
+        <label style={labelStyle}>{currentCourier ? t('batchManagement.newDriver') : t('batchManagement.driver')} *</label>
         <select value={courierId} onChange={e => setCourierId(e.target.value)} style={inputStyle}>
-          <option value="">اختر سائقاً...</option>
+          <option value="">{t('batchManagement.chooseDriver')}</option>
           {couriers.filter(c => c.id !== currentCourier?.id).map(c => (
             <option key={c.id} value={c.id}>{c.name} {c.status !== 'available' ? `(${c.status})` : ''}</option>
           ))}
@@ -500,7 +503,7 @@ export function ChangeDriverModal({ batchId, batchStatus, currentCourier, courie
       <ReasonFields reasonCode={reasonCode} setReasonCode={setReasonCode} reason={reason} setReason={setReason} notes={notes} setNotes={setNotes} />
 
       <ActionButtons onCancel={onClose} onConfirm={() => setShowConfirm(true)} loading={false}
-        confirmLabel="متابعة"
+        confirmLabel={t('batchManagement.continue')}
         disabled={!courierId || !reasonCode || !reason.trim()} />
     </ModalShell>
   );

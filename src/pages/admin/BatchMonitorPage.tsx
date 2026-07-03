@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import supabase from '../../lib/supabase';
+import { useLanguage } from '../../context/LanguageContext';
 import {
   fetchAdminBatches, fetchAdminBatchDetail, fetchBreakdownCases,
   type AdminBatchListRow, type AdminBatchDetail, type AdminShipmentDetail, type AuditLogEntry,
@@ -22,39 +25,45 @@ interface UnbatchedShipment {
   urgency_score: number;
 }
 
-const STATUS_LABELS: Record<BatchStatus, string> = {
-  pending_assignment: 'بانتظار السائق',
-  assigned: 'تم التعيين',
-  in_transit: 'في الطريق',
-  completed: 'مكتمل',
-  cancelled: 'ملغي',
-};
+function getStatusLabels(t: TFunction): Record<BatchStatus, string> {
+  return {
+    pending_assignment: t('batchMonitor.status.pending_assignment'),
+    assigned: t('batchMonitor.status.assigned'),
+    in_transit: t('batchMonitor.status.in_transit'),
+    completed: t('batchMonitor.status.completed'),
+    cancelled: t('batchMonitor.status.cancelled'),
+  };
+}
 
-const SHIPMENT_STATUS_LABELS: Record<string, string> = {
-  pending: 'قيد التحضير',
-  available: 'متاحة',
-  delayed: 'متأخرة',
-  batched: 'مجمّعة (بانتظار الاستلام)',
-  reserved: 'محجوزة (بانتظار الاستلام)',
-  picked_up: 'مع السائق',
-  delivered: 'تم التوصيل',
-  stranded: 'تتطلب معالجة يدوية',
-  claimed: 'محجوزة',
-  in_transit: 'في الطريق',
-  cancelled: 'ملغية',
-};
+function getShipmentStatusLabels(t: TFunction): Record<string, string> {
+  return {
+    pending: t('batchMonitor.shipmentStatus.pending'),
+    available: t('batchMonitor.shipmentStatus.available'),
+    delayed: t('batchMonitor.shipmentStatus.delayed'),
+    batched: t('batchMonitor.shipmentStatus.batched'),
+    reserved: t('batchMonitor.shipmentStatus.reserved'),
+    picked_up: t('batchMonitor.shipmentStatus.picked_up'),
+    delivered: t('batchMonitor.shipmentStatus.delivered'),
+    stranded: t('batchMonitor.shipmentStatus.stranded'),
+    claimed: t('batchMonitor.shipmentStatus.claimed'),
+    in_transit: t('batchMonitor.shipmentStatus.in_transit'),
+    cancelled: t('batchMonitor.shipmentStatus.cancelled'),
+  };
+}
 
-const ACTION_TYPE_LABELS: Record<string, string> = {
-  move_shipment: 'نقل شحنة',
-  move_shipments_bulk: 'نقل عدة شحنات',
-  remove_shipment: 'إزالة شحنة وإعادتها للمتاح',
-  update_estimated_time: 'تحديث وقت الإنجاز المتوقع',
-  add_note: 'إضافة ملاحظة',
-  mark_under_monitoring: 'وضع تحت المراقبة',
-  escalate_manual_intervention: 'تصعيد لمعالجة يدوية',
-  resolve_breakdown: 'معالجة عطل',
-  change_driver: 'تغيير السائق',
-};
+function getActionTypeLabels(t: TFunction): Record<string, string> {
+  return {
+    move_shipment: t('batchMonitor.actionType.move_shipment'),
+    move_shipments_bulk: t('batchMonitor.actionType.move_shipments_bulk'),
+    remove_shipment: t('batchMonitor.actionType.remove_shipment'),
+    update_estimated_time: t('batchMonitor.actionType.update_estimated_time'),
+    add_note: t('batchMonitor.actionType.add_note'),
+    mark_under_monitoring: t('batchMonitor.actionType.mark_under_monitoring'),
+    escalate_manual_intervention: t('batchMonitor.actionType.escalate_manual_intervention'),
+    resolve_breakdown: t('batchMonitor.actionType.resolve_breakdown'),
+    change_driver: t('batchMonitor.actionType.change_driver'),
+  };
+}
 
 const STATUS_STYLE: Record<BatchStatus, { bg: string; text: string; border: string }> = {
   pending_assignment: { bg: '#FFF7ED', text: '#C2410C', border: '#FDBA74' },
@@ -66,9 +75,9 @@ const STATUS_STYLE: Record<BatchStatus, { bg: string; text: string; border: stri
 
 const ALL_STATUSES: BatchStatus[] = ['pending_assignment', 'assigned', 'in_transit', 'completed', 'cancelled'];
 
-function formatDate(iso: string | null) {
+function formatDate(iso: string | null, numLocale: string) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleString('ar-EG');
+  return new Date(iso).toLocaleString(numLocale);
 }
 
 function Detail({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
@@ -105,9 +114,10 @@ const thStyle: React.CSSProperties = {
 const tdStyle: React.CSSProperties = {
   padding: '7px 10px', color: '#0F2B4E', fontSize: 12, verticalAlign: 'middle', textAlign: 'right', borderBottom: '1px solid #F1F5F9',
 };
+// direction is inherited from the page root, which sets it dynamically per language.
 const inputStyle: React.CSSProperties = {
   padding: '6px 9px', borderRadius: 7, border: '1.5px solid #E2E8F0', background: '#fff',
-  fontSize: 12, fontFamily: 'inherit', color: '#0F2B4E', direction: 'rtl',
+  fontSize: 12, fontFamily: 'inherit', color: '#0F2B4E',
 };
 const actionBtnStyle = (color: string): React.CSSProperties => ({
   padding: '6px 12px', borderRadius: 7, border: `1.5px solid ${color}55`, background: `${color}14`,
@@ -115,6 +125,11 @@ const actionBtnStyle = (color: string): React.CSSProperties => ({
 });
 
 export default function BatchMonitorPage() {
+  const { t } = useTranslation('admin');
+  const { direction, lang } = useLanguage();
+  const numLocale = lang === 'ar' ? 'ar-EG' : 'en-US';
+  const STATUS_LABELS = getStatusLabels(t);
+  const SHIPMENT_STATUS_LABELS = getShipmentStatusLabels(t);
   const [tab, setTab] = useState<'batches' | 'breakdowns'>('batches');
 
   // ── Filters ──
@@ -180,10 +195,10 @@ export default function BatchMonitorPage() {
     setLoading(true);
     setError('');
     const [res] = await Promise.all([fetchAdminBatches(filters), loadUnbatched()]);
-    if (!res.ok) setError('تعذّر تحميل البيانات: ' + (res.error ?? ''));
+    if (!res.ok) setError(t('batchMonitor.loadDataError', { error: res.error ?? '' }));
     else setBatches(res.batches ?? []);
     setLoading(false);
-  }, [filters, loadUnbatched]);
+  }, [filters, loadUnbatched, t]);
 
   const loadBreakdowns = useCallback(async () => {
     setLoadingBreakdowns(true);
@@ -281,15 +296,15 @@ export default function BatchMonitorPage() {
       });
       const json = await res.json();
       if (json.success) {
-        setAddShipmentMsg(prev => ({ ...prev, [batch.id]: `✓ تمت إضافة ${selected.length} شحنة للتجميعة` }));
+        setAddShipmentMsg(prev => ({ ...prev, [batch.id]: `✓ ${t('batchMonitor.shipmentsAdded', { count: selected.length })}` }));
         setPhase8Selected(prev => ({ ...prev, [batch.id]: new Set() }));
         await loadBatches();
         await loadCompatibleShipments(batch);
       } else {
-        setAddShipmentMsg(prev => ({ ...prev, [batch.id]: '✗ تعذّرت الإضافة — السائق وصل للمنطقة أو لا توجد سعة كافية أو وقت غير كافٍ' }));
+        setAddShipmentMsg(prev => ({ ...prev, [batch.id]: `✗ ${t('batchMonitor.addShipmentsFailed')}` }));
       }
     } catch {
-      setAddShipmentMsg(prev => ({ ...prev, [batch.id]: '✗ تعذّر الاتصال بالخادم' }));
+      setAddShipmentMsg(prev => ({ ...prev, [batch.id]: `✗ ${t('batchMonitor.connectionError')}` }));
     }
 
     setAddingShipments(prev => { const next = new Set(prev); next.delete(batch.id); return next; });
@@ -312,7 +327,7 @@ export default function BatchMonitorPage() {
       .select('id');
 
     if (!courierLock?.length) {
-      setAssignMsg(prev => ({ ...prev, [batchId]: '✗ السائق غير متاح أو لديه دفعة نشطة' }));
+      setAssignMsg(prev => ({ ...prev, [batchId]: `✗ ${t('batchMonitor.driverUnavailable')}` }));
       setAssigning(prev => { const next = new Set(prev); next.delete(batchId); return next; });
       return;
     }
@@ -331,14 +346,14 @@ export default function BatchMonitorPage() {
 
     if (updateErr || !data?.length) {
       await supabase.from('couriers').update({ status: 'available' }).eq('id', courierId).eq('status', 'on_route');
-      setAssignMsg(prev => ({ ...prev, [batchId]: '✗ فشل التعيين، ربما تم تعيينه مسبقاً' }));
+      setAssignMsg(prev => ({ ...prev, [batchId]: `✗ ${t('batchMonitor.assignmentFailed')}` }));
     } else {
       await supabase.from('driver_notifications').insert({
         courier_id: courierId,
         batch_id: batchId,
         is_accepted: true,
       });
-      setAssignMsg(prev => ({ ...prev, [batchId]: '✓ تم التعيين بنجاح' }));
+      setAssignMsg(prev => ({ ...prev, [batchId]: `✓ ${t('batchMonitor.assignmentSucceeded')}` }));
       await loadBatches();
     }
 
@@ -351,10 +366,10 @@ export default function BatchMonitorPage() {
     try {
       const res = await fetch('/api/logistics/cycle', { method: 'POST' });
       const json = await res.json();
-      setCycleMsg(json.success ? '✓ اكتملت الدورة بنجاح' : '✗ ' + (json.error ?? 'فشلت الدورة'));
+      setCycleMsg(json.success ? `✓ ${t('batchMonitor.cycleSucceeded')}` : `✗ ${json.error ?? t('batchMonitor.cycleFailed')}`);
       await loadBatches();
     } catch {
-      setCycleMsg('✗ تعذّر الاتصال بالخادم');
+      setCycleMsg(`✗ ${t('batchMonitor.connectionError')}`);
     }
     setCycling(false);
     setTimeout(() => setCycleMsg(''), 5000);
@@ -370,7 +385,7 @@ export default function BatchMonitorPage() {
   }
 
   return (
-    <div style={{ fontFamily: "'Tajawal', sans-serif", direction: 'rtl', color: '#0F2B4E' }}>
+    <div style={{ fontFamily: "'Tajawal', sans-serif", direction, color: '#0F2B4E' }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');`}</style>
 
       {/* Modals */}
@@ -411,19 +426,19 @@ export default function BatchMonitorPage() {
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
-        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>إدارة التجميعات</h2>
+        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>{t('batchMonitor.title')}</h2>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 12, color: '#64748B' }}>
             <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} />
-            تحديث كل 15 ث
+            {t('batchMonitor.refreshEvery15s')}
           </label>
           <button onClick={() => { loadBatches(); if (tab === 'breakdowns') loadBreakdowns(); }} disabled={loading}
             style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #E2E8F0', background: '#fff', color: '#0F2B4E', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit' }}>
-            ↻ تحديث
+            ↻ {t('batchMonitor.refresh')}
           </button>
           <button onClick={triggerCycle} disabled={cycling}
             style={{ padding: '7px 18px', borderRadius: 7, border: 'none', background: 'linear-gradient(135deg,#F97316,#EA580C)', color: '#fff', cursor: cycling ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 700, fontFamily: 'inherit', opacity: cycling ? 0.7 : 1 }}>
-            {cycling ? '⏳ جاري التشغيل...' : '▶ تشغيل دورة التجميع'}
+            {cycling ? `⏳ ${t('batchMonitor.running')}` : `▶ ${t('batchMonitor.runCycle')}`}
           </button>
         </div>
       </div>
@@ -434,13 +449,13 @@ export default function BatchMonitorPage() {
           padding: '6px 16px', borderRadius: 20, border: '1.5px solid', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
           borderColor: tab === 'batches' ? '#0F2B4E' : '#E2E8F0', background: tab === 'batches' ? '#0F2B4E' : '#fff',
           color: tab === 'batches' ? '#fff' : '#64748B', fontWeight: tab === 'batches' ? 700 : 400,
-        }}>التجميعات</button>
+        }}>{t('batchMonitor.batchesTab')}</button>
         <button onClick={() => setTab('breakdowns')} style={{
           padding: '6px 16px', borderRadius: 20, border: '1.5px solid', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
           borderColor: tab === 'breakdowns' ? '#DC2626' : '#E2E8F0', background: tab === 'breakdowns' ? '#FEF2F2' : '#fff',
           color: tab === 'breakdowns' ? '#DC2626' : '#64748B', fontWeight: tab === 'breakdowns' ? 700 : 400,
         }}>
-          الأعطال والتدخلات المطلوبة {breakdownCount > 0 && <span style={{ fontFamily: 'monospace' }}>({breakdownCount})</span>}
+          {t('batchMonitor.breakdownsTab')} {breakdownCount > 0 && <span style={{ fontFamily: 'monospace' }}>({breakdownCount})</span>}
         </button>
       </div>
 
@@ -457,13 +472,13 @@ export default function BatchMonitorPage() {
           {/* Stats strip */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8, marginBottom: 18 }}>
             {[
-              { label: 'الإجمالي', value: batches.length, color: '#0F2B4E', bg: '#F8FAFC', border: '#E2E8F0' },
-              { label: 'بانتظار السائق', value: counts.pending_assignment, color: '#C2410C', bg: '#FFF7ED', border: '#FDBA74' },
-              { label: 'تم التعيين', value: counts.assigned, color: '#1D4ED8', bg: '#EFF6FF', border: '#93C5FD' },
-              { label: 'في الطريق', value: counts.in_transit, color: '#15803D', bg: '#F0FDF4', border: '#86EFAC' },
-              { label: 'مكتملة', value: counts.completed, color: '#475569', bg: '#F8FAFC', border: '#CBD5E1' },
-              { label: 'متأخرة', value: delayedCount, color: '#B45309', bg: '#FFFBEB', border: '#FDE68A' },
-              { label: 'بها عطل', value: breakdownCount, color: '#DC2626', bg: '#FEF2F2', border: '#FCA5A5' },
+              { label: t('batchMonitor.stats.total'), value: batches.length, color: '#0F2B4E', bg: '#F8FAFC', border: '#E2E8F0' },
+              { label: t('batchMonitor.status.pending_assignment'), value: counts.pending_assignment, color: '#C2410C', bg: '#FFF7ED', border: '#FDBA74' },
+              { label: t('batchMonitor.status.assigned'), value: counts.assigned, color: '#1D4ED8', bg: '#EFF6FF', border: '#93C5FD' },
+              { label: t('batchMonitor.status.in_transit'), value: counts.in_transit, color: '#15803D', bg: '#F0FDF4', border: '#86EFAC' },
+              { label: t('batchMonitor.stats.completed'), value: counts.completed, color: '#475569', bg: '#F8FAFC', border: '#CBD5E1' },
+              { label: t('batchMonitor.stats.delayed'), value: delayedCount, color: '#B45309', bg: '#FFFBEB', border: '#FDE68A' },
+              { label: t('batchMonitor.stats.hasBreakdown'), value: breakdownCount, color: '#DC2626', bg: '#FEF2F2', border: '#FCA5A5' },
             ].map(s => (
               <div key={s.label} style={{ background: s.bg, border: `1.5px solid ${s.border}`, borderRadius: 10, padding: '10px 0', textAlign: 'center' }}>
                 <div style={{ fontSize: 20, fontWeight: 800, color: s.color, fontFamily: 'monospace' }}>{s.value}</div>
@@ -475,50 +490,50 @@ export default function BatchMonitorPage() {
           {/* Filters */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14, padding: '12px 14px', background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: 10 }}>
             <select style={inputStyle} value={filters.status ?? ''} onChange={e => setFilters(prev => ({ ...prev, status: e.target.value || undefined }))}>
-              <option value="">كل الحالات</option>
+              <option value="">{t('batchMonitor.filters.allStatuses')}</option>
               {ALL_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
             </select>
             <select style={inputStyle} value={filters.driver_id ?? ''} onChange={e => setFilters(prev => ({ ...prev, driver_id: e.target.value || undefined }))}>
-              <option value="">كل السائقين</option>
+              <option value="">{t('batchMonitor.filters.allDrivers')}</option>
               {couriers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             <select style={inputStyle} value={filters.zone ?? ''} onChange={e => setFilters(prev => ({ ...prev, zone: e.target.value || undefined }))}>
-              <option value="">كل المناطق</option>
+              <option value="">{t('batchMonitor.filters.allZones')}</option>
               {zones.map(z => <option key={z} value={z}>{z}</option>)}
             </select>
             <select style={inputStyle} value={filters.delayed ?? ''} onChange={e => setFilters(prev => ({ ...prev, delayed: (e.target.value || undefined) as any }))}>
-              <option value="">كل حالات التأخير</option>
-              <option value="true">متأخرة فقط</option>
-              <option value="lt1h">متأخرة أقل من ساعة</option>
-              <option value="gt1h">متأخرة أكثر من ساعة</option>
-              <option value="severe">تأخير شديد (+4 ساعات)</option>
-              <option value="with_reason">تأخير بسبب مذكور</option>
-              <option value="without_reason">تأخير بدون سبب</option>
+              <option value="">{t('batchMonitor.filters.allDelayStates')}</option>
+              <option value="true">{t('batchMonitor.filters.delayedOnly')}</option>
+              <option value="lt1h">{t('batchMonitor.filters.delayedLt1h')}</option>
+              <option value="gt1h">{t('batchMonitor.filters.delayedGt1h')}</option>
+              <option value="severe">{t('batchMonitor.filters.delayedSevere')}</option>
+              <option value="with_reason">{t('batchMonitor.filters.delayedWithReason')}</option>
+              <option value="without_reason">{t('batchMonitor.filters.delayedWithoutReason')}</option>
             </select>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#64748B', cursor: 'pointer' }}>
               <input type="checkbox" checked={filters.breakdown === 'true'} onChange={e => setFilters(prev => ({ ...prev, breakdown: e.target.checked ? 'true' : undefined }))} />
-              بها عطل فقط
+              {t('batchMonitor.filters.breakdownOnly')}
             </label>
-            <input type="date" style={inputStyle} value={filters.date_from ?? ''} onChange={e => setFilters(prev => ({ ...prev, date_from: e.target.value || undefined }))} title="من تاريخ" />
-            <input type="date" style={inputStyle} value={filters.date_to ?? ''} onChange={e => setFilters(prev => ({ ...prev, date_to: e.target.value || undefined }))} title="إلى تاريخ" />
-            <input type="text" style={{ ...inputStyle, minWidth: 180 }} placeholder="رقم التجميعة أو الشحنة..." value={searchInput}
+            <input type="date" style={inputStyle} value={filters.date_from ?? ''} onChange={e => setFilters(prev => ({ ...prev, date_from: e.target.value || undefined }))} title={t('batchMonitor.filters.fromDate')} />
+            <input type="date" style={inputStyle} value={filters.date_to ?? ''} onChange={e => setFilters(prev => ({ ...prev, date_to: e.target.value || undefined }))} title={t('batchMonitor.filters.toDate')} />
+            <input type="text" style={{ ...inputStyle, minWidth: 180 }} placeholder={t('batchMonitor.filters.searchPlaceholder')} value={searchInput}
               onChange={e => setSearchInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && applySearch()} />
-            <button onClick={applySearch} style={{ ...inputStyle, cursor: 'pointer', background: '#0F2B4E', color: '#fff', border: 'none' }}>بحث</button>
+            <button onClick={applySearch} style={{ ...inputStyle, cursor: 'pointer', background: '#0F2B4E', color: '#fff', border: 'none' }}>{t('batchMonitor.filters.search')}</button>
             {(filters.status || filters.driver_id || filters.zone || filters.delayed || filters.breakdown || filters.date_from || filters.date_to || filters.q) && (
-              <button onClick={() => { setFilters({}); setSearchInput(''); }} style={{ ...inputStyle, cursor: 'pointer', color: '#DC2626' }}>إعادة ضبط</button>
+              <button onClick={() => { setFilters({}); setSearchInput(''); }} style={{ ...inputStyle, cursor: 'pointer', color: '#DC2626' }}>{t('batchMonitor.filters.reset')}</button>
             )}
           </div>
 
           {error && (
             <div style={{ padding: 14, background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 8, color: '#DC2626', marginBottom: 14, fontSize: 13 }}>{error}</div>
           )}
-          {loading && <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8', fontSize: 14 }}>جاري التحميل...</div>}
+          {loading && <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8', fontSize: 14 }}>{t('batchMonitor.loading')}</div>}
 
           {/* Unbatched individual shipment cards */}
           {!loading && unbatchedShipments.length > 0 && (
             <div style={{ marginBottom: 18 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#92400E', marginBottom: 8, letterSpacing: '0.05em' }}>
-                طرود غير مجمّعة ({unbatchedShipments.length})
+                {t('batchMonitor.unbatchedShipments', { count: unbatchedShipments.length })}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {unbatchedShipments.map(s => (
@@ -538,9 +553,9 @@ export default function BatchMonitorPage() {
                       <span style={{ fontSize: 10, color: '#94A3B8', fontFamily: 'monospace' }}>{s.shipment_number}</span>
                     </div>
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
-                      <Chip icon="📦" label="طرد مفرد" />
+                      <Chip icon="📦" label={t('batchMonitor.singleParcel')} />
                       {s.delayed_reason && <Chip icon="⚠" label={s.delayed_reason} color="red" />}
-                      <span style={{ fontSize: 10, color: '#94A3B8' }}>{formatDate(s.created_at)}</span>
+                      <span style={{ fontSize: 10, color: '#94A3B8' }}>{formatDate(s.created_at, numLocale)}</span>
                     </div>
                   </div>
                 ))}
@@ -549,7 +564,7 @@ export default function BatchMonitorPage() {
           )}
 
           {!loading && batches.length === 0 && unbatchedShipments.length === 0 && (
-            <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8', fontSize: 14 }}>لا توجد تجميعات مطابقة للفلاتر الحالية</div>
+            <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8', fontSize: 14 }}>{t('batchMonitor.noMatchingBatches')}</div>
           )}
 
           {/* Batch cards */}
@@ -579,23 +594,23 @@ export default function BatchMonitorPage() {
                               {i < batch.route.length - 1 && <span style={{ color: '#94A3B8', fontSize: 11 }}>←</span>}
                             </React.Fragment>
                           ))
-                          : <span style={{ color: '#94A3B8', fontSize: 11 }}>لا يوجد مسار</span>}
+                          : <span style={{ color: '#94A3B8', fontSize: 11 }}>{t('batchMonitor.noRoute')}</span>}
                       </div>
                       <span style={{ fontSize: 10, color: '#94A3B8', fontFamily: 'monospace' }}>{batch.batch_number}</span>
                     </div>
 
                     <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
-                      <Chip icon="📦" label={`${batch.shipment_count} شحنة`} />
+                      <Chip icon="📦" label={t('batchMonitor.shipmentCount', { count: batch.shipment_count })} />
                       <Chip icon="⚖" label={`${batch.total_volume}/${batch.max_volume}`} />
-                      <Chip icon="✅" label={`${batch.delivered_count} تم التوصيل`} color="green" />
-                      <Chip icon="🚚" label={`${batch.picked_up_count} مع السائق`} color="blue" />
-                      <Chip icon="🏬" label={`${batch.not_picked_up_count} لم يُستلم`} color="gray" />
+                      <Chip icon="✅" label={t('batchMonitor.deliveredCount', { count: batch.delivered_count })} color="green" />
+                      <Chip icon="🚚" label={t('batchMonitor.pickedUpCount', { count: batch.picked_up_count })} color="blue" />
+                      <Chip icon="🏬" label={t('batchMonitor.notPickedUpCount', { count: batch.not_picked_up_count })} color="gray" />
                       {batch.courier?.name && <Chip icon="🚗" label={batch.courier.name} color="blue" />}
-                      {batch.is_delayed && <Chip icon="⏰" label={`متأخرة ${batch.delay_minutes} د`} color="orange" />}
-                      {batch.has_active_breakdown && <Chip icon="🛑" label="عطل نشط" color="red" />}
-                      {batch.requires_manual_intervention && <Chip icon="⚠" label="تتطلب تدخل يدوي" color="red" />}
-                      {batch.under_monitoring && <Chip icon="👁" label="تحت المراقبة" color="orange" />}
-                      {batch.needs_dispatcher && <Chip icon="⚠" label="يحتاج مشرف" color="red" />}
+                      {batch.is_delayed && <Chip icon="⏰" label={t('batchMonitor.delayedMinutes', { minutes: batch.delay_minutes })} color="orange" />}
+                      {batch.has_active_breakdown && <Chip icon="🛑" label={t('batchMonitor.activeBreakdown')} color="red" />}
+                      {batch.requires_manual_intervention && <Chip icon="⚠" label={t('batchMonitor.requiresManualIntervention')} color="red" />}
+                      {batch.under_monitoring && <Chip icon="👁" label={t('batchMonitor.underMonitoring')} color="orange" />}
+                      {batch.needs_dispatcher && <Chip icon="⚠" label={t('batchMonitor.needsDispatcher')} color="red" />}
                     </div>
 
                     <span style={{ color: '#94A3B8', fontSize: 12, flexShrink: 0 }}>{isOpen ? '▲' : '▼'}</span>
@@ -605,36 +620,36 @@ export default function BatchMonitorPage() {
                   {isOpen && (
                     <div style={{ borderTop: `1px solid ${col.border}`, padding: '14px 16px', background: col.bg }}>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginBottom: 16 }}>
-                        <Detail label="المنطقة/المدينة" value={batch.zone ?? '—'} />
-                        <Detail label="تاريخ الإنشاء" value={formatDate(batch.created_at)} />
-                        <Detail label="بدء التوصيل" value={formatDate(batch.started_at)} />
-                        <Detail label="الإنجاز الفعلي" value={formatDate(batch.completed_at)} />
-                        <Detail label="الإنجاز المتوقع" value={formatDate(batch.expected_completion_at)} />
-                        <Detail label="السعة المستخدمة" value={`${batch.total_volume} / ${batch.max_volume}`} />
-                        <Detail label="المحطات" value={`${batch.stops_used} / ${batch.max_stops}`} />
+                        <Detail label={t('batchMonitor.detail.zone')} value={batch.zone ?? '—'} />
+                        <Detail label={t('batchMonitor.detail.createdAt')} value={formatDate(batch.created_at, numLocale)} />
+                        <Detail label={t('batchMonitor.detail.startedAt')} value={formatDate(batch.started_at, numLocale)} />
+                        <Detail label={t('batchMonitor.detail.actualCompletion')} value={formatDate(batch.completed_at, numLocale)} />
+                        <Detail label={t('batchMonitor.detail.expectedCompletion')} value={formatDate(batch.expected_completion_at, numLocale)} />
+                        <Detail label={t('batchMonitor.detail.capacityUsed')} value={`${batch.total_volume} / ${batch.max_volume}`} />
+                        <Detail label={t('batchMonitor.detail.stops')} value={`${batch.stops_used} / ${batch.max_stops}`} />
                         {detail?.batch.courier && (
-                          <Detail label="بيانات المركبة" value={`سعة السائق: ${detail.batch.courier.max_volume} وحدة`} />
+                          <Detail label={t('batchMonitor.detail.vehicleInfo')} value={t('batchMonitor.detail.driverCapacity', { volume: detail.batch.courier.max_volume })} />
                         )}
-                        {batch.delay_reason && <Detail label="سبب التأخير" value={batch.delay_reason} />}
-                        {batch.breakdown_reason && <Detail label="سبب العطل" value={batch.breakdown_reason} />}
+                        {batch.delay_reason && <Detail label={t('batchMonitor.detail.delayReason')} value={batch.delay_reason} />}
+                        {batch.breakdown_reason && <Detail label={t('batchMonitor.detail.breakdownReason')} value={batch.breakdown_reason} />}
                       </div>
 
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-                        <button onClick={() => setNoteModal({ batchId: batch.id })} style={actionBtnStyle('#1D4ED8')}>📝 إضافة ملاحظة</button>
-                        <button onClick={() => setTimeModal({ batchId: batch.id, current: detail?.batch.expected_completion_at ?? null })} style={actionBtnStyle('#1D4ED8')}>⏱ تحديث وقت الإنجاز</button>
+                        <button onClick={() => setNoteModal({ batchId: batch.id })} style={actionBtnStyle('#1D4ED8')}>📝 {t('batchMonitor.addNote')}</button>
+                        <button onClick={() => setTimeModal({ batchId: batch.id, current: detail?.batch.expected_completion_at ?? null })} style={actionBtnStyle('#1D4ED8')}>⏱ {t('batchMonitor.updateEta')}</button>
                         {eligibleSelected.length > 0 && (
                           <>
                             <button onClick={() => setMoveModal({ batchId: batch.id, shipmentIds: eligibleSelected.map(s => s.id) })} style={actionBtnStyle('#15803D')}>
-                              🔁 نقل {eligibleSelected.length} شحنة لتجميعة أخرى
+                              🔁 {t('batchMonitor.moveToAnotherBatch', { count: eligibleSelected.length })}
                             </button>
                             <button onClick={() => setRemoveModal({ batchId: batch.id, shipmentIds: eligibleSelected.map(s => s.id) })} style={actionBtnStyle('#DC2626')}>
-                              ↩️ إزالة {eligibleSelected.length} شحنة وإعادتها للمتاح
+                              ↩️ {t('batchMonitor.removeAndReturn', { count: eligibleSelected.length })}
                             </button>
                           </>
                         )}
                       </div>
 
-                      {isDetailLoading && <div style={{ color: '#94A3B8', fontSize: 12, padding: '10px 0', textAlign: 'center' }}>جاري تحميل تفاصيل الشحنات...</div>}
+                      {isDetailLoading && <div style={{ color: '#94A3B8', fontSize: 12, padding: '10px 0', textAlign: 'center' }}>{t('batchMonitor.loadingShipmentDetails')}</div>}
 
                       {detail && (
                         <ShipmentsTable
@@ -647,17 +662,17 @@ export default function BatchMonitorPage() {
                       {batch.status === 'in_transit' && batch.route.length >= 2 && (
                         <div style={{ marginTop: 16, padding: '14px 16px', background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: 8 }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 6 }}>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: '#15803D' }}>إضافة شحنات من {batch.route[1]} للتجميعة</div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: '#15803D' }}>{t('batchMonitor.addShipmentsFromZone', { zone: batch.route[1] })}</div>
                             {batch.estimated_minutes_to_next_zone != null && (
                               <span style={{ fontSize: 11, color: '#15803D', background: '#DCFCE7', border: '1px solid #86EFAC', borderRadius: 5, padding: '2px 8px' }}>
-                                ⏱ {batch.estimated_minutes_to_next_zone} د حتى الوصول
+                                ⏱ {t('batchMonitor.minutesToArrival', { minutes: batch.estimated_minutes_to_next_zone })}
                               </span>
                             )}
                           </div>
 
-                          {loadingCompatible.has(batch.id) && <div style={{ color: '#94A3B8', fontSize: 12 }}>جاري البحث عن شحنات متوافقة...</div>}
+                          {loadingCompatible.has(batch.id) && <div style={{ color: '#94A3B8', fontSize: 12 }}>{t('batchMonitor.searchingCompatible')}</div>}
                           {!loadingCompatible.has(batch.id) && (compatibleShipments[batch.id]?.length ?? 0) === 0 && (
-                            <div style={{ color: '#94A3B8', fontSize: 12 }}>لا توجد شحنات متاحة من {batch.route[1]}</div>
+                            <div style={{ color: '#94A3B8', fontSize: 12 }}>{t('batchMonitor.noAvailableFromZone', { zone: batch.route[1] })}</div>
                           )}
                           {!loadingCompatible.has(batch.id) && (compatibleShipments[batch.id]?.length ?? 0) > 0 && (
                             <>
@@ -674,7 +689,7 @@ export default function BatchMonitorPage() {
                               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                                 <button disabled={!(phase8Selected[batch.id]?.size) || addingShipments.has(batch.id)} onClick={() => addShipmentsToBatch(batch)}
                                   style={{ padding: '7px 18px', borderRadius: 7, border: 'none', background: (phase8Selected[batch.id]?.size) ? '#15803D' : '#CBD5E1', color: '#fff', cursor: (phase8Selected[batch.id]?.size) ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 700, fontFamily: 'inherit', opacity: addingShipments.has(batch.id) ? 0.7 : 1, whiteSpace: 'nowrap' }}>
-                                  {addingShipments.has(batch.id) ? '⏳ جاري...' : `أضف للتجميعة${(phase8Selected[batch.id]?.size) ? ` (${phase8Selected[batch.id].size})` : ''}`}
+                                  {addingShipments.has(batch.id) ? `⏳ ${t('batchMonitor.processing')}` : `${t('batchMonitor.addToBatch')}${(phase8Selected[batch.id]?.size) ? ` (${phase8Selected[batch.id].size})` : ''}`}
                                 </button>
                                 {addShipmentMsg[batch.id] && (
                                   <span style={{ fontSize: 12, color: addShipmentMsg[batch.id].startsWith('✓') ? '#15803D' : '#DC2626', fontWeight: 600 }}>{addShipmentMsg[batch.id]}</span>
@@ -692,10 +707,10 @@ export default function BatchMonitorPage() {
                         <div style={{ marginTop: 16, padding: '14px 16px', background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: 8 }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
                             <div style={{ fontSize: 12, color: '#64748B' }}>
-                              السائق المعيّن: <strong style={{ color: '#0F2B4E' }}>{batch.courier?.name ?? 'لا يوجد سائق معيّن'}</strong>
+                              {t('batchMonitor.assignedDriver')}: <strong style={{ color: '#0F2B4E' }}>{batch.courier?.name ?? t('batchMonitor.noAssignedDriver')}</strong>
                             </div>
                             <button onClick={() => setDriverModal({ batchId: batch.id })} style={actionBtnStyle('#EA580C')}>
-                              🚗 {batch.courier ? 'تغيير السائق' : 'تعيين سائق'}
+                              🚗 {batch.courier ? t('batchManagement.changeDriverTitle') : t('batchManagement.assignDriverTitle')}
                             </button>
                           </div>
                         </div>
@@ -717,32 +732,33 @@ export default function BatchMonitorPage() {
 function ShipmentsTable({ shipments, selected, onToggle }: {
   shipments: AdminShipmentDetail[]; selected: Set<string>; onToggle: (id: string) => void;
 }) {
+  const { t } = useTranslation('admin');
   if (!shipments.length) return null;
 
   function custodyChip(s: AdminShipmentDetail) {
-    if (s.delivered) return <Chip icon="✅" label="تم التوصيل" color="green" />;
-    if (s.requires_manual_handling) return <Chip icon="⚠" label="تتطلب معالجة يدوية" color="red" />;
-    if (s.in_driver_custody) return <Chip icon="🚚" label="مع السائق" color="blue" />;
-    return <Chip icon="🏬" label="لم يُستلم من المتجر" color="gray" />;
+    if (s.delivered) return <Chip icon="✅" label={t('batchMonitor.custody.delivered')} color="green" />;
+    if (s.requires_manual_handling) return <Chip icon="⚠" label={t('batchMonitor.custody.requiresManualHandling')} color="red" />;
+    if (s.in_driver_custody) return <Chip icon="🚚" label={t('batchMonitor.custody.withDriver')} color="blue" />;
+    return <Chip icon="🏬" label={t('batchMonitor.custody.notPickedUpFromStore')} color="gray" />;
   }
 
   return (
     <div>
-      <div style={{ fontSize: 11, color: '#64748B', fontWeight: 700, marginBottom: 8 }}>تفاصيل الشحنات ({shipments.length})</div>
+      <div style={{ fontSize: 11, color: '#64748B', fontWeight: 700, marginBottom: 8 }}>{t('batchMonitor.shipmentDetails', { count: shipments.length })}</div>
       <div style={{ overflowX: 'auto', borderRadius: 8, border: '1.5px solid #E2E8F0', background: '#fff' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
               <th style={{ ...thStyle, width: 30 }}></th>
-              <th style={thStyle}>الشحنة</th>
-              <th style={thStyle}>الطلب</th>
-              <th style={thStyle}>التاجر</th>
-              <th style={thStyle}>العميل</th>
-              <th style={thStyle}>من ← إلى</th>
-              <th style={thStyle}>رحلة</th>
-              <th style={thStyle}>الحجم</th>
-              <th style={thStyle}>الحالة الفعلية (الحيازة)</th>
-              <th style={thStyle}>الترتيب</th>
+              <th style={thStyle}>{t('batchMonitor.table.shipment')}</th>
+              <th style={thStyle}>{t('batchMonitor.table.order')}</th>
+              <th style={thStyle}>{t('batchMonitor.table.merchant')}</th>
+              <th style={thStyle}>{t('batchMonitor.table.customer')}</th>
+              <th style={thStyle}>{t('batchMonitor.table.fromTo')}</th>
+              <th style={thStyle}>{t('batchMonitor.table.leg')}</th>
+              <th style={thStyle}>{t('batchMonitor.table.volume')}</th>
+              <th style={thStyle}>{t('batchMonitor.table.custodyStatus')}</th>
+              <th style={thStyle}>{t('batchMonitor.table.sequence')}</th>
             </tr>
           </thead>
           <tbody>
@@ -750,14 +766,14 @@ function ShipmentsTable({ shipments, selected, onToggle }: {
               <tr key={s.id} style={{ background: '#fff' }}>
                 <td style={tdStyle}>
                   <input type="checkbox" disabled={!s.not_picked_up} checked={selected.has(s.id)} onChange={() => onToggle(s.id)}
-                    title={s.not_picked_up ? 'تحديد للنقل/الإزالة' : 'لا يمكن تحديدها — تم استلامها أو تسليمها أو تتطلب معالجة يدوية'} />
+                    title={s.not_picked_up ? t('batchMonitor.selectForMoveRemove') : t('batchMonitor.cannotSelect')} />
                 </td>
                 <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 11 }}>{s.shipment_number}</td>
                 <td style={tdStyle}>{s.order_id ? `#${s.order_id}` : '—'}</td>
                 <td style={tdStyle}>{s.merchant_name ?? '—'}</td>
                 <td style={tdStyle}>{s.customer_name ?? '—'}</td>
                 <td style={tdStyle}>{s.pickup_zone} ← {s.dropoff_zone}</td>
-                <td style={tdStyle}>{s.leg === 'ab' ? <Chip icon="①" label="أ←ب" color="blue" /> : <Chip icon="②" label="ب←ج" color="orange" />}</td>
+                <td style={tdStyle}>{s.leg === 'ab' ? <Chip icon="①" label={t('batchMonitor.legAB')} color="blue" /> : <Chip icon="②" label={t('batchMonitor.legBC')} color="orange" />}</td>
                 <td style={tdStyle}>{s.volume}</td>
                 <td style={tdStyle}>{custodyChip(s)}</td>
                 <td style={{ ...tdStyle, fontFamily: 'monospace' }}>{idx + 1}</td>
@@ -771,30 +787,34 @@ function ShipmentsTable({ shipments, selected, onToggle }: {
 }
 
 function AuditLogPanel({ entries }: { entries: AuditLogEntry[] }) {
+  const { t } = useTranslation('admin');
+  const { lang } = useLanguage();
+  const numLocale = lang === 'ar' ? 'ar-EG' : 'en-US';
+  const ACTION_TYPE_LABELS = getActionTypeLabels(t);
   return (
     <div style={{ marginTop: 16 }}>
-      <div style={{ fontSize: 11, color: '#64748B', fontWeight: 700, marginBottom: 8 }}>سجل الإجراءات الإدارية ({entries.length})</div>
+      <div style={{ fontSize: 11, color: '#64748B', fontWeight: 700, marginBottom: 8 }}>{t('batchMonitor.auditLog', { count: entries.length })}</div>
       {entries.length === 0 ? (
-        <div style={{ fontSize: 12, color: '#94A3B8' }}>لا توجد إجراءات إدارية مسجّلة على هذه التجميعة</div>
+        <div style={{ fontSize: 12, color: '#94A3B8' }}>{t('batchMonitor.noAuditEntries')}</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
           {entries.map(e => (
             <div key={e.id} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, padding: '8px 12px', fontSize: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
                 <strong style={{ color: '#0F2B4E' }}>{ACTION_TYPE_LABELS[e.action_type] ?? e.action_type}</strong>
-                <span style={{ color: '#94A3B8', fontSize: 11 }}>{formatDate(e.created_at)}</span>
+                <span style={{ color: '#94A3B8', fontSize: 11 }}>{formatDate(e.created_at, numLocale)}</span>
               </div>
               <div style={{ color: '#64748B', marginTop: 3 }}>
-                بواسطة: {e.performed_by_name ?? e.performed_by}
-                {e.reason && <> · السبب: {e.reason}</>}
+                {t('batchMonitor.performedBy')}: {e.performed_by_name ?? e.performed_by}
+                {e.reason && <> · {t('batchMonitor.reasonLabel')}: {e.reason}</>}
               </div>
               {e.action_type === 'change_driver' && e.metadata && (
                 <div style={{ color: '#64748B', marginTop: 3 }}>
                   {String((e.metadata as any).previous_courier_name ?? '—')} ← {String((e.metadata as any).new_courier_name ?? '—')}
-                  {(e.metadata as any).driver_already_departed && <span style={{ color: '#DC2626', fontWeight: 700 }}> (تم التغيير بعد خروج السائق للمهمة)</span>}
+                  {(e.metadata as any).driver_already_departed && <span style={{ color: '#DC2626', fontWeight: 700 }}> ({t('batchMonitor.changedAfterDeparture')})</span>}
                 </div>
               )}
-              {e.notes && <div style={{ color: '#94A3B8', marginTop: 3 }}>ملاحظات: {e.notes}</div>}
+              {e.notes && <div style={{ color: '#94A3B8', marginTop: 3 }}>{t('batchMonitor.notesLabel')}: {e.notes}</div>}
             </div>
           ))}
         </div>
@@ -804,8 +824,11 @@ function AuditLogPanel({ entries }: { entries: AuditLogEntry[] }) {
 }
 
 function BreakdownsPanel({ cases, loading, onResolve }: { cases: BreakdownCase[]; loading: boolean; onResolve: (c: BreakdownCase) => void }) {
-  if (loading) return <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8', fontSize: 14 }}>جاري التحميل...</div>;
-  if (cases.length === 0) return <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8', fontSize: 14 }}>لا توجد أعطال مسجّلة 🎉</div>;
+  const { t } = useTranslation('admin');
+  const { lang } = useLanguage();
+  const numLocale = lang === 'ar' ? 'ar-EG' : 'en-US';
+  if (loading) return <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8', fontSize: 14 }}>{t('batchMonitor.loading')}</div>;
+  if (cases.length === 0) return <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8', fontSize: 14 }}>{t('batchMonitor.noBreakdowns')} 🎉</div>;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -813,20 +836,20 @@ function BreakdownsPanel({ cases, loading, onResolve }: { cases: BreakdownCase[]
         <div key={c.id} style={{ background: '#fff', border: `1.5px solid ${c.is_active ? '#FCA5A5' : '#E2E8F0'}`, borderRadius: 10, padding: '14px 16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <Chip icon={c.is_active ? '🛑' : '✅'} label={c.is_active ? 'عطل نشط' : 'تمت المعالجة'} color={c.is_active ? 'red' : 'green'} />
+              <Chip icon={c.is_active ? '🛑' : '✅'} label={c.is_active ? t('batchMonitor.activeBreakdown') : t('batchMonitor.resolved')} color={c.is_active ? 'red' : 'green'} />
               <span style={{ fontFamily: 'monospace', fontSize: 11, color: '#94A3B8' }}>{c.batch_number}</span>
               <span style={{ fontSize: 12 }}>{c.route.join(' ← ')}</span>
               {c.courier?.name && <Chip icon="🚗" label={c.courier.name} color="blue" />}
             </div>
-            {c.is_active && <button onClick={() => onResolve(c)} style={actionBtnStyle('#15803D')}>🛠 معالجة العطل</button>}
+            {c.is_active && <button onClick={() => onResolve(c)} style={actionBtnStyle('#15803D')}>🛠 {t('batchMonitor.resolveBreakdown')}</button>}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, fontSize: 12, color: '#475569' }}>
-            <Detail label="وقت الإبلاغ" value={formatDate(c.breakdown_reported_at)} />
-            <Detail label="سبب العطل" value={c.breakdown_reason ?? 'لم يُذكر سبب'} />
-            <Detail label="موقع السائق وقت الإبلاغ" value={c.breakdown_location ? `${c.breakdown_location.lat.toFixed(4)}, ${c.breakdown_location.lng.toFixed(4)}` : '—'} />
-            <Detail label="شحنات لم تُستلم (أُعيدت للمتاح)" value={String(c.not_picked_up)} />
-            <Detail label="شحنات تتطلب معالجة يدوية" value={c.stranded.length ? c.stranded.map(s => s.shipment_number).join('، ') : 'لا توجد'} />
-            {!c.is_active && <Detail label="نتيجة المعالجة" value={c.breakdown_resolution ?? '—'} />}
+            <Detail label={t('batchMonitor.detail.reportedAt')} value={formatDate(c.breakdown_reported_at, numLocale)} />
+            <Detail label={t('batchMonitor.detail.breakdownReason')} value={c.breakdown_reason ?? t('batchMonitor.noReasonGiven')} />
+            <Detail label={t('batchMonitor.detail.driverLocationAtReport')} value={c.breakdown_location ? `${c.breakdown_location.lat.toFixed(4)}, ${c.breakdown_location.lng.toFixed(4)}` : '—'} />
+            <Detail label={t('batchMonitor.detail.notPickedUpReturned')} value={String(c.not_picked_up)} />
+            <Detail label={t('batchMonitor.detail.requiresManualHandling')} value={c.stranded.length ? c.stranded.map(s => s.shipment_number).join(', ') : t('batchMonitor.none')} />
+            {!c.is_active && <Detail label={t('batchMonitor.detail.resolutionOutcome')} value={c.breakdown_resolution ?? '—'} />}
           </div>
         </div>
       ))}
