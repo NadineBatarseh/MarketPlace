@@ -1196,16 +1196,26 @@ export default function DriverDashboard() {
               </svg>
               المنطقة: {zoneLabel}
             </div>
-          </div>
 
-          {/* ── حالة الدوام ── */}
-          <div className="dd-duty-card" style={{ background: dutyConfig.bg, borderColor: dutyConfig.border }}>
-            <div className="dd-duty-card-top">
-              <span className="dd-duty-card-badge" style={{ color: dutyConfig.color, borderColor: dutyConfig.border }}>
-                <span className={`dd-duty-dot${dutyStatus === 'on_route' ? ' dd-duty-dot-busy' : dutyStatus === 'offline' ? ' dd-duty-dot-off' : ''}`} />
-                {dutyConfig.badge}
-              </span>
+            {dutyStatus !== 'offline' && workSummary?.activeWorkSession && (
+              <div className="dd-shift-item">
+                <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><polyline points="12 12 16 14" />
+                </svg>
+                مدة الدوام: {formatElapsed(workSummary.activeWorkSession.startedAt, nowMs)}
+              </div>
+            )}
 
+            {dutyStatus === 'on_route' && workSummary?.activeDeliverySession && (
+              <div className="dd-shift-item">
+                <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <rect x="1" y="3" width="15" height="13" rx="2" /><path d="M16 8l4 2v5h-4V8z" /><circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" />
+                </svg>
+                مدة التوصيل: {formatElapsed(workSummary.activeDeliverySession.startedAt, nowMs)}
+              </div>
+            )}
+
+            <div className="dd-shift-duty-actions">
               {dutyStatus === 'offline' && (
                 <button
                   type="button"
@@ -1228,28 +1238,7 @@ export default function DriverDashboard() {
                   إنهاء الدوام
                 </button>
               )}
-              {dutyStatus === 'on_route' && (
-                <button type="button" className="dd-duty-toggle-btn dd-duty-toggle-busy" disabled>
-                  إنهاء الدوام
-                </button>
-              )}
             </div>
-
-            {dutyConfig.helper && <p className="dd-duty-card-helper">{dutyConfig.helper}</p>}
-
-            {dutyStatus !== 'offline' && workSummary?.activeWorkSession && (
-              <div className="dd-duty-card-timer">
-                <span className="dd-duty-card-timer-label">مدة الدوام الحالية</span>
-                <span className="dd-duty-card-timer-value">{formatElapsed(workSummary.activeWorkSession.startedAt, nowMs)}</span>
-              </div>
-            )}
-
-            {dutyStatus === 'on_route' && workSummary?.activeDeliverySession && (
-              <div className="dd-duty-card-timer">
-                <span className="dd-duty-card-timer-label">مدة التوصيل الحالية</span>
-                <span className="dd-duty-card-timer-value">{formatElapsed(workSummary.activeDeliverySession.startedAt, nowMs)}</span>
-              </div>
-            )}
 
             {staleWorkSession && (
               <div className="dd-duty-card-warning">

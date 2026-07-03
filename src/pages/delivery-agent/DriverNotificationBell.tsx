@@ -2,13 +2,21 @@ import { useState, useEffect } from 'react';
 import supabase from '../../lib/supabase';
 import { useSharedAuth } from '../../context/AuthContext';
 
+// 'assignment'   → direct offer to an available driver; accept via /accept
+// 'next_mission' → offer to an on_route driver; accept via /accept-next-mission to lock immediately
+type NotifType = 'assignment' | 'next_mission';
+
 interface PendingBatchNotification {
   notificationId: string;
   batchId: string;
+  type: NotifType;
   route: string[];
   shipmentCount: number;
   totalVolume: number;
   isAccepted: boolean;
+  // true only when is_accepted=true AND the batch is assigned to *this* driver
+  // (distinguishes "I accepted it" from "someone else accepted it")
+  assignedToMe: boolean;
 }
 
 interface AdminMessage {
@@ -26,7 +34,8 @@ interface DriverNotificationBellProps {
 
 export default function DriverNotificationBell({ driverStatus, onBatchAccepted }: DriverNotificationBellProps) {
   const { rawUser } = useSharedAuth();
-  const canAccept = driverStatus === 'available';
+  const canAcceptAssignment = driverStatus === 'available' || driverStatus === 'on_route';
+  const canAcceptNextMission = driverStatus === 'on_route';
 
   const [pendingNotifications, setPendingNotifications] = useState<PendingBatchNotification[]>([]);
   const [showNotifPanel, setShowNotifPanel]             = useState(false);
@@ -50,11 +59,11 @@ export default function DriverNotificationBell({ driverStatus, onBatchAccepted }
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'driver_notifications', filter: `courier_id=eq.${rawUser.id}` },
         async (payload) => {
-          const notifType      = (payload.new.type as string) ?? 'assignment';
+          const rawType        = (payload.new.type as string) ?? 'assignment';
           const batchId        = payload.new.batch_id as string;
           const notificationId = payload.new.id as string;
 
-          if (notifType === 'addition') {
+          if (rawType === 'addition') {
             const { data: batch } = await supabase
               .from('batches').select('batch_number, total_volume, bc_shipment_ids').eq('id', batchId).single();
             if (!batch) return;
@@ -71,18 +80,33 @@ export default function DriverNotificationBell({ driverStatus, onBatchAccepted }
             return;
           }
 
+          // Skip internal-only types that don't need a card
+          if (rawType === 'next_mission_expired') {
+            // Trigger a reload so any pre-existing next_mission card updates
+            loadPendingNotifications();
+            return;
+          }
+
+          const notifType = (rawType === 'next_mission' ? 'next_mission' : 'assignment') as NotifType;
+
           const { data: batch } = await supabase
-            .from('batches').select('route, total_volume, ab_shipment_ids').eq('id', batchId).single();
+            .from('batches').select('route, total_volume, ab_shipment_ids, assigned_to').eq('id', batchId).single();
           if (!batch) return;
+
+          const assignedToMe = (batch.assigned_to as string | null) === rawUser.id;
+
           setPendingNotifications((prev) => {
             if (prev.some((n) => n.notificationId === notificationId)) return prev;
             setUnreadCount((c) => c + 1);
             return [...prev, {
-              notificationId, batchId,
+              notificationId,
+              batchId,
+              type:          notifType,
               route:         (batch.route as string[]) ?? [],
               shipmentCount: (batch.ab_shipment_ids as string[])?.length ?? 0,
               totalVolume:   batch.total_volume ?? 0,
               isAccepted:    false,
+              assignedToMe,
             }];
           });
           setShowNotifPanel(true);
@@ -91,11 +115,26 @@ export default function DriverNotificationBell({ driverStatus, onBatchAccepted }
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'driver_notifications', filter: `courier_id=eq.${rawUser.id}` },
-        (payload) => {
+        async (payload) => {
           const notificationId = payload.new.id as string;
           const isAccepted     = payload.new.is_accepted as boolean;
+          const batchId        = payload.new.batch_id as string;
+
+          // When a next_mission notification is marked accepted, resolve whether
+          // it was accepted by this driver or by a competitor.
+          let assignedToMe = false;
+          if (isAccepted) {
+            const { data: batch } = await supabase
+              .from('batches').select('assigned_to').eq('id', batchId).maybeSingle();
+            assignedToMe = (batch?.assigned_to as string | null) === rawUser.id;
+          }
+
           setPendingNotifications((prev) =>
-            prev.map((n) => n.notificationId === notificationId ? { ...n, isAccepted } : n)
+            prev.map((n) =>
+              n.notificationId === notificationId
+                ? { ...n, isAccepted, assignedToMe }
+                : n
+            )
           );
         }
       )
@@ -125,19 +164,29 @@ export default function DriverNotificationBell({ driverStatus, onBatchAccepted }
   async function loadPendingNotifications() {
     if (!rawUser?.id) return;
     const { data: notifs } = await supabase
-      .from('driver_notifications').select('id, batch_id, is_accepted').eq('courier_id', rawUser.id);
+      .from('driver_notifications')
+      .select('id, batch_id, type, is_accepted')
+      .eq('courier_id', rawUser.id)
+      .in('type', ['assignment', 'next_mission']); // exclude internal types like next_mission_expired
+
     if (!notifs?.length) return;
     const enriched = await Promise.all(
       notifs.map(async (n) => {
         const { data: batch } = await supabase
-          .from('batches').select('route, total_volume, ab_shipment_ids').eq('id', n.batch_id).single();
+          .from('batches').select('route, total_volume, ab_shipment_ids, assigned_to').eq('id', n.batch_id).single();
+        const isAccepted   = n.is_accepted as boolean;
+        const assignedToMe = isAccepted
+          ? (batch?.assigned_to as string | null) === rawUser.id
+          : false;
         return {
           notificationId: n.id as string,
           batchId:        n.batch_id as string,
+          type:           ((n.type as string) ?? 'assignment') as NotifType,
           route:          (batch?.route as string[]) ?? [],
           shipmentCount:  (batch?.ab_shipment_ids as string[])?.length ?? 0,
           totalVolume:    batch?.total_volume ?? 0,
-          isAccepted:     n.is_accepted as boolean,
+          isAccepted,
+          assignedToMe,
         };
       })
     );
@@ -170,14 +219,11 @@ export default function DriverNotificationBell({ driverStatus, onBatchAccepted }
     setUnreadMsgCount(0);
   }
 
+  // Accept a direct assignment notification (available drivers only)
   async function handleAcceptBatch(notif: PendingBatchNotification) {
     if (!rawUser?.id) return;
-    if (!canAccept) {
-      window.alert(
-        driverStatus === 'on_route'
-          ? 'أنهِ المهمة الحالية قبل قبول مهمة جديدة.'
-          : 'ابدأ الدوام لتتمكن من قبول المهام.'
-      );
+    if (!canAcceptAssignment) {
+      window.alert('ابدأ الدوام لتتمكن من قبول المهام.');
       return;
     }
     try {
@@ -189,16 +235,13 @@ export default function DriverNotificationBell({ driverStatus, onBatchAccepted }
       const json = await res.json();
 
       if (json.success) {
-        // Won the batch — flip every other driver's notification so they see it's taken.
         await supabase.from('driver_notifications').update({ is_accepted: true }).eq('batch_id', notif.batchId);
         setPendingNotifications((prev) => prev.filter((n) => n.notificationId !== notif.notificationId));
         onBatchAccepted?.();
       } else if (res.status === 409) {
-        // Someone else already claimed it.
         await supabase.from('driver_notifications').update({ is_accepted: true }).eq('id', notif.notificationId);
         setPendingNotifications((prev) => prev.filter((n) => n.notificationId !== notif.notificationId));
       } else {
-        // Not eligible (e.g. already on_route on another batch) — leave the offer pending.
         window.alert(json.message ?? 'تعذر قبول الدفعة');
       }
     } catch {
@@ -206,8 +249,60 @@ export default function DriverNotificationBell({ driverStatus, onBatchAccepted }
     }
   }
 
-  async function handleDeclineBatch(notifId: string) {
-    await supabase.from('driver_notifications').delete().eq('id', notifId);
+  // Accept a next_mission notification (on_route drivers only).
+  // Calls /accept-next-mission which atomically locks the batch immediately.
+  async function handleAcceptNextMission(notif: PendingBatchNotification) {
+    if (!rawUser?.id) return;
+    if (!canAcceptNextMission) {
+      window.alert('يمكن حجز المهمة القادمة فقط أثناء تنفيذ مهمة حالية.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/logistics/accept-next-mission', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batch_id: notif.batchId, courier_id: rawUser.id }),
+      });
+      const json = await res.json();
+
+      if (json.success) {
+        // The server already expired all other notifications for this batch.
+        // Update local state to show "confirmed" for this card.
+        setPendingNotifications((prev) =>
+          prev.map((n) =>
+            n.notificationId === notif.notificationId
+              ? { ...n, isAccepted: true, assignedToMe: true }
+              : n
+          )
+        );
+        onBatchAccepted?.();
+      } else if (res.status === 409) {
+        // Another driver locked it first
+        setPendingNotifications((prev) =>
+          prev.map((n) =>
+            n.notificationId === notif.notificationId
+              ? { ...n, isAccepted: true, assignedToMe: false }
+              : n
+          )
+        );
+      } else {
+        window.alert(json.message ?? 'تعذر حجز المهمة القادمة');
+      }
+    } catch {
+      window.alert('تعذر الاتصال بالخادم');
+    }
+  }
+
+  async function handleDeclineNotification(notifId: string, courierId: string) {
+    try {
+      await fetch('/api/logistics/decline-notification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notification_id: notifId, courier_id: courierId }),
+      });
+    } catch {
+      // best-effort — remove from UI regardless
+    }
     setPendingNotifications((prev) => prev.filter((n) => n.notificationId !== notifId));
   }
 
@@ -220,7 +315,6 @@ export default function DriverNotificationBell({ driverStatus, onBatchAccepted }
       const ids = pendingNotifications.map((n) => n.notificationId);
       localStorage.setItem(`dd_seen_notifs_${rawUser.id}`, JSON.stringify(ids));
     }
-    // Mark unread admin messages as read when panel opens
     const unreadIds = adminMessages.filter(m => !m.read_at).map(m => m.id);
     if (unreadIds.length) markMessagesRead(unreadIds);
   }
@@ -300,35 +394,94 @@ export default function DriverNotificationBell({ driverStatus, onBatchAccepted }
             <p className="dd-notif-panel-empty">لا توجد إشعارات</p>
           )}
 
-          {[...pendingNotifications].reverse().map((notif) => (
-            <div key={notif.notificationId} className="dd-notif-panel-item">
-              <div className="dd-notif-panel-icon">
-                <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <rect x="1" y="3" width="15" height="13" rx="2" /><path d="M16 8l4 2v5h-4V8z" /><circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" />
-                </svg>
-              </div>
-              <div className="dd-notif-panel-body">
-                <p className="dd-notif-panel-title">طلب توصيل جديد</p>
-                <p className="dd-notif-panel-route">{notif.route.join(' ← ')}</p>
-                <p className="dd-notif-panel-meta">{notif.shipmentCount} شحنة · {notif.totalVolume.toFixed(0)} وحدة</p>
-                {!canAccept && !notif.isAccepted && (
-                  <p className="dd-notif-panel-meta" style={{ color: '#dc2626' }}>
-                    {driverStatus === 'on_route' ? 'أنهِ المهمة الحالية أولاً' : 'ابدأ الدوام أولاً'}
+          {[...pendingNotifications].reverse().map((notif) => {
+            const isNextMission = notif.type === 'next_mission';
+
+            return (
+              <div
+                key={notif.notificationId}
+                className="dd-notif-panel-item"
+                style={isNextMission ? { borderRight: '3px solid #7C3AED' } : undefined}
+              >
+                <div className="dd-notif-panel-icon" style={isNextMission ? { color: '#7C3AED' } : undefined}>
+                  <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <rect x="1" y="3" width="15" height="13" rx="2" /><path d="M16 8l4 2v5h-4V8z" /><circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" />
+                  </svg>
+                </div>
+                <div className="dd-notif-panel-body">
+                  {/* Title differs by type */}
+                  <p className="dd-notif-panel-title" style={isNextMission ? { color: '#7C3AED' } : undefined}>
+                    {isNextMission ? 'مهمة قادمة' : 'طلب توصيل جديد'}
                   </p>
-                )}
-                <div className="dd-notif-panel-actions">
-                  {notif.isAccepted ? (
-                    <span className="dd-notif-taken">تم القبول من سائق آخر</span>
-                  ) : (
-                    <>
-                      <button className="dd-notif-btn accept" disabled={!canAccept} onClick={() => handleAcceptBatch(notif)}>قبول</button>
-                      <button className="dd-notif-btn decline" onClick={() => handleDeclineBatch(notif.notificationId)}>رفض</button>
-                    </>
+                  <p className="dd-notif-panel-route">{notif.route.join(' ← ')}</p>
+                  <p className="dd-notif-panel-meta">{notif.shipmentCount} شحنة · {notif.totalVolume.toFixed(0)} وحدة</p>
+
+                  {/* Context hint for drivers who can't act */}
+                  {!notif.isAccepted && isNextMission && !canAcceptNextMission && (
+                    <p className="dd-notif-panel-meta" style={{ color: '#dc2626' }}>
+                      {driverStatus === 'available' ? 'هذا العرض مخصص للسائقين في رحلة حالية' : 'ابدأ الدوام أولاً'}
+                    </p>
                   )}
+                  {!notif.isAccepted && !isNextMission && !canAcceptAssignment && (
+                    <p className="dd-notif-panel-meta" style={{ color: '#dc2626' }}>
+                      ابدأ الدوام أولاً
+                    </p>
+                  )}
+
+                  <div className="dd-notif-panel-actions">
+                    {notif.isAccepted ? (
+                      notif.assignedToMe ? (
+                        // This driver won the next mission — show confirmation
+                        <span className="dd-notif-taken" style={{ color: '#7C3AED', fontWeight: 600 }}>
+                          ✓ محجوزة لك — مهمة قادمة
+                        </span>
+                      ) : (
+                        // Another driver accepted it
+                        <span className="dd-notif-taken">
+                          {isNextMission ? 'انتهت صلاحية العرض' : 'تم القبول من سائق آخر'}
+                        </span>
+                      )
+                    ) : isNextMission ? (
+                      // Next mission: reserve button (on_route only)
+                      <>
+                        <button
+                          className="dd-notif-btn accept"
+                          style={{ background: '#7C3AED', borderColor: '#7C3AED' }}
+                          disabled={!canAcceptNextMission}
+                          onClick={() => handleAcceptNextMission(notif)}
+                        >
+                          حجز المهمة القادمة
+                        </button>
+                        <button
+                          className="dd-notif-btn decline"
+                          onClick={() => handleDeclineNotification(notif.notificationId, rawUser!.id)}
+                        >
+                          رفض
+                        </button>
+                      </>
+                    ) : (
+                      // Regular assignment: accept/decline (available only)
+                      <>
+                        <button
+                          className="dd-notif-btn accept"
+                          disabled={!canAcceptAssignment}
+                          onClick={() => handleAcceptBatch(notif)}
+                        >
+                          قبول
+                        </button>
+                        <button
+                          className="dd-notif-btn decline"
+                          onClick={() => handleDeclineNotification(notif.notificationId, rawUser!.id)}
+                        >
+                          رفض
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

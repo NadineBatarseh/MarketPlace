@@ -7,7 +7,7 @@ import crypto from 'crypto';
 const router = express.Router();
 
 const SCOPES = [
-  'instagram_business_basic',
+'instagram_basic',
   'pages_show_list',
   'pages_read_engagement',
 ].join(',');

@@ -7,6 +7,7 @@ import { readBatchShipments, computeRemainingCapacity } from './phases/phase3_re
 import { planFullRoute } from './phases/phase4_planRoute.js';
 import { claimShipmentsAtomically } from './phases/phase5_claimShipments.js';
 import { assignBatch } from './driverAssignment.js';
+import { offerNextMissionToOnRouteDrivers } from './phases/phase11_nextMissionQueuing.js';
 import { computeReservedUntil } from './formulas.js';
 import { CandidateBatch, DemandFlow } from './types.js';
 import { loadConfigFromDB } from './constants.js';
@@ -117,14 +118,14 @@ async function processSingleBatch(
 
   console.log(`[Phase 5] Batch ${batchId} closed â€” route: ${routePlan.route.join(' â†’ ')}`);
 
+  const totalVolume = current.total_volume + routePlan.bc_total_volume;
+
   // Driver assignment â€” runs asynchronously, does not block the next batch
-  setTimeout(() =>
-    assignBatch(
-      batchId,
-      current.origin_lat,
-      current.origin_lng,
-      current.total_volume + routePlan.bc_total_volume
-    ), 0);
+  setTimeout(() => assignBatch(batchId, current.origin_lat, current.origin_lng, totalVolume), 0);
+
+  // Concurrently offer the batch as a next mission to on_route drivers whose
+  // current batch ends at or near the new batch's start zone (Phase 11).
+  setTimeout(() => offerNextMissionToOnRouteDrivers(batchId, current.origin_lat, current.origin_lng, totalVolume), 0);
 }
 
 // â”€â”€ Scheduler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

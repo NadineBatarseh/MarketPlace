@@ -8,9 +8,9 @@ import {
 import { Courier } from './types.js';
 import { getActiveWorkSession } from './workSessions.js';
 
-// â”€â”€ D33 â€” Score a driver against a specific batch â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Driver_Score = W_proxآ·P + W_capآ·C - W_loadآ·L
-//   P = e^(-خ» أ— distance(driver, Zone_A))
+// D33 — Score a driver against a specific batch
+// Driver_Score = W_prox·P + W_cap·C - W_load·L
+//   P = e^(-λ × distance(driver.liveGPS, Zone_A))   ← available drivers use live GPS position
 //   C = batch.total_volume / courier.max_volume
 //   L = hours_driven_today / MAX_SHIFT_HOURS
 function scoreDriver(
@@ -19,6 +19,8 @@ function scoreDriver(
   zoneALng: number,
   batchVolume: number
 ): number {
+  // Available drivers: distance is from their live GPS location to the new batch's Zone A.
+  // This is accurate because available drivers are stationary or can head directly to Zone A.
   const distKm = roadDistance(
     courier.location.lat, courier.location.lng,
     zoneALat, zoneALng
@@ -58,24 +60,23 @@ async function fetchAvailableCouriers(
     .slice(0, limit);
 }
 
-// â”€â”€ D34 â€” Atomic assignment check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── D34 — Atomic assignment for AVAILABLE drivers ───────────────────────────
 // UPDATE batches SET status='assigned' WHERE id=:id AND status='pending_assignment'
-// Returns true if this driver successfully claimed the batch.
+// Only the first caller wins. Returns false if the batch was already claimed.
 export type AtomicAssignResult =
   | { success: true }
   | {
       success: false;
-      reason: 'batch_unavailable' | 'courier_unavailable' | 'no_active_work_session' | 'driver_has_active_batch';
+      reason: 'batch_unavailable' | 'courier_unavailable' | 'no_active_work_session';
     };
 
-// Claims the batch, then flips the courier available -> on_route in the same call
-// so a driver becomes ineligible for further offers the instant they accept, not
-// when they later click "Start mission". If the courier isn't actually available
-// (already on_route from another batch), the batch claim is released.
+// Claims the batch and flips the courier available → on_route atomically so a
+// driver becomes ineligible for further offers the instant they accept, not when
+// they click "Start mission". If the courier isn't available (already on_route
+// from another batch), the batch claim is released.
 //
-// Accept is only legal while the driver is on duty (an active work session) and
-// has no other active batch — both checked up front so a stale/forced courier
-// status can't slip a batch through.
+// This path is ONLY for available drivers accepting a direct assignment.
+// On-route drivers accepting a next mission use atomicAssignNextMission instead.
 export async function atomicAssign(
   batchId: string,
   driverId: string
@@ -83,16 +84,6 @@ export async function atomicAssign(
   const activeSession = await getActiveWorkSession(driverId);
   if (!activeSession) {
     return { success: false, reason: 'no_active_work_session' };
-  }
-
-  const { count: activeBatchCount } = await supabase
-    .from('batches')
-    .select('id', { count: 'exact', head: true })
-    .eq('assigned_to', driverId)
-    .in('status', ['assigned', 'in_transit']);
-
-  if (activeBatchCount && activeBatchCount > 0) {
-    return { success: false, reason: 'driver_has_active_batch' };
   }
 
   const { data, error } = await supabase
@@ -114,32 +105,128 @@ export async function atomicAssign(
     .from('couriers')
     .update({ status: 'on_route' })
     .eq('id', driverId)
-    .eq('status', 'available')
+    .in('status', ['available', 'on_route'])
     .select('id');
 
   if (courierError || !courierLock?.length) {
+    // Roll back: driver is offline or in an unexpected state
     await supabase
       .from('batches')
       .update({ status: 'pending_assignment', assigned_to: null, assigned_at: null })
       .eq('id', batchId)
       .eq('assigned_to', driverId);
-    console.warn(`[Driver Assignment] courier ${driverId} not available — releasing batch ${batchId}`);
+    console.warn(`[Driver Assignment] courier ${driverId} not in an active state — releasing batch ${batchId}`);
     return { success: false, reason: 'courier_unavailable' };
   }
 
   return { success: true };
 }
 
-// Notify a driver by inserting into driver_notifications â€” picked up via Supabase Realtime on the dashboard.
-async function notifyDriver(courierId: string, batchId: string): Promise<void> {
+// ── Atomic assignment for ON_ROUTE drivers accepting a next mission ──────────
+// Unlike atomicAssign this does NOT require the driver to be 'available' and
+// does NOT flip their courier status (they are already on_route for their current
+// batch). It immediately locks the batch so no other driver can steal it.
+//
+// Why atomic locking is required here:
+//   Without it, two on_route drivers could both "pre-accept" the same batch and
+//   whichever finishes their current delivery first would win — a race condition
+//   that reserved_until cannot prevent because reserved_until is a shipment-level
+//   reservation timer, not a driver-assignment lock.
+export type AtomicAssignNextMissionResult =
+  | { success: true }
+  | {
+      success: false;
+      reason:
+        | 'batch_unavailable'
+        | 'courier_not_on_route'
+        | 'no_active_work_session'
+        | 'already_has_queued_mission';
+    };
+
+export async function atomicAssignNextMission(
+  batchId: string,
+  driverId: string,
+): Promise<AtomicAssignNextMissionResult> {
+  const activeSession = await getActiveWorkSession(driverId);
+  if (!activeSession) {
+    return { success: false, reason: 'no_active_work_session' };
+  }
+
+  // Only on_route drivers use this path; available drivers use atomicAssign instead.
+  const { data: courier } = await supabase
+    .from('couriers')
+    .select('status')
+    .eq('id', driverId)
+    .maybeSingle();
+
+  if (courier?.status !== 'on_route') {
+    return { success: false, reason: 'courier_not_on_route' };
+  }
+
+  // One queued next mission at a time: 'assigned' batches are next missions that
+  // are locked but not yet started (in_transit batches are the current active run).
+  const { count: alreadyQueued } = await supabase
+    .from('batches')
+    .select('id', { count: 'exact', head: true })
+    .eq('assigned_to', driverId)
+    .eq('status', 'assigned');
+
+  if (alreadyQueued && alreadyQueued > 0) {
+    return { success: false, reason: 'already_has_queued_mission' };
+  }
+
+  // Atomic claim: wins only if the batch is still pending_assignment.
+  // If two on_route drivers race, exactly one UPDATE returns a row — the other
+  // sees an empty result and returns batch_unavailable. No further locking needed.
+  const { data, error } = await supabase
+    .from('batches')
+    .update({ status: 'assigned', assigned_to: driverId, assigned_at: new Date().toISOString() })
+    .eq('id', batchId)
+    .eq('status', 'pending_assignment')
+    .select('id');
+
+  if (error) {
+    console.error('[Driver Assignment] atomicAssignNextMission error:', error.message);
+    return { success: false, reason: 'batch_unavailable' };
+  }
+  if (!Array.isArray(data) || data.length === 0) {
+    return { success: false, reason: 'batch_unavailable' };
+  }
+
+  // Mark this driver's own notification accepted so their dashboard shows confirmation.
+  await supabase
+    .from('driver_notifications')
+    .update({ is_accepted: true })
+    .eq('courier_id', driverId)
+    .eq('batch_id', batchId);
+
+  // Expire competing notifications for the same batch so other drivers see it as taken.
+  await supabase
+    .from('driver_notifications')
+    .update({ is_accepted: true })
+    .eq('batch_id', batchId)
+    .neq('courier_id', driverId);
+
+  console.log(`[Driver Assignment] Next mission ${batchId} locked for on_route courier ${driverId}`);
+  return { success: true };
+}
+
+// Notify a driver by inserting into driver_notifications — picked up via Supabase Realtime on the dashboard.
+// type 'assignment'   → available driver, normal offer; first to accept via /accept wins.
+// type 'next_mission' → on_route driver; accepting via /accept-next-mission immediately locks the batch.
+async function notifyDriver(
+  courierId: string,
+  batchId: string,
+  type: 'assignment' | 'next_mission' = 'assignment',
+): Promise<void> {
   const { error } = await supabase
     .from('driver_notifications')
-    .insert({ courier_id: courierId, batch_id: batchId, is_accepted: false });
+    .insert({ courier_id: courierId, batch_id: batchId, type, is_accepted: false });
 
   if (error) {
     console.error('[Driver Assignment] notifyDriver insert error:', error.message);
   } else {
-    console.log(`[Driver Assignment] Notifying courier ${courierId} for batch ${batchId}`);
+    console.log(`[Driver Assignment] Notifying courier ${courierId} for batch ${batchId} (${type})`);
   }
 }
 
@@ -185,9 +272,9 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// â”€â”€ Main export â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Broadcasts to top N drivers per round. First to accept wins (D34).
-// If no one accepts after MAX_ASSIGNMENT_ROUNDS â†’ flags for human dispatcher.
+// Main export — broadcasts to top N available drivers per round. First to accept wins (D34).
+// If no one accepts after MAX_ASSIGNMENT_ROUNDS → flags for human dispatcher.
+// On_route drivers are handled separately via offerNextMissionToOnRouteDrivers (Phase 11).
 export async function assignBatch(
   batchId: string,
   zoneALat: number,
@@ -209,16 +296,16 @@ export async function assignBatch(
 
     const courierIds = scored.map(s => s.courier.id);
 
-    // Broadcast simultaneously to all drivers in this round
-    await Promise.all(courierIds.map(id => notifyDriver(id, batchId)));
+    // Broadcast simultaneously to all drivers in this round with type='assignment'
+    await Promise.all(courierIds.map(id => notifyDriver(id, batchId, 'assignment')));
 
     // Wait for first acceptance
     const acceptedBy = await waitForAcceptance(batchId, courierIds, C.ASSIGNMENT_TIMEOUT_MS);
 
     if (acceptedBy) {
-      // D34 â€” atomic assignment (no-op if frontend already did it)
+      // Atomic assignment (no-op if frontend already did it via /accept)
       await atomicAssign(batchId, acceptedBy);
-      // Ensure all notifications are flipped regardless of who ran atomicAssign
+      // Flip all notifications for this batch so others see it as taken
       await supabase
         .from('driver_notifications')
         .update({ is_accepted: true })

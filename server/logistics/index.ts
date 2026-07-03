@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+﻿import { Router, Request, Response } from 'express';
 import { runBatchCycle, startBatchCycleScheduler } from './batchCycle.js';
 import { startBackgroundJobs } from './phases/phase7_backgroundJobs.js';
 import { handleBreakdown } from './phases/phase9_breakdownHandling.js';
@@ -6,7 +6,8 @@ import { tryAddShipmentsToBatch } from './phases/phase8_inTransitAdditions.js';
 import { sequenceIntraCityTasks } from './phases/phase10_intraCitySequencing.js';
 import { sequenceIntraCityTasksGoogle } from './phases/phase10_googleRouteOptimization.js';
 import { prefetchPairs } from './distanceProvider.js';
-import { atomicAssign } from './driverAssignment.js';
+import { atomicAssign, atomicAssignNextMission } from './driverAssignment.js';
+import { triggerQueuedNextMission } from './phases/phase11_nextMissionQueuing.js';
 import { autoAssignUnbatchedShipments } from './phases/phase0a_autoAssignUnbatched.js';
 import { startDeliverySession, completeDeliverySession } from './workSessions.js';
 import { supabase } from '../supabase.js';
@@ -187,16 +188,17 @@ logisticsRouter.post('/start-batch', async (req: Request, res: Response) => {
     return;
   }
 
-  // Defense-in-depth: an assigned batch should always mean the courier is on_route
-  // (set atomically in atomicAssign at accept time). Block the start if that invariant
-  // is somehow violated, instead of silently proceeding on a desynced status.
+  // A driver can start an assigned batch when they are on_route (normal case) OR
+  // available (edge case: they just completed their previous batch and triggerQueuedNextMission
+  // hasn't flipped their status back to on_route yet). In both cases the batch must
+  // be assigned to this driver so no other driver can intercept it.
   const { data: courier } = await supabase
     .from('couriers')
     .select('status')
     .eq('id', courier_id)
     .maybeSingle();
 
-  if (courier?.status !== 'on_route') {
+  if (courier?.status !== 'on_route' && courier?.status !== 'available') {
     res.status(403).json({ success: false, error: 'حالتك الحالية لا تسمح ببدء هذه المهمة — يرجى تحديث الصفحة' });
     return;
   }
@@ -213,6 +215,13 @@ logisticsRouter.post('/start-batch', async (req: Request, res: Response) => {
     res.status(409).json({ success: false, error: 'الدفعة غير موجودة أو لم تُخصص لك أو بدأت مسبقاً' });
     return;
   }
+
+  // Ensure the courier is on_route when starting any batch (covers the available-driver edge case)
+  await supabase
+    .from('couriers')
+    .update({ status: 'on_route' })
+    .eq('id', courier_id)
+    .eq('status', 'available');
 
   await startDeliverySession(courier_id, batch_id);
 
@@ -349,6 +358,27 @@ logisticsRouter.post('/deliver-shipment', async (req: Request, res: Response) =>
 
   if (count === 0) {
     await supabase.from('batches').update({ status: 'completed' }).eq('id', batch.id);
+
+    // If the driver already accepted a next mission (locked as 'assigned'), keep them
+    // on_route — triggerQueuedNextMission will confirm the lock and they can start
+    // immediately. Only reset to available when there is no locked next mission, so the
+    // regular assignment flow can offer them new batches.
+    const { count: queuedCount } = await supabase
+      .from('batches')
+      .select('id', { count: 'exact', head: true })
+      .eq('assigned_to', courier_id)
+      .eq('status', 'assigned');
+
+    if (!queuedCount || queuedCount === 0) {
+      await supabase
+        .from('couriers')
+        .update({ status: 'available' })
+        .eq('id', courier_id)
+        .eq('status', 'on_route');
+    }
+
+    void completeDeliverySession(courier_id, batch.id as string);
+    void triggerQueuedNextMission(courier_id);
   }
 
   void insertDriverTrackingEvent(shipment_id, shipment.order_detail_id as number | null, 'driver_delivered');
@@ -356,7 +386,123 @@ logisticsRouter.post('/deliver-shipment', async (req: Request, res: Response) =>
   res.json({ success: true, batch_completed: count === 0 });
 });
 
-// â”€â”€ POST /api/logistics/accept â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ POST /api/logistics/pre-accept-next-mission â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// An on_route driver pre-accepts an upcoming batch. The batch stays in
+// pending_assignment — no lock is taken until their current batch completes,
+// at which point triggerQueuedNextMission fires atomicAssign automatically.
+// Body: { batch_id, courier_id }
+logisticsRouter.post('/pre-accept-next-mission', async (req: Request, res: Response) => {
+  const { batch_id, courier_id } = req.body as { batch_id: string; courier_id: string };
+
+  if (!batch_id || !courier_id) {
+    res.status(400).json({ success: false, error: 'batch_id and courier_id are required' });
+    return;
+  }
+
+  const { data: courier } = await supabase
+    .from('couriers')
+    .select('status')
+    .eq('id', courier_id)
+    .maybeSingle();
+
+  if (courier?.status !== 'on_route') {
+    res.status(403).json({ success: false, message: 'يمكن حجز المهمة القادمة فقط أثناء تنفيذ مهمة حالية' });
+    return;
+  }
+
+  const { data: batch } = await supabase
+    .from('batches')
+    .select('id')
+    .eq('id', batch_id)
+    .eq('status', 'pending_assignment')
+    .maybeSingle();
+
+  if (!batch) {
+    res.status(409).json({ success: false, message: 'تم قبول هذه الدفعة من سائق آخر' });
+    return;
+  }
+
+  const { data: updated, error } = await supabase
+    .from('driver_notifications')
+    .update({ is_accepted: true })
+    .eq('courier_id', courier_id)
+    .eq('batch_id', batch_id)
+    .eq('type', 'next_mission')
+    .eq('is_accepted', false)
+    .select('id');
+
+  if (error || !updated?.length) {
+    res.status(404).json({ success: false, message: 'لم يتم العثور على إشعار المهمة القادمة' });
+    return;
+  }
+
+  res.json({
+    success: true,
+    message: 'تم حجز المهمة القادمة — ستُخصص لك تلقائياً فور إنهاء مهمتك الحالية',
+  });
+});
+
+/// -- POST /api/logistics/accept-next-mission ---------------------------------
+// An on_route driver accepts an upcoming batch as their confirmed next mission.
+// Unlike /pre-accept-next-mission this immediately locks the batch atomically
+// (pending_assignment -> assigned) so no other driver can steal it.
+// The driver's courier status stays on_route for their current batch.
+// Body: { batch_id, courier_id }
+logisticsRouter.post('/accept-next-mission', async (req: Request, res: Response) => {
+  const { batch_id, courier_id } = req.body as { batch_id: string; courier_id: string };
+
+  if (!batch_id || !courier_id) {
+    res.status(400).json({ success: false, error: 'batch_id and courier_id are required' });
+    return;
+  }
+
+  try {
+    const result = await atomicAssignNextMission(batch_id, courier_id);
+    if (result.success) {
+      res.json({ success: true, message: 'تم تأكيد المهمة القادمة — الدفعة محجوزة لك' });
+    } else if (result.reason === 'no_active_work_session') {
+      res.status(403).json({ success: false, message: 'يجب بدء الدوام أولاً لتتمكن من قبول مهمة' });
+    } else if (result.reason === 'courier_not_on_route') {
+      res.status(403).json({ success: false, message: 'يمكن حجز المهمة القادمة فقط أثناء تنفيذ مهمة حالية' });
+    } else if (result.reason === 'already_has_queued_mission') {
+      res.status(409).json({ success: false, message: 'لديك مهمة قادمة محجوزة بالفعل' });
+    } else {
+      res.status(409).json({ success: false, message: 'تم قبول هذه الدفعة من سائق آخر' });
+    }
+  } catch (err) {
+    console.error('[Logistics] /accept-next-mission error:', err);
+    res.status(500).json({ success: false, error: 'فشل تأكيد المهمة القادمة' });
+  }
+});
+
+// -- POST /api/logistics/decline-notification ---------------------------------
+// Driver declines a batch notification (any type). Removes it from their queue.
+// For next_mission offers the batch was never locked to this driver so no
+// rollback is needed — the batch stays pending_assignment for other drivers.
+// Body: { notification_id, courier_id }
+logisticsRouter.post('/decline-notification', async (req: Request, res: Response) => {
+  const { notification_id, courier_id } = req.body as { notification_id: string; courier_id: string };
+
+  if (!notification_id || !courier_id) {
+    res.status(400).json({ success: false, error: 'notification_id and courier_id are required' });
+    return;
+  }
+
+  const { error } = await supabase
+    .from('driver_notifications')
+    .delete()
+    .eq('id', notification_id)
+    .eq('courier_id', courier_id);
+
+  if (error) {
+    res.status(500).json({ success: false, error: 'فشل حذف الإشعار' });
+    return;
+  }
+
+  res.json({ success: true });
+});
+
+// ── POST /api/logistics/accept ───────────────────────────────────────────────
 // Courier accepts a batch â€” atomic assignment (D34)
 // Body: { batch_id, courier_id }
 logisticsRouter.post('/accept', async (req: Request, res: Response) => {
@@ -376,8 +522,8 @@ logisticsRouter.post('/accept', async (req: Request, res: Response) => {
       res.json({ success: true, message: 'تم تخصيص الدفعة لك' });
     } else if (result.reason === 'no_active_work_session') {
       res.status(403).json({ success: false, message: 'يجب بدء الدوام أولاً لتتمكن من قبول مهمة' });
-    } else if (result.reason === 'driver_has_active_batch' || result.reason === 'courier_unavailable') {
-      res.status(403).json({ success: false, message: 'أنت غير متاح حالياً أو لديك مهمة نشطة بالفعل' });
+    } else if (result.reason === 'courier_unavailable') {
+      res.status(403).json({ success: false, message: 'أنت غير متاح حالياً (offline). ابدأ الدوام أولاً.' });
     } else {
       res.status(409).json({ success: false, message: 'تم قبول هذه الدفعة من سائق آخر' });
     }

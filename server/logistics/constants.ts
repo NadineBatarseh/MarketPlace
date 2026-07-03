@@ -47,6 +47,11 @@ INTRA_CITY_MIN_TIME_BUFFER_MINUTES: 15,
   W_URG: 0.40,
 
   RESERVATION_EXTENSION_MINUTES: 120,
+
+  // ── Next-mission queuing (Phase 11) ─────────────────────────────────────────
+  // Max road distance (km) between an on_route driver's batch end zone and the
+  // new batch's start zone for the driver to receive a next_mission offer.
+  NEXT_MISSION_PROXIMITY_KM: 5,
 };
 
 // Loads all admin-configurable fields from batch_config (id = 1)
