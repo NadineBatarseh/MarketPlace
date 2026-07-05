@@ -10,6 +10,11 @@ function getServiceRoleClient() {
   return createClient(url, key);
 }
 
+function buildCaption(product: { title: string; description?: string | null; price?: number | null }): string {
+  const priceLine = product.price != null ? `السعر: ${product.price} ₪` : '';
+  return [product.title, priceLine, product.description ?? ''].filter(Boolean).join('\n\n');
+}
+
 async function assertShopOwnership(shopId: string, userId: string): Promise<void> {
   const db = getServiceRoleClient();
   const { data } = await db
@@ -321,6 +326,46 @@ export async function handleInstagramTool(
         count: rows.length,
         message: `تم حفظ ${rows.length} منتجاً كمسودة بنجاح.`,
       };
+    }
+
+    case 'instagram_publish_product': {
+      const shopId = args.shop_id as string;
+      const productId = args.product_id as string;
+      const imageUrls = args.image_urls as string[] | undefined;
+
+      if (!shopId) throw new Error('shop_id is required');
+      if (!productId) throw new Error('product_id is required');
+      if (!imageUrls?.length) throw new Error('image_urls is required and must contain at least one image');
+      if (imageUrls.length > 10) throw new Error('image_urls must contain at most 10 images');
+      if (userId) await assertShopOwnership(shopId, userId);
+
+      const db = getServiceRoleClient();
+      const { data: product, error: prodErr } = await db
+        .from('products')
+        .select('id, title, description, price, image_urls')
+        .eq('id', productId)
+        .eq('shop_id', shopId)
+        .maybeSingle();
+      if (prodErr || !product) throw new Error('Product not found for this shop.');
+
+      const ownImageUrls = new Set((product.image_urls as string[] | null) ?? []);
+      const invalidUrl = imageUrls.find((url) => !ownImageUrls.has(url));
+      if (invalidUrl) throw new Error('One or more image_urls do not belong to this product.');
+
+      const caption = (args.caption as string | undefined)?.trim() || buildCaption(product);
+
+      const { mediaId } = await client.publishProductPost(
+        imageUrls,
+        caption,
+        args.account_id as string | undefined
+      );
+
+      await db
+        .from('products')
+        .update({ instagram_published_media_id: mediaId, instagram_published_at: new Date().toISOString() })
+        .eq('id', productId);
+
+      return { success: true, media_id: mediaId, caption };
     }
 
     default:

@@ -185,3 +185,12 @@ export type MediaMetric =
   | 'total_time_watched';
 
 export type Period = 'day' | 'week' | 'days_28' | 'lifetime';
+
+export interface MediaContainerResponse {
+  id: string;
+}
+
+export interface ContainerStatusResponse {
+  id: string;
+  status_code: 'IN_PROGRESS' | 'FINISHED' | 'ERROR' | 'PUBLISHED' | 'EXPIRED';
+}

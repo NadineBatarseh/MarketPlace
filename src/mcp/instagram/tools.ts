@@ -236,6 +236,26 @@ export const INSTAGRAM_TOOLS: Tool[] = [
       required: ["shop_id"],
     },
   },
+  {
+    name: "instagram_publish_product",
+    description:
+      "Publish one of the merchant's own products to Instagram as a feed post (1 image) or carousel post (2-10 images), using a caption built from the product's title, price, and description unless a caption is provided.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        shop_id: { type: "string", description: "The merchant's shop ID." },
+        product_id: { type: "string", description: "The product ID to publish." },
+        image_urls: {
+          type: "array",
+          items: { type: "string" },
+          description: "1-10 publicly accessible HTTPS image URLs, each one of the product's own image_urls.",
+        },
+        caption: { type: "string", description: "Caption text to post. If omitted, one is generated from the product's title/price/description." },
+        account_id: { type: "string", description: "Instagram Business Account ID. Auto-detected if not provided." },
+      },
+      required: ["shop_id", "product_id", "image_urls"],
+    },
+  },
 ];
 
 export const FACEBOOK_TOOLS: Tool[] = [
