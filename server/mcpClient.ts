@@ -110,6 +110,7 @@ export async function getTools(role: string): Promise<Anthropic.Tool[]> {
   const instagramToolsByRole: Record<string, string[]> = {
     merchant: [
       "instagram_import_products",
+      "instagram_publish_product",
       "instagram_get_profile",
       "instagram_get_account_insights",
       "instagram_get_media_insights",
