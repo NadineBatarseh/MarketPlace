@@ -74,18 +74,102 @@
   font-size: 0.9rem;
 }
 
+/* ── Toolbar ── */
+.dp-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  padding: 0.6rem 0.85rem;
+  background: #fff;
+  border: 1px solid #e9ecef;
+  border-radius: 12px;
+}
+
+.dp-filter-tabs {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.dp-filter-tab {
+  background: #f5f5f7;
+  color: #555;
+  border: 1.5px solid transparent;
+  border-radius: 999px;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.dp-filter-tab:hover {
+  background: #ececef;
+}
+
+.dp-filter-tab.active {
+  background: #1a1a2e;
+  color: #fff;
+}
+
+.dp-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.dp-select-all {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #444;
+  cursor: pointer;
+  user-select: none;
+}
+
+.dp-select-all input {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+.dp-btn-delete-bulk {
+  background: #c0392b;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.18s;
+}
+
+.dp-btn-delete-bulk:hover:not(:disabled) {
+  background: #a5301f;
+}
+
+.dp-btn-delete-bulk:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* ── Grid ── */
 .dp-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 0.85rem;
 }
 
 /* ── Card ── */
 .dp-card {
   background: #fff;
   border: 1px solid #e9ecef;
-  border-radius: 14px;
+  border-radius: 12px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -139,30 +223,71 @@
   background: rgba(0,0,0,0.75);
 }
 
+/* ── Source badge ── */
+.dp-source-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.18rem 0.45rem;
+  border-radius: 6px;
+  color: #fff;
+  z-index: 1;
+  backdrop-filter: blur(4px);
+}
+
+.dp-source-instagram {
+  background: linear-gradient(135deg, #f58529, #dd2a7b, #8134af);
+}
+
+.dp-source-meta {
+  background: #0866ff;
+}
+
+/* ── Select checkbox ── */
+.dp-card-checkbox {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  background: rgba(255,255,255,0.85);
+  border-radius: 5px;
+  padding: 2px;
+  display: flex;
+  backdrop-filter: blur(4px);
+}
+
+.dp-card-checkbox input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
 /* ── Card body ── */
 .dp-card-body {
-  padding: 1rem;
+  padding: 0.7rem;
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
+  gap: 0.45rem;
   flex: 1;
 }
 
 .dp-field label {
   display: block;
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   font-weight: 600;
   color: #555;
-  margin-bottom: 0.3rem;
+  margin-bottom: 0.2rem;
 }
 
 .dp-field input,
 .dp-field textarea {
   width: 100%;
-  padding: 0.45rem 0.65rem;
+  padding: 0.35rem 0.5rem;
   border: 1.5px solid #dde1e7;
-  border-radius: 8px;
-  font-size: 0.88rem;
+  border-radius: 7px;
+  font-size: 0.8rem;
   font-family: inherit;
   color: #1a1a2e;
   background: #fafafa;
@@ -196,14 +321,14 @@
 .dp-price-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.65rem;
+  gap: 0.5rem;
 }
 
 /* ── Card actions ── */
 .dp-card-actions {
   display: flex;
-  gap: 0.6rem;
-  padding: 0.75rem 1rem;
+  gap: 0.5rem;
+  padding: 0.6rem 0.7rem;
   border-top: 1px solid #f0f0f0;
 }
 
@@ -212,9 +337,9 @@
   background: #1a1a2e;
   color: #fff;
   border: none;
-  border-radius: 8px;
-  padding: 0.55rem 0.75rem;
-  font-size: 0.88rem;
+  border-radius: 7px;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.8rem;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.18s;
@@ -233,9 +358,9 @@
   background: #fff0ee;
   color: #c0392b;
   border: 1.5px solid #f8b4a0;
-  border-radius: 8px;
-  padding: 0.55rem 0.75rem;
-  font-size: 0.88rem;
+  border-radius: 7px;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.18s;

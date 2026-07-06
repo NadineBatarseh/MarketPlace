@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import supabase from '../../lib/supabase';
+import { useMerchantAuth } from '../context/MerchantAuthContext';
 import './InstagramConnectPage.css';
 
 interface ConnectionStatus {
@@ -11,6 +12,7 @@ interface ConnectionStatus {
 type ImportStatus = 'idle' | 'importing' | 'done' | 'error';
 
 export default function InstagramConnectPage() {
+  const { refreshShop } = useMerchantAuth();
   const [status, setStatus] = useState<'loading' | 'connected' | 'disconnected' | 'error'>('loading');
   const [info, setInfo] = useState<ConnectionStatus | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
@@ -52,6 +54,7 @@ export default function InstagramConnectPage() {
       const url = new URL(window.location.href);
       url.searchParams.delete('connected');
       window.history.replaceState({}, '', url.toString());
+      refreshShop();
     }
     fetchStatus();
   }, []);
@@ -93,6 +96,7 @@ export default function InstagramConnectPage() {
       });
       setInfo(null);
       setStatus('disconnected');
+      refreshShop();
     } catch {
       setStatus('error');
     } finally {

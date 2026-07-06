@@ -4,6 +4,7 @@ import { supabase } from '../supabase.js';
 import { validateProducts } from '../metaCatalog/metaCatalogAPIValidator.js';
 import { syncProductsToMeta } from '../metaCatalog/metaCatalogAPISync.js';
 import type { ProductSyncInput, MetaCurrency } from '../metaCatalog/metaCatalogAPITypes.js';
+import { resolveMerchantMetaConnectionByShopId } from '../metaCatalog/resolveMerchantMetaConnection.js';
 
 const router = Router();
 
@@ -59,6 +60,11 @@ router.post('/sync', async (req: Request, res: Response) => {
   const shop_id = await resolveShopId(req, res);
   if (!shop_id) return;
 
+  const conn = await resolveMerchantMetaConnectionByShopId(shop_id);
+  if (!conn) {
+    return res.status(400).json({ ok: false, error: 'لم يتم ربط حساب Meta أو لم يتم اختيار كتالوج بعد. اربط حسابك من إعدادات المتجر أولاً.' });
+  }
+
   const { currency, product_ids } = req.body as {
     currency?: MetaCurrency;
     product_ids?: string[];
@@ -101,8 +107,8 @@ router.post('/sync', async (req: Request, res: Response) => {
     });
   }
 
-  // Push to Meta
-  const results = await syncProductsToMeta({ products: valid });
+  // Push to Meta via the merchant's own connected catalog
+  const results = await syncProductsToMeta({ products: valid, catalogId: conn.catalog_id, accessToken: conn.access_token });
 
   const allOk = results.every((r) => r.ok);
   const totalSynced = results.reduce((sum, r) => sum + (r.itemCount ?? 0), 0);
@@ -128,6 +134,11 @@ router.post('/sync', async (req: Request, res: Response) => {
 router.post('/product/:id/sync', async (req: Request, res: Response) => {
   const shop_id = await resolveShopId(req, res);
   if (!shop_id) return;
+
+  const conn = await resolveMerchantMetaConnectionByShopId(shop_id);
+  if (!conn) {
+    return res.status(400).json({ ok: false, error: 'لم يتم ربط حساب Meta أو لم يتم اختيار كتالوج بعد. اربط حسابك من إعدادات المتجر أولاً.' });
+  }
 
   const productId = req.params.id;
   const { currency } = req.body as { currency?: MetaCurrency };
@@ -160,7 +171,7 @@ router.post('/product/:id/sync', async (req: Request, res: Response) => {
     return res.status(400).json({ ok: false, validationFailures: failures });
   }
 
-  const [result] = await syncProductsToMeta({ products: valid });
+  const [result] = await syncProductsToMeta({ products: valid, catalogId: conn.catalog_id, accessToken: conn.access_token });
 
   return res.status(result.ok ? 200 : 500).json(result);
 });
@@ -174,6 +185,11 @@ router.post('/product/:id/sync', async (req: Request, res: Response) => {
 router.delete('/product/:id', async (req: Request, res: Response) => {
   const shop_id = await resolveShopId(req, res);
   if (!shop_id) return;
+
+  const conn = await resolveMerchantMetaConnectionByShopId(shop_id);
+  if (!conn) {
+    return res.status(400).json({ ok: false, error: 'لم يتم ربط حساب Meta أو لم يتم اختيار كتالوج بعد. اربط حسابك من إعدادات المتجر أولاً.' });
+  }
 
   const productId = req.params.id;
 
@@ -201,7 +217,7 @@ router.delete('/product/:id', async (req: Request, res: Response) => {
     deleted: true,
   };
 
-  const [result] = await syncProductsToMeta({ products: [deleteInput] });
+  const [result] = await syncProductsToMeta({ products: [deleteInput], catalogId: conn.catalog_id, accessToken: conn.access_token });
 
   return res.status(result.ok ? 200 : 500).json(result);
 });

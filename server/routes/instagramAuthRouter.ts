@@ -170,6 +170,22 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     console.log(`[instagram/callback] connected IG account ${instagramUsername ?? instagramAccountId} for user ${user.id}`);
 
+    // Keep the merchant's social-links "instagram" field in sync with the real connection
+    if (instagramUsername) {
+      const { data: shop } = await supabase
+        .from('shops')
+        .select('shop_id, merchants!inner(user_id)')
+        .eq('merchants.user_id', user.id)
+        .maybeSingle();
+
+      if (shop) {
+        await supabase
+          .from('shops')
+          .update({ instagram: `@${instagramUsername}` })
+          .eq('shop_id', shop.shop_id);
+      }
+    }
+
     // 5. Redirect merchant back to the dashboard
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
     res.redirect(`${frontendUrl}/merchant-dashboard?page=instagramConnect&connected=true`);
@@ -223,6 +239,20 @@ router.delete('/disconnect', async (req: Request, res: Response) => {
     .eq('user_id', user.id);
 
   if (delError) return res.status(500).json({ ok: false, error: delError.message });
+
+  // Keep the merchant's social-links "instagram" field in sync with the real connection
+  const { data: shop } = await supabase
+    .from('shops')
+    .select('shop_id, merchants!inner(user_id)')
+    .eq('merchants.user_id', user.id)
+    .maybeSingle();
+
+  if (shop) {
+    await supabase
+      .from('shops')
+      .update({ instagram: null })
+      .eq('shop_id', shop.shop_id);
+  }
 
   return res.json({ ok: true });
 });
