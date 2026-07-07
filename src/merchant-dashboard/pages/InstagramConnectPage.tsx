@@ -176,7 +176,7 @@ export default function InstagramConnectPage() {
               <div className="igc-account-info">
                 <span className="igc-account-label">تاريخ الربط</span>
                 <span className="igc-account-name">
-                  {new Date(info.connected_at).toLocaleDateString('ar-EG')}
+                  {new Date(info.connected_at).toLocaleDateString('ar-EG-u-nu-latn')}
                 </span>
               </div>
             )}

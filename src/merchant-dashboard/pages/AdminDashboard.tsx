@@ -202,7 +202,7 @@ export default function AdminDashboard() {
   const [typeFilter, setTypeFilter]   = useState<string>('all');
   const [showArchived, setShowArchived] = useState(false);
 
-  const today = new Date().toLocaleDateString('ar-EG', {
+  const today = new Date().toLocaleDateString('ar-EG-u-nu-latn', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
 
@@ -1412,7 +1412,7 @@ export default function AdminDashboard() {
                                     <span className="ad-batch-shop-id">{shop.shop_name}</span>
                                     <span className="ad-batch-shop-meta">
                                       {shop.order_ids.length} {shop.order_ids.length === 1 ? 'طلب' : 'طلبات'} · حجم {shop.total_volume} وحدة · جاهز{' '}
-                                      {new Date(shop.ready_time).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                                      {new Date(shop.ready_time).toLocaleTimeString('ar-EG-u-nu-latn', { hour: '2-digit', minute: '2-digit' })}
                                     </span>
                                   </div>
                                   <div className="ad-batch-shop-actions">

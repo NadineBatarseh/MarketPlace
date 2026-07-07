@@ -7,8 +7,6 @@
    lightbox-*) so the logic in ProductDetailPage.tsx stays untouched.
    ════════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Markazi+Text:wght@500;600;700&display=swap');
-
 :root {
   --pdp-green:        #0b3d2e;  /* ledger ink — headings, primary actions */
   --pdp-green-soft:   #155b44;  /* hover/pressed */
@@ -37,8 +35,8 @@
   --pdp-shadow:        0 10px 28px rgba(36, 26, 16, 0.08);
   --pdp-shadow-lg:     0 18px 48px rgba(36, 26, 16, 0.14);
 
-  --font-display: 'Markazi Text', 'IBM Plex Sans Arabic', serif;
-  --font-body: 'IBM Plex Sans Arabic', sans-serif;
+  --font-display: 'Tajawal', sans-serif;
+  --font-body: 'Tajawal', sans-serif;
 }
 
 .pdp-page {

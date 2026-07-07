@@ -384,7 +384,7 @@ export default function AdminSentMessages() {
                           </span>
                         )}
                         <span className="text-[10px] text-slate-300">
-                          {new Date(c.latestAt).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' })}
+                          {new Date(c.latestAt).toLocaleDateString('ar-EG-u-nu-latn', { month: 'short', day: 'numeric' })}
                         </span>
                       </div>
                     </div>
@@ -462,7 +462,7 @@ export default function AdminSentMessages() {
                         </div>
                         <div className={`flex items-center gap-1 mt-2 ${isMine ? 'justify-start' : 'justify-end'}`}>
                           <span className="text-[10px] text-slate-400">
-                            {new Date(msg.created_at).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                            {new Date(msg.created_at).toLocaleTimeString('ar-EG-u-nu-latn', { hour: '2-digit', minute: '2-digit' })}
                           </span>
                           {isMine && msg.read_at && (
                             <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="#136540" strokeWidth="2.5">

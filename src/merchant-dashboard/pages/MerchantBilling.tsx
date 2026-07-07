@@ -2,10 +2,18 @@ import { useState, useEffect } from 'react';
 import { useMerchantAuth } from '../context/MerchantAuthContext';
 import supabase from '../../lib/supabase';
 
-interface CustomerInfo {
-  full_name: string | null;
+// Snapshot frozen on the order at checkout (see server/routes/ordersRouter.ts).
+// This is the authoritative source for customer name/phone — it doesn't depend
+// on a profile that may not exist or may have since changed.
+interface ShippingAddress {
+  firstName: string | null;
+  lastName: string | null;
   phone: string | null;
+  email: string | null;
   address: string | null;
+  apartment: string | null;
+  city: string | null;
+  postalCode: string | null;
 }
 
 interface BillItem {
@@ -16,35 +24,35 @@ interface BillItem {
 
 interface Bill {
   id: string;
-  payment_status: string | null;
   total_price: number;
   created_at: string;
   user_id: string;
-  customer: CustomerInfo | null;
+  shipping_address: ShippingAddress | null;
   delivery_lat: number | null;
   delivery_lng: number | null;
   items: BillItem[];
 }
 
 function formatDate(iso: string) {
-  return new Intl.DateTimeFormat('ar-SA', {
+  return new Intl.DateTimeFormat('ar-SA-u-nu-latn', {
     year: 'numeric', month: 'long', day: 'numeric',
   }).format(new Date(iso));
 }
 
 function BillCard({ bill }: { bill: Bill }) {
-  const isPaid = bill.payment_status === 'paid';
-  const customerName = bill.customer?.full_name ?? `عميل #${bill.user_id.slice(0, 8)}`;
-  const phone = bill.customer?.phone;
-  const address = bill.customer?.address;
+  const fullName = [bill.shipping_address?.firstName, bill.shipping_address?.lastName]
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+  const customerName = fullName || 'عميل غير معروف';
+  const phone = bill.shipping_address?.phone || 'رقم الهاتف غير متوفر';
+  const address = bill.shipping_address?.address;
 
   return (
-    <div className={`mb-bill-card ${isPaid ? 'paid' : 'unpaid'}`}>
+    <div className="mb-bill-card paid">
       <div className="mb-bill-header">
         <div className="mb-bill-name">{customerName}</div>
-        <span className={`mb-status-badge ${isPaid ? 'paid' : 'unpaid'}`}>
-          {isPaid ? '✅ مدفوعة' : '⏳ غير مدفوعة'}
-        </span>
+        <span className="mb-status-badge paid">✅ مدفوعة</span>
       </div>
 
       <div className="mb-bill-info">
@@ -53,17 +61,15 @@ function BillCard({ bill }: { bill: Bill }) {
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
             <circle cx="12" cy="7" r="4" />
           </svg>
-          <span>{customerName}</span>
+          <span>العميل: {customerName}</span>
         </div>
 
-        {phone && (
-          <div className="mb-bill-row">
-            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.6 3.32 2 2 0 0 1 3.56 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.54a16 16 0 0 0 5.55 5.55l.92-.92a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
-            </svg>
-            <span>{phone}</span>
-          </div>
-        )}
+        <div className="mb-bill-row">
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.6 3.32 2 2 0 0 1 3.56 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.54a16 16 0 0 0 5.55 5.55l.92-.92a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+          </svg>
+          <span>الهاتف: {phone}</span>
+        </div>
 
         {address && (
           <div className="mb-bill-row">
@@ -104,7 +110,7 @@ function BillCard({ bill }: { bill: Bill }) {
           <div key={idx} className="mb-product-row">
             <span className="mb-product-name">{item.productTitle} × {item.qty}</span>
             <span className="mb-product-cost">
-              {(item.qty * item.unitPrice).toLocaleString('ar-SA')} ₪
+              {(item.qty * item.unitPrice).toLocaleString('en-US')} ₪
             </span>
           </div>
         ))}
@@ -114,7 +120,7 @@ function BillCard({ bill }: { bill: Bill }) {
 
       <div className="mb-total">
         <span className="mb-total-label">الإجمالي</span>
-        <span className="mb-total-value">{Number(bill.total_price).toLocaleString('ar-SA')} ₪</span>
+        <span className="mb-total-value">{Number(bill.total_price).toLocaleString('en-US')} ₪</span>
       </div>
     </div>
   );
@@ -123,7 +129,6 @@ function BillCard({ bill }: { bill: Bill }) {
 export default function MerchantBilling() {
   const { merchant } = useMerchantAuth();
   const [bills, setBills] = useState<Bill[]>([]);
-  const [tab, setTab] = useState<'unpaid' | 'paid'>('unpaid');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -175,37 +180,23 @@ export default function MerchantBilling() {
 
       const orderIds = Object.keys(detailsByOrder).map(Number);
 
-      // 3. Fetch order headers
+      // 4. Fetch order headers — paid only. All payments go through PayTabs; the
+      //    marketplace has no cash-on-delivery flow, so unpaid orders never belong
+      //    on this page.
       const { data: orders, error: oErr } = await supabase
         .from('orders')
-        .select('id, payment_status, total_price, created_at, user_id, delivery_lat, delivery_lng')
+        .select('id, total_price, created_at, user_id, delivery_lat, delivery_lng, shipping_address')
         .in('id', orderIds)
+        .eq('payment_status', 'paid')
         .order('created_at', { ascending: false });
       if (oErr) throw oErr;
 
-      const userIds = [...new Set((orders ?? []).map((o: any) => o.user_id as string))];
-
-      // 4. Fetch customer profiles (name, phone, address)
-      let profileMap: Record<string, CustomerInfo> = {};
-      if (userIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('id, full_name, phone, address')
-          .in('id', userIds);
-        if (profiles) {
-          for (const p of profiles as any[]) {
-            profileMap[p.id] = { full_name: p.full_name, phone: p.phone, address: p.address };
-          }
-        }
-      }
-
       const mapped: Bill[] = (orders ?? []).map((o: any) => ({
         id: o.id,
-        payment_status: o.payment_status,
         total_price: Number(o.total_price),
         created_at: o.created_at,
         user_id: o.user_id,
-        customer: profileMap[o.user_id] ?? null,
+        shipping_address: o.shipping_address ?? null,
         delivery_lat: o.delivery_lat ?? null,
         delivery_lng: o.delivery_lng ?? null,
         items: detailsByOrder[o.id] ?? [],
@@ -219,10 +210,6 @@ export default function MerchantBilling() {
     setLoading(false);
   };
 
-  const unpaid = bills.filter(b => b.payment_status !== 'paid');
-  const paid = bills.filter(b => b.payment_status === 'paid');
-  const displayed = tab === 'unpaid' ? unpaid : paid;
-
   if (loading) return <div className="mb-root"><div className="md-page-loading">جاري تحميل الفواتير...</div></div>;
   if (!merchant?.shop) return <div className="mb-root"><div className="md-page-empty">لا يوجد متجر مرتبط بحسابك.</div></div>;
 
@@ -231,32 +218,19 @@ export default function MerchantBilling() {
       <div className="mb-header">
         <h1 className="mb-title">الفواتير</h1>
         <div className="mb-tabs">
-          <button
-            type="button"
-            className={`mb-tab${tab === 'unpaid' ? ' mb-tab-active' : ''}`}
-            onClick={() => setTab('unpaid')}
-          >
-            ⏳ غير مدفوعة ({unpaid.length})
-          </button>
-          <button
-            type="button"
-            className={`mb-tab${tab === 'paid' ? ' mb-tab-active' : ''}`}
-            onClick={() => setTab('paid')}
-          >
-            ✅ مدفوعة ({paid.length})
-          </button>
+          <span className="mb-tab mb-tab-active">
+            ✅ مدفوعة ({bills.length})
+          </span>
         </div>
       </div>
 
       {error && <div className="md-page-error md-page-error--spaced">{error}</div>}
 
       <div className="mb-grid">
-        {displayed.length === 0 ? (
-          <div className="mb-empty">
-            {tab === 'unpaid' ? 'لا توجد فواتير غير مدفوعة 🎉' : 'لا توجد فواتير مدفوعة بعد'}
-          </div>
+        {bills.length === 0 ? (
+          <div className="mb-empty">لا توجد فواتير مدفوعة بعد</div>
         ) : (
-          displayed.map(bill => <BillCard key={bill.id} bill={bill} />)
+          bills.map(bill => <BillCard key={bill.id} bill={bill} />)
         )}
       </div>
     </div>

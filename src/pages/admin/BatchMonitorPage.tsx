@@ -68,7 +68,7 @@ const ALL_STATUSES: BatchStatus[] = ['pending_assignment', 'assigned', 'in_trans
 
 function formatDate(iso: string | null) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleString('ar-EG');
+  return new Date(iso).toLocaleString('ar-EG-u-nu-latn');
 }
 
 function Detail({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {

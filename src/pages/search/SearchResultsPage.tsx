@@ -4,8 +4,9 @@ import {
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import Topbar from '../../components/Topbar';
 import supabase from '../../lib/supabase';
-import { getProductBadge } from '../../lib/productBadge';
-import '../../lib/productBadge.css';
+import { useShop } from '../../context/ShopContext';
+import { useCustomerAuth } from '../../context/CustomerAuthContext';
+import ProductCard, { ProductCardSkeleton } from '../../components/ProductCard';
 import './SearchResultsPage.css';
 
 /* ═══════════════════════════════════════════════
@@ -37,7 +38,11 @@ interface Zone { id: string; name: string; }
 interface RatingData { avg: number; count: number; }
 type RatingsMap = Record<string, RatingData>;
 type SortOption = 'newest' | 'price_asc' | 'price_desc' | 'rating';
-type ViewMode   = 'grid'   | 'list';
+
+function firstImg(urls: Product['image_urls']): string | null {
+  if (!urls) return null;
+  return Array.isArray(urls) ? (urls[0] ?? null) : urls;
+}
 
 interface FilterState {
   rating4: boolean; rating3: boolean; rating5: boolean;
@@ -55,34 +60,6 @@ const INIT_FILTERS: FilterState = {
   rating4: false, rating3: false, rating5: false,
   inStock: false, outOfStock: false,
 };
-
-/* ═══════════════════════════════════════════════
-   HELPERS
-═══════════════════════════════════════════════ */
-function firstImg(urls: Product['image_urls']): string | null {
-  if (!urls) return null;
-  return Array.isArray(urls) ? (urls[0] ?? null) : urls;
-}
-
-/* ═══════════════════════════════════════════════
-   STARS
-═══════════════════════════════════════════════ */
-function Stars({ value, count }: { value: number | null; count: number }) {
-  if (value === null) return null;
-  return (
-    <span className="srp-stars">
-      {[1,2,3,4,5].map(i => (
-        <svg key={i} viewBox="0 0 20 20" width="12" height="12"
-          fill={i <= Math.round(value) ? '#f59e0b' : 'none'}
-          stroke="#f59e0b" strokeWidth="1.3">
-          <polygon points="10 1 12.94 7.26 20 8.18 15 13.13 16.18 20 10 16.77 3.82 20 5 13.13 0 8.18 7.06 7.26"/>
-        </svg>
-      ))}
-      <span className="srp-stars-val">{value.toFixed(1)}</span>
-      <span className="srp-stars-cnt">({count})</span>
-    </span>
-  );
-}
 
 /* ═══════════════════════════════════════════════
    DUAL RANGE SLIDER
@@ -280,101 +257,6 @@ function FilterPanel({
 }
 
 /* ═══════════════════════════════════════════════
-   PRODUCT CARD
-═══════════════════════════════════════════════ */
-function ProductCard({ product, rating, onView }: {
-  product: Product; rating: RatingData | null; onView: (id: string) => void;
-}) {
-  const [liked, setLiked] = useState(false);
-  const img = firstImg(product.image_urls);
-  const oos = product.stock_Quantity === 0;
-  const badge = getProductBadge(product);
-
-  return (
-    <article className="srp-card" onClick={() => onView(product.id)}>
-      {/* ── Image ── */}
-      <div className="srp-card-img">
-        {img
-          ? <img src={img} alt={product.title} className="srp-card-photo" loading="lazy" />
-          : <div className="srp-card-no-img">
-              <svg viewBox="0 0 48 48" width="48" height="48" fill="none">
-                <rect x="4" y="8" width="40" height="32" rx="4" fill="#f3f4f6"/>
-                <rect x="14" y="14" width="20" height="20" rx="3" fill="#e5e7eb"/>
-              </svg>
-            </div>
-        }
-
-        <button
-          type="button"
-          className={`srp-heart${liked ? ' srp-heart--on' : ''}`}
-          onClick={e => { e.stopPropagation(); setLiked(v => !v); }}
-          aria-label="أضف للمفضلة"
-        >
-          <svg viewBox="0 0 24 24" width="15" height="15"
-            fill={liked ? '#ef4444' : 'none'}
-            stroke={liked ? '#ef4444' : '#9ca3af'} strokeWidth="2">
-            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-          </svg>
-        </button>
-
-        {badge && <span className={`pbadge pbadge--${badge.kind}`}>{badge.text}</span>}
-      </div>
-
-      {/* ── Body ── */}
-      <div className="srp-card-body">
-        <h3 className="srp-card-name">{product.title}</h3>
-
-        <div className="srp-card-store">
-          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-          </svg>
-          {product.shops?.name ?? '—'}
-        </div>
-
-        <Stars value={rating?.avg ?? null} count={rating?.count ?? 0} />
-
-        <div className="srp-price-line" dir="ltr">
-          {product.price != null
-            ? <span className="srp-cur-price">₪{product.price.toFixed(0)}</span>
-            : <span className="srp-price-na" dir="rtl">السعر عند الطلب</span>}
-        </div>
-
-        {oos
-          ? <button type="button" className="srp-btn srp-btn--oos" disabled onClick={e => e.stopPropagation()}>
-              نفدت الكمية
-            </button>
-          : <button type="button" className="srp-btn srp-btn--add" onClick={e => e.stopPropagation()}>
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
-                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
-              </svg>
-              أضف للسلة
-            </button>
-        }
-      </div>
-    </article>
-  );
-}
-
-/* ═══════════════════════════════════════════════
-   SKELETON CARD
-═══════════════════════════════════════════════ */
-function SkeletonCard() {
-  return (
-    <div className="srp-card srp-card--skel" aria-hidden>
-      <div className="srp-card-img srp-card-img--skel srp-shimmer" />
-      <div className="srp-card-body">
-        <div className="srp-skel srp-shimmer srp-skel--name" />
-        <div className="srp-skel srp-shimmer srp-skel--store" />
-        <div className="srp-skel srp-shimmer srp-skel--rating" />
-        <div className="srp-skel srp-shimmer srp-skel--price" />
-        <div className="srp-skel srp-shimmer srp-skel--btn" />
-      </div>
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════
    EMPTY STATE
 ═══════════════════════════════════════════════ */
 function EmptyState({ onBrowse }: { onBrowse: () => void }) {
@@ -501,8 +383,24 @@ export default function SearchResultsPage() {
 
   /* ── UI state ── */
   const [sortBy, setSortBy]       = useState<SortOption>('newest');
-  const [viewMode, setViewMode]   = useState<ViewMode>('grid');
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  /* ── Cart & favorites ── */
+  const { addToCart, toggleFavorite, isFavorited } = useShop();
+  const { customer } = useCustomerAuth();
+  const isCustomer = customer?.role === 'customer';
+
+  const onAddToCart = (e: React.MouseEvent, product: Product) => {
+    if (!isCustomer) { navigate('/login'); return; }
+    const img = firstImg(product.image_urls) ?? '';
+    addToCart({ id: product.id, name: product.title, image: img, price: product.price ?? 0 });
+  };
+
+  const onToggleFavorite = (e: React.MouseEvent, product: Product) => {
+    if (!isCustomer) { navigate('/login'); return; }
+    const img = firstImg(product.image_urls) ?? '';
+    toggleFavorite({ id: product.id, name: product.title, image: img, price: product.price ?? 0 });
+  };
 
   /* ── Fetch ── */
   const fetchResults = useCallback(async () => {
@@ -632,30 +530,6 @@ export default function SearchResultsPage() {
 
             {/* Toolbar (desktop) */}
             <div className="srp-toolbar">
-              <div className="srp-view-grp">
-                <button
-                  type="button"
-                  className={`srp-view-btn${viewMode === 'grid' ? ' srp-view-btn--on' : ''}`}
-                  onClick={() => setViewMode('grid')} title="شبكة"
-                >
-                  <svg viewBox="0 0 18 18" width="14" height="14" fill="currentColor">
-                    <rect width="7" height="7" rx="1.2"/><rect x="11" width="7" height="7" rx="1.2"/>
-                    <rect y="11" width="7" height="7" rx="1.2"/><rect x="11" y="11" width="7" height="7" rx="1.2"/>
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  className={`srp-view-btn${viewMode === 'list' ? ' srp-view-btn--on' : ''}`}
-                  onClick={() => setViewMode('list')} title="قائمة"
-                >
-                  <svg viewBox="0 0 18 18" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8">
-                    <line x1="0" y1="4"  x2="18" y2="4"/>
-                    <line x1="0" y1="9"  x2="18" y2="9"/>
-                    <line x1="0" y1="14" x2="18" y2="14"/>
-                  </svg>
-                </button>
-              </div>
-
               <div className="srp-sort-grp">
                 <span className="srp-sort-lbl">ترتيب حسب</span>
                 <div className="srp-select-wrap">
@@ -703,8 +577,8 @@ export default function SearchResultsPage() {
 
             {/* Loading */}
             {loading && (
-              <div className={`srp-grid${viewMode === 'list' ? ' srp-grid--list' : ''}`}>
-                {Array.from({ length: 10 }).map((_, i) => <SkeletonCard key={i} />)}
+              <div className="srp-grid">
+                {Array.from({ length: 10 }).map((_, i) => <ProductCardSkeleton key={i} />)}
               </div>
             )}
 
@@ -732,9 +606,16 @@ export default function SearchResultsPage() {
 
             {/* Product grid */}
             {hasProducts && (
-              <div className={`srp-grid${viewMode === 'list' ? ' srp-grid--list' : ''}`}>
+              <div className="srp-grid">
                 {sorted.map(p => (
-                  <ProductCard key={p.id} product={p} rating={ratingsMap[p.id] ?? null} onView={id => navigate(`/product/${id}`)} />
+                  <ProductCard
+                    key={p.id}
+                    product={p}
+                    storeName={p.shops?.name}
+                    onAddToCart={onAddToCart}
+                    onToggleFavorite={onToggleFavorite}
+                    isFavorited={isFavorited(p.id)}
+                  />
                 ))}
               </div>
             )}

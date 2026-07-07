@@ -184,7 +184,7 @@ export default function InstagramSettingsCard() {
               {info.connected_at && (
                 <div className="igc-account-info">
                   <span className="igc-account-label">تاريخ الربط</span>
-                  <span className="igc-account-name">{new Date(info.connected_at).toLocaleDateString('ar-EG')}</span>
+                  <span className="igc-account-name">{new Date(info.connected_at).toLocaleDateString('ar-EG-u-nu-latn')}</span>
                 </div>
               )}
               <div className="igc-actions">

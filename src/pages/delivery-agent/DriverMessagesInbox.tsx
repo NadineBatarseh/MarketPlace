@@ -59,7 +59,7 @@ function dayLabel(dateStr: string): string {
   yesterday.setDate(now.getDate() - 1);
   if (isSameDay(d, now)) return 'اليوم';
   if (isSameDay(d, yesterday)) return 'أمس';
-  return d.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' });
+  return d.toLocaleDateString('ar-EG-u-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 function listTimeLabel(dateStr: string): string {
@@ -67,13 +67,13 @@ function listTimeLabel(dateStr: string): string {
   const now = new Date();
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
-  if (isSameDay(d, now)) return d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+  if (isSameDay(d, now)) return d.toLocaleTimeString('ar-EG-u-nu-latn', { hour: '2-digit', minute: '2-digit' });
   if (isSameDay(d, yesterday)) return 'أمس';
-  return d.toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' });
+  return d.toLocaleDateString('ar-EG-u-nu-latn', { day: 'numeric', month: 'short' });
 }
 
 function timeLabel(dateStr: string): string {
-  return new Date(dateStr).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+  return new Date(dateStr).toLocaleTimeString('ar-EG-u-nu-latn', { hour: '2-digit', minute: '2-digit' });
 }
 
 interface Props {

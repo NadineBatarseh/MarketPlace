@@ -42,7 +42,7 @@ export const fmtMoney = (n: number, ccy: string) =>
   `${(Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${ccy}`;
 
 export const fmtDate = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+  iso ? new Date(iso).toLocaleDateString('ar-EG-u-nu-latn', { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
 
 /** CSS-independent inline-styled status pill (for use outside the earnings page). */
 export function PayoutStatusPill({ status }: { status: PayoutStatus }) {

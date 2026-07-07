@@ -1,11 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Topbar from '../../components/Topbar';
 import supabase from '../../lib/supabase';
 import { useShop } from '../../context/ShopContext';
 import { useCustomerAuth } from '../../context/CustomerAuthContext';
-import { getProductBadge } from '../../lib/productBadge';
-import '../../lib/productBadge.css';
+import ProductCard, { ProductCardSkeleton } from '../../components/ProductCard';
 import './HomePage.css';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -195,146 +194,33 @@ function StoresSection({ stores, loading }: { stores: Store[]; loading: boolean 
 
 // ── Products ──────────────────────────────────────────────────────────────────
 
-function ProductCard({ product }: { product: Product }) {
-  const navigate = useNavigate();
-  const { addToCart, isInCart, toggleFavorite, isFavorited } = useShop();
-  const { customer } = useCustomerAuth();
-  const isCustomer = customer?.role === 'customer';
-  const images = product.image_urls?.filter(Boolean) ?? [];
-  const hasMultiple = images.length > 1;
-  const [idx, setIdx] = useState(0);
-  const img = images[0] ?? '';
-  const inCart = isInCart(product.id);
-  const origPrice = product.discount_pct && product.price != null
-    ? Math.round(product.price / (1 - product.discount_pct / 100))
-    : null;
-
-  const goPrev = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIdx(i => (i - 1 + images.length) % images.length);
-  };
-  const goNext = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIdx(i => (i + 1) % images.length);
-  };
-  const goDot = (e: React.MouseEvent, i: number) => {
-    e.stopPropagation();
-    setIdx(i);
-  };
-
-  // Touch swipe between images (mobile — there is no hover/arrow affordance)
-  const touchX = useRef<number | null>(null);
-  const onTouchStart = (e: React.TouchEvent) => { touchX.current = e.touches[0].clientX; };
-  const onTouchEnd = (e: React.TouchEvent) => {
-    if (touchX.current == null || !hasMultiple) return;
-    const dx = e.changedTouches[0].clientX - touchX.current;
-    if (Math.abs(dx) > 35) {
-      // RTL layout: swipe-left advances, swipe-right goes back
-      setIdx(i => (dx < 0 ? (i + 1) % images.length : (i - 1 + images.length) % images.length));
-    }
-    touchX.current = null;
-  };
-
-  const onCart = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!isCustomer) { navigate('/login'); return; }
-    if (!inCart) addToCart({ id: product.id, name: product.title, image: img, price: product.price ?? 0 });
-  };
-
-  const onFav = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!isCustomer) { navigate('/login'); return; }
-    toggleFavorite({ id: product.id, name: product.title, image: img, price: product.price ?? 0 });
-  };
-
-  const faved = isFavorited(product.id);
-  const badge = getProductBadge(product);
-
-  return (
-    <div className="hp-prod-card" onClick={() => navigate(`/product/${product.id}`)}>
-      {/* Favorite button */}
-      <button type="button" className={`hp-prod-card__fav${faved ? ' hp-prod-card__fav--on' : ''}`} onClick={onFav} aria-label="أضف للمفضلة">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill={faved ? '#136540' : 'none'} stroke={faved ? '#136540' : '#9ca3af'} strokeWidth="2">
-          <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/>
-        </svg>
-      </button>
-
-      {/* Image + carousel */}
-      <div className="hp-prod-card__img-wrap" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-        {badge && <span className={`pbadge pbadge--${badge.kind}`}>{badge.text}</span>}
-        {images.length > 0
-          ? <img src={images[idx]} alt={product.title} className="hp-prod-card__img" loading="lazy" />
-          : <div className="hp-prod-card__img-ph">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5">
-                <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/>
-              </svg>
-            </div>
-        }
-
-        {hasMultiple && (
-          <>
-            <button type="button" className="hp-prod-card__arrow hp-prod-card__arrow--prev" onClick={goPrev} aria-label="صورة سابقة">‹</button>
-            <button type="button" className="hp-prod-card__arrow hp-prod-card__arrow--next" onClick={goNext} aria-label="صورة تالية">›</button>
-            <div className="hp-prod-card__dots">
-              {images.map((_, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  className={`hp-prod-card__dot${i === idx ? ' hp-prod-card__dot--on' : ''}`}
-                  onClick={e => goDot(e, i)}
-                  aria-label={`صورة ${i + 1}`}
-                />
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Info */}
-      <div className="hp-prod-card__body">
-        <p className="hp-prod-card__title">{product.title}</p>
-        <div className="hp-prod-card__meta">
-          <span className="hp-prod-card__price">
-            {product.price != null ? `₪ ${product.price.toLocaleString()}` : '—'}
-          </span>
-          {origPrice && <span className="hp-prod-card__orig">₪ {origPrice.toLocaleString()}</span>}
-        </div>
-        <div className="hp-prod-card__stars-row">
-          {[1,2,3,4,5].map(s => (
-            <svg key={s} width="10" height="10" viewBox="0 0 24 24" fill={s<=4?'#f5a623':'#e5e7eb'}>
-              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-            </svg>
-          ))}
-        </div>
-        <button className={`hp-prod-card__btn${inCart?' hp-prod-card__btn--in':''}`} onClick={onCart}>
-          {inCart ? (
-            <>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
-              في السلة
-            </>
-          ) : (
-            <>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
-                <path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/>
-              </svg>
-              أضف إلى السلة
-            </>
-          )}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 const PRODUCTS_INITIAL = 10;
 
-function ProductsSection({ products, loading }: { products: Product[]; loading: boolean }) {
+function ProductsSection({ products, loading, shopNameMap }: {
+  products: Product[]; loading: boolean; shopNameMap: Map<string, string>;
+}) {
+  const navigate = useNavigate();
+  const { addToCart, toggleFavorite, isFavorited } = useShop();
+  const { customer } = useCustomerAuth();
+  const isCustomer = customer?.role === 'customer';
+
   const [tab, setTab] = useState<'new'|'deals'>('new');
   const [showAll, setShowAll] = useState(false);
   const shown = tab === 'deals' ? products.filter(p => p.discount_pct != null) : products;
   const visible = showAll ? shown : shown.slice(0, PRODUCTS_INITIAL);
   const hasMore = shown.length > PRODUCTS_INITIAL;
+
+  const onCart = (e: React.MouseEvent, product: Product) => {
+    if (!isCustomer) { navigate('/login'); return; }
+    const img = product.image_urls?.filter(Boolean)?.[0] ?? '';
+    addToCart({ id: product.id, name: product.title, image: img, price: product.price ?? 0 });
+  };
+
+  const onFav = (e: React.MouseEvent, product: Product) => {
+    if (!isCustomer) { navigate('/login'); return; }
+    const img = product.image_urls?.filter(Boolean)?.[0] ?? '';
+    toggleFavorite({ id: product.id, name: product.title, image: img, price: product.price ?? 0 });
+  };
 
   return (
     <section className="hp-section" id="deals">
@@ -349,22 +235,22 @@ function ProductsSection({ products, loading }: { products: Product[]; loading: 
 
         {loading ? (
           <div className="hp-prod-grid">
-            {Array.from({ length: PRODUCTS_INITIAL }).map((_, i) => (
-              <div key={i} className="hp-prod-card hp-prod-card--sk">
-                <div className="hp-sk-rect" />
-                <div className="hp-prod-card-sk-body">
-                  <div className="hp-sk-line hp-sk-line--80" />
-                  <div className="hp-sk-line hp-sk-line--50" />
-                  <div className="hp-sk-btn" />
-                </div>
-              </div>
-            ))}
+            {Array.from({ length: PRODUCTS_INITIAL }).map((_, i) => <ProductCardSkeleton key={i} />)}
           </div>
         ) : shown.length === 0 ? (
           <p className="hp-empty">{tab==='deals'?'لا توجد عروض خاصة':'لا توجد منتجات'}</p>
         ) : (
           <div className="hp-prod-grid">
-            {visible.map(p => <ProductCard key={p.id} product={p} />)}
+            {visible.map(p => (
+              <ProductCard
+                key={p.id}
+                product={p}
+                storeName={shopNameMap.get(p.shop_id)}
+                onAddToCart={onCart}
+                onToggleFavorite={onFav}
+                isFavorited={isFavorited(p.id)}
+              />
+            ))}
           </div>
         )}
 
@@ -430,13 +316,15 @@ export default function HomePage() {
       .then(({ data }) => { if (data) setProducts(data); setLoadingProds(false); });
   }, []);
 
+  const shopNameMap = useMemo(() => new Map(stores.map(s => [s.shop_id, s.name])), [stores]);
+
   return (
     <div dir="rtl" className="hp-page">
       <Topbar />
       <HeroSection />
       <CategoriesSection cats={cats} loading={loadingCats} />
       <StoresSection stores={stores} loading={loadingStores} />
-      <ProductsSection products={products} loading={loadingProds} />
+      <ProductsSection products={products} loading={loadingProds} shopNameMap={shopNameMap} />
     </div>
   );
 }

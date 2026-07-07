@@ -140,7 +140,7 @@ export default function MerchantDashboard() {
 
   const shop = merchant.shop;
   const displayInitial = (shop?.name ?? merchant.displayName ?? 'م').charAt(0);
-  const today = new Date().toLocaleDateString('ar-EG', {
+  const today = new Date().toLocaleDateString('ar-EG-u-nu-latn', {
     weekday: 'long',
     year: 'numeric',
     month: 'long',

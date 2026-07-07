@@ -10,6 +10,7 @@ import OrderTrackingPage from './pages/orderTrackingPage/OrderTrackingPage';
 import PrivacyPolicyPage from './pages/privacy/PrivacyPolicyPage';
 import PaytabsReturnPage from './pages/payment/PaytabsReturnPage';
 import ProfileSettingsPage from './pages/profile/ProfileSettingsPage';
+import OffersPage from './pages/offers/OffersPage';
 
 
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
@@ -98,6 +99,7 @@ export default function App() {
               <Route path="/product" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><ProductDetailPage /></CustomerLayout></RoleGuard>} />
               <Route path="/search" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><SearchResultsPage /></CustomerLayout></RoleGuard>} />
               <Route path="/category/:categoryId" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><CategoryListingPage /></CustomerLayout></RoleGuard>} />
+              <Route path="/offers" element={<RoleGuard allowedRoles={['customer']} allowGuests><CustomerLayout><OffersPage /></CustomerLayout></RoleGuard>} />
 
               {/* Customer only — no guests, no other roles */}
               <Route path="/cart" element={<RoleGuard allowedRoles={['customer']}><CustomerLayout><Cart /></CustomerLayout></RoleGuard>} />

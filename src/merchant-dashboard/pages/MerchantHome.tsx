@@ -138,7 +138,7 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
               </svg>
             </div>
           </div>
-          <div className="mh-card-value">{stats.newOrders.toLocaleString('ar-EG')}</div>
+          <div className="mh-card-value">{stats.newOrders.toLocaleString('en-US')}</div>
           <div className="mh-card-sub">اليوم</div>
         </div>
 
@@ -153,7 +153,7 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
               </svg>
             </div>
           </div>
-          <div className="mh-card-value">{stats.accountBalance.toLocaleString('ar-EG')}</div>
+          <div className="mh-card-value">{stats.accountBalance.toLocaleString('en-US')}</div>
           <div className="mh-card-sub">₪</div>
         </div>
 
@@ -168,7 +168,7 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
               </svg>
             </div>
           </div>
-          <div className="mh-card-value">{stats.unpaidTotal.toLocaleString('ar-EG')}</div>
+          <div className="mh-card-value">{stats.unpaidTotal.toLocaleString('en-US')}</div>
           <div className="mh-card-sub">إجمالي المبلغ</div>
         </div>
       </div>
@@ -220,7 +220,7 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
               <tbody>
                 {filtered.map(order => {
                   const s = STATUS_LABEL[order.status] ?? { label: order.status, color: '#6b7280' };
-                  const date = new Date(order.createdAt).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' });
+                  const date = new Date(order.createdAt).toLocaleDateString('ar-EG-u-nu-latn', { month: 'short', day: 'numeric' });
                   return (
                     <tr key={order.id}>
                       <td className="mh-td-id">{fmt(order.id)}</td>
@@ -229,7 +229,7 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
                           {s.label}
                         </span>
                       </td>
-                      <td className="mh-td-total">₪{order.total.toLocaleString()}</td>
+                      <td className="mh-td-total">₪{order.total.toLocaleString('en-US')}</td>
                       <td className="mh-td-date">{date}</td>
                     </tr>
                   );

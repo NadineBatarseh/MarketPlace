@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700&display=swap');
-
 /* ── Tokens ──────────────────────────────────────────────────────────────────── */
 .ot-page {
   --green:        #15803D;
@@ -26,7 +24,7 @@
   --sh:           0 1px 4px rgba(0,0,0,.05), 0 1px 2px rgba(0,0,0,.04);
   --sh-md:        0 4px 16px rgba(0,0,0,.08), 0 1px 4px rgba(0,0,0,.04);
 
-  font-family: 'DM Sans', 'Tajawal', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   background: var(--surface);
   color: var(--text);
   min-height: 100vh;
@@ -60,7 +58,7 @@
   border: 1px solid var(--border);
   border-radius: 14px;
   color: var(--muted);
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -135,7 +133,7 @@
 }
 
 .ot-hc-order-num {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   font-size: 40px;
   font-weight: 700;
   color: var(--text);
@@ -198,7 +196,7 @@
 }
 
 .ot-hcd-time {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   font-size: 30px;
   font-weight: 700;
   color: var(--green);
@@ -207,13 +205,13 @@
   margin-bottom: 8px;
 }
 .ot-hcd-time--neutral {
-  font-family: 'DM Sans', 'Tajawal', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   font-size: 18px;
   font-weight: 600;
   color: var(--muted);
 }
 .ot-hcd-time--success {
-  font-family: 'DM Sans', 'Tajawal', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   font-size: 22px;
   font-weight: 700;
   color: var(--green-dark);
@@ -238,7 +236,7 @@
 }
 
 .ot-tlc-title {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   font-size: 18px;
   font-weight: 700;
   color: var(--text);
@@ -432,7 +430,7 @@
   align-items: center;
   gap: 8px;
   padding: 18px 20px 14px;
-  font-family: 'Syne', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   font-size: 15px;
   font-weight: 700;
   color: var(--text);
@@ -486,7 +484,7 @@
   border: 1.5px solid var(--blue);
   background: var(--blue-light);
   color: var(--blue);
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -524,7 +522,7 @@
   color: var(--text);
 }
 .ot-sbs-total-val {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   font-size: 22px;
   font-weight: 700;
   color: var(--green);
@@ -550,7 +548,7 @@
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--muted);
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -572,7 +570,7 @@
   direction: rtl;
 }
 .ot-products-title {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   font-size: 22px;
   font-weight: 700;
   color: var(--text);
@@ -668,7 +666,7 @@
   width: fit-content;
 }
 .ot-pc-price {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   font-size: 16px;
   font-weight: 700;
   color: var(--text);
@@ -911,7 +909,7 @@
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--muted);
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -946,7 +944,7 @@
 }
 .ot-empty-icon { color: var(--border); margin-bottom: 4px; }
 .ot-empty-state h3 {
-  font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 700;
+  font-family: 'Tajawal', sans-serif; font-size: 20px; font-weight: 700;
   color: var(--text); margin: 0;
 }
 .ot-empty-state p { font-size: 14px; max-width: 320px; margin: 0; }

@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700&display=swap');
-
 /* ── Root tokens ─────────────────────────────────────────────────────────────── */
 .oh-page {
   --oh-primary:       #136540;
@@ -27,7 +25,7 @@
   --oh-shadow:        0 1px 3px rgba(19,101,64,.06), 0 1px 2px rgba(19,101,64,.04);
   --oh-shadow-h:      0 4px 12px rgba(19,101,64,.10), 0 1px 4px rgba(19,101,64,.06);
 
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   background: var(--oh-surface);
   color: var(--oh-text);
   min-height: 100vh;
@@ -45,7 +43,7 @@
 /* ── Header ──────────────────────────────────────────────────────────────────── */
 .oh-header { margin-bottom: 2rem; text-align: right; }
 .oh-header h1 {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   font-size: 28px;
   font-weight: 700;
   color: var(--oh-title);
@@ -89,7 +87,7 @@
 
 .oh-stat-body { flex: 1; text-align: right; }
 .oh-stat-val {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   font-size: 22px;
   font-weight: 600;
   color: var(--oh-title);
@@ -134,7 +132,7 @@
   border-radius: 18px;
   border: 1px solid #e5e7eb;
   background: var(--oh-bg);
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   font-size: 14px;
   direction: rtl;
   padding: 0 50px 0 40px;
@@ -175,7 +173,7 @@
   border: 1px solid #e5e7eb;
   background: var(--oh-bg);
   color: #4b5563;
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   font-size: 13px;
   font-weight: 400;
   cursor: pointer;
@@ -223,7 +221,7 @@
   border: none;
   background: transparent;
   color: #374151;
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   font-size: 14px;
   font-weight: 400;
   cursor: pointer;
@@ -249,7 +247,7 @@
   border: 1px solid #e5e7eb;
   background: var(--oh-bg);
   color: #4b5563;
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   font-size: 13px;
   font-weight: 400;
   cursor: pointer;
@@ -347,7 +345,7 @@
   white-space: nowrap;
 }
 .oh-grid-order-id {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   font-size: 32px;
   font-weight: 700;
   color: var(--oh-title);
@@ -455,7 +453,7 @@
   font-weight: 400;
 }
 .oh-grid-total-amount {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   font-size: 30px;
   font-weight: 700;
   color: var(--oh-title);
@@ -719,7 +717,7 @@
 .oh-foot-label { color: var(--oh-hint); }
 .oh-foot-val   { color: var(--oh-text); font-weight: 500; }
 .oh-foot-price {
-  font-family: 'Syne', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   font-size: 15px;
   font-weight: 600;
   color: var(--oh-title);
@@ -728,7 +726,7 @@
 
 .oh-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .oh-btn {
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Tajawal', sans-serif;
   font-size: 12px;
   font-weight: 500;
   padding: 6px 14px;

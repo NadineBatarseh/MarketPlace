@@ -1185,7 +1185,7 @@ const ProductDetailPage: React.FC = () => {
                                 <div>
                                   <p className="rv-name">{r.customerName}</p>
                                   <p className="rv-date">
-                                    {new Intl.DateTimeFormat('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(r.created_at))}
+                                    {new Intl.DateTimeFormat('ar-EG-u-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(r.created_at))}
                                   </p>
                                 </div>
                               </div>

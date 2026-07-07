@@ -306,9 +306,9 @@ export default function MerchantOrders() {
                   </div>
 
                   <div className="mo-card-right">
-                    <span className="mo-price">{order.total_price.toLocaleString('ar-EG')} ₪</span>
+                    <span className="mo-price">{order.total_price.toLocaleString('en-US')} ₪</span>
                     <span className="mo-date">
-                      {new Date(order.created_at).toLocaleDateString('ar-EG', {
+                      {new Date(order.created_at).toLocaleDateString('ar-EG-u-nu-latn', {
                         day: 'numeric', month: 'short', year: 'numeric',
                       })}
                     </span>
@@ -331,11 +331,11 @@ export default function MerchantOrders() {
                           <div className="mo-item-info">
                             <span className="mo-item-title">{item.product_title}</span>
                             <span className="mo-item-meta">
-                              الكمية: {item.qty} × {item.unit_price.toLocaleString('ar-EG')} ₪
+                              الكمية: {item.qty} × {item.unit_price.toLocaleString('en-US')} ₪
                             </span>
                           </div>
                           <span className="mo-item-subtotal">
-                            {(item.qty * item.unit_price).toLocaleString('ar-EG')} ₪
+                            {(item.qty * item.unit_price).toLocaleString('en-US')} ₪
                           </span>
                         </div>
                       ))}
@@ -345,7 +345,7 @@ export default function MerchantOrders() {
                     {order.ready_time && (
                       <div className="mo-ready-info">
                         ✅ تم التجهيز في:{' '}
-                        {new Date(order.ready_time).toLocaleString('ar-EG', {
+                        {new Date(order.ready_time).toLocaleString('ar-EG-u-nu-latn', {
                           day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
                         })}
                       </div>

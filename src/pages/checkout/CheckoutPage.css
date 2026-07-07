@@ -1,6 +1,6 @@
 /* ════════════════════════════════════════════════════════════════════
    Checkout — Souq Link design system
-   Emerald palette · IBM Plex Sans Arabic · outlined white cards
+   Emerald palette · Tajawal · outlined white cards
    (tokens mirrored from the reference DESIGN.md)
    ════════════════════════════════════════════════════════════════════ */
 :root {
@@ -48,7 +48,7 @@
   min-height: 100vh;
   background: var(--co-surface);
   padding: 0 0 64px;
-  font-family: 'IBM Plex Sans Arabic', 'IBM Plex Sans', 'Segoe UI', sans-serif;
+  font-family: var(--font-main, 'Tajawal', sans-serif);
   color: var(--co-on-surface);
 }
 
