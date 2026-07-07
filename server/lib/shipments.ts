@@ -1,5 +1,6 @@
 import { supabase } from '../supabase.js';
 import { fetchAllZones, pointInZone, zoneCenter, type Zone } from './zones.js';
+import { C } from '../logistics/constants.js';
 
 /**
  * Shipment creation — run once when an order is created.
@@ -21,8 +22,6 @@ import { fetchAllZones, pointInZone, zoneCenter, type Zone } from './zones.js';
  * Idempotent: if any shipment already exists for the order, it does nothing — safe
  * to call from both order creation and a payment callback that may fire twice.
  */
-
-const DEADLINE_HOURS = Number(process.env.SHIPMENT_DEADLINE_HOURS ?? 24);
 
 interface ShopRow {
   shop_id: string;
@@ -92,7 +91,7 @@ export async function createShipmentsForOrder(orderId: number | string): Promise
   ]);
   const shopMap = new Map<string, ShopRow>((shopRows ?? []).map(s => [s.shop_id, s as ShopRow]));
 
-  const deadline = new Date(Date.now() + DEADLINE_HOURS * 3600 * 1000).toISOString();
+  const deadline = new Date(Date.now() + C.SHIPMENT_DEADLINE_HOURS * 3600 * 1000).toISOString();
 
   const rows: Array<Record<string, unknown>> = [];
   for (const d of details) {

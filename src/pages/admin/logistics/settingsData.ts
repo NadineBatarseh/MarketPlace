@@ -127,6 +127,18 @@ export const SETTINGS_DEFINITIONS: SettingDef[] = [
     explanation: 'أقصى مسافة مسموح بها بين منطقتين في نفس المسار.',
     category: 'flow',
   },
+  {
+    key: 'SHIPMENT_DEADLINE_HOURS',
+    label: 'مهلة تسليم الشحنة',
+    unit: 'ساعة',
+    type: 'count',
+    defaultValue: 24,
+    min: 1,
+    max: 240,
+    step: 1,
+    explanation: 'عدد الساعات من إنشاء الشحنة حتى الموعد النهائي للتسليم. يُستخدم لعرض موعد الوصول المتوقع للعميل ولحساب إلحاح الشحنة في خوارزمية التجميع.',
+    category: 'flow',
+  },
 
   // ── 3. أوزان التقييم ───────────────────────────────────────────────────────
   {

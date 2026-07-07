@@ -52,6 +52,10 @@ INTRA_CITY_MIN_TIME_BUFFER_MINUTES: 15,
   // Max road distance (km) between an on_route driver's batch end zone and the
   // new batch's start zone for the driver to receive a next_mission offer.
   NEXT_MISSION_PROXIMITY_KM: 5,
+
+  // ── Shipment delivery deadline (overridable from batch_config) ──────────────
+  // Hours from shipment creation to its delivery deadline.
+  SHIPMENT_DEADLINE_HOURS: 24,
 };
 
 // Loads all admin-configurable fields from batch_config (id = 1)
@@ -65,7 +69,8 @@ export async function loadConfigFromDB(): Promise<void> {
       weight_shipment_count, weight_urgency, weight_duration,
       base_dead_end_penalty, cost_per_km, road_factor,
       min_time_to_zone_b_for_addition,
-      drivers_per_round, max_assignment_rounds, assignment_timeout_seconds
+      drivers_per_round, max_assignment_rounds, assignment_timeout_seconds,
+      shipment_deadline_hours
     `)
     .eq('id', 1)
     .single();
@@ -91,4 +96,5 @@ export async function loadConfigFromDB(): Promise<void> {
   if (data.drivers_per_round)          C.DRIVERS_PER_ROUND          = data.drivers_per_round;
   if (data.max_assignment_rounds)      C.MAX_ASSIGNMENT_ROUNDS      = data.max_assignment_rounds;
   if (data.assignment_timeout_seconds) C.ASSIGNMENT_TIMEOUT_MS      = data.assignment_timeout_seconds * 1000;
+  if (data.shipment_deadline_hours)    C.SHIPMENT_DEADLINE_HOURS    = data.shipment_deadline_hours;
 }
