@@ -1,13 +1,177 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { InstagramClient } from './platforms/instagram/client.js';
 import { FacebookClient } from './platforms/facebook/client.js';
 import { extractProductsFromPosts } from './utils/extractProducts.js';
+import { InstagramApiError } from './utils/errors.js';
 
 function getServiceRoleClient() {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error('SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set');
   return createClient(url, key);
+}
+
+function buildCaption(product: { title: string; description?: string | null; price?: number | null }): string {
+  const priceLine = product.price != null ? `السعر: ${product.price} ₪` : '';
+  return [product.title, priceLine, product.description ?? ''].filter(Boolean).join('\n\n');
+}
+
+function buildHashtagsLine(hashtags?: string[]): string {
+  if (!hashtags?.length) return '';
+  return hashtags
+    .map((h) => h.trim())
+    .filter(Boolean)
+    .map((h) => (h.startsWith('#') ? h : `#${h}`))
+    .join(' ');
+}
+
+function buildAutoPublishCaption(
+  product: { title: string; description?: string | null; price?: number | null },
+  shopName: string | null
+): string {
+  const lines = [`✨ ${product.title} ✨`];
+  if (product.description) lines.push(product.description);
+  if (product.price != null) lines.push(`💰 السعر: ${product.price} ₪`);
+  if (shopName) lines.push(`🏬 المتجر: ${shopName}`);
+  lines.push('🛍️ تسوقوا الآن عبر تطبيق SouqLink');
+  return lines.join('\n\n');
+}
+
+interface AutoPublishResult {
+  success: boolean;
+  message: string;
+  productId: string;
+  caption?: string;
+  mediaId?: string;
+}
+
+async function logPublishAttempt(
+  db: SupabaseClient,
+  params: {
+    productId: string;
+    shopId: string | null;
+    caption: string;
+    imageUrl: string;
+    status: 'published' | 'failed';
+    mediaId?: string;
+    errorMessage?: string;
+  }
+): Promise<void> {
+  try {
+    await db.from('instagram_publish_logs').insert({
+      product_id: params.productId,
+      shop_id: params.shopId,
+      caption: params.caption,
+      image_url: params.imageUrl,
+      media_id: params.mediaId ?? null,
+      status: params.status,
+      error_message: params.errorMessage ?? null,
+    });
+  } catch {
+    // Best-effort logging only — must never mask the actual publish result.
+  }
+}
+
+/**
+ * Auto-publish flow: fetches the product (and shop name) straight from Supabase
+ * and publishes it under the single account configured via INSTAGRAM_ACCESS_TOKEN /
+ * INSTAGRAM_IG_USER_ID — no shop_id/image_urls need to be supplied by the caller.
+ */
+async function publishProductAuto(args: Record<string, unknown>): Promise<AutoPublishResult> {
+  const productId = ((args.productId as string | undefined) ?? (args.product_id as string | undefined))?.trim();
+  if (!productId) {
+    return { success: false, message: 'productId is required.', productId: '' };
+  }
+
+  const dryRun = Boolean(args.dryRun);
+  const customCaption = (args.customCaption as string | undefined)?.trim();
+  const hashtagsLine = buildHashtagsLine(args.hashtags as string[] | undefined);
+
+  const db = getServiceRoleClient();
+
+  type ProductRow = {
+    id: string;
+    title: string;
+    description: string | null;
+    price: number | null;
+    image_urls: string[] | null;
+    shop_id: string;
+  };
+  let product: ProductRow | null;
+  try {
+    const { data, error } = await db
+      .from('products')
+      .select('id, title, description, price, image_urls, shop_id')
+      .eq('id', productId)
+      .maybeSingle();
+    if (error) return { success: false, message: `Supabase error while fetching product: ${error.message}`, productId };
+    product = data as ProductRow | null;
+  } catch (err) {
+    return { success: false, message: `Supabase error while fetching product: ${err instanceof Error ? err.message : String(err)}`, productId };
+  }
+
+  if (!product) {
+    return { success: false, message: 'المنتج غير موجود.', productId };
+  }
+
+  const imageUrl = product.image_urls?.[0];
+  if (!imageUrl) {
+    return { success: false, message: 'لا يمكن نشر هذا المنتج لعدم وجود صورة.', productId };
+  }
+
+  let shopName: string | null = null;
+  try {
+    const { data: shop, error: shopErr } = await db
+      .from('shops')
+      .select('name')
+      .eq('shop_id', product.shop_id)
+      .maybeSingle();
+    if (shopErr) return { success: false, message: `Supabase error while fetching shop: ${shopErr.message}`, productId };
+    shopName = (shop?.name as string | undefined) ?? null;
+  } catch (err) {
+    return { success: false, message: `Supabase error while fetching shop: ${err instanceof Error ? err.message : String(err)}`, productId };
+  }
+
+  const baseCaption = customCaption || buildAutoPublishCaption(product, shopName);
+  const caption = hashtagsLine ? `${baseCaption}\n\n${hashtagsLine}` : baseCaption;
+
+  if (dryRun) {
+    return { success: true, message: 'معاينة الكابشن فقط — لم يتم النشر على انستقرام.', productId, caption };
+  }
+
+  const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN;
+  const igUserId = process.env.INSTAGRAM_IG_USER_ID;
+  if (!accessToken || !igUserId) {
+    return {
+      success: false,
+      message: 'بيانات اعتماد انستقرام غير مهيأة. تأكد من ضبط INSTAGRAM_ACCESS_TOKEN و INSTAGRAM_IG_USER_ID.',
+      productId,
+      caption,
+    };
+  }
+
+  const igClient = new InstagramClient({ accessToken, accountId: igUserId });
+
+  let mediaId: string;
+  try {
+    const result = await igClient.publishProductPost([imageUrl], caption, igUserId);
+    mediaId = result.mediaId;
+  } catch (err) {
+    const message =
+      err instanceof InstagramApiError
+        ? err.message
+        : `فشل النشر على انستقرام: ${err instanceof Error ? err.message : String(err)}`;
+    await logPublishAttempt(db, { productId, shopId: product.shop_id, caption, imageUrl, status: 'failed', errorMessage: message });
+    return { success: false, message, productId, caption };
+  }
+
+  await logPublishAttempt(db, { productId, shopId: product.shop_id, caption, imageUrl, status: 'published', mediaId });
+  await db
+    .from('products')
+    .update({ instagram_published_media_id: mediaId, instagram_published_at: new Date().toISOString() })
+    .eq('id', productId);
+
+  return { success: true, message: 'تم نشر المنتج على انستقرام بنجاح.', productId, caption, mediaId };
 }
 
 async function assertShopOwnership(shopId: string, userId: string): Promise<void> {
@@ -21,12 +185,73 @@ async function assertShopOwnership(shopId: string, userId: string): Promise<void
   if (!data) throw new Error('Access denied: this store does not belong to your account.');
 }
 
+async function handlePublishProduct(
+  client: InstagramClient | null,
+  args: Record<string, unknown>,
+  userId?: string
+): Promise<unknown> {
+  const shopId = args.shop_id as string | undefined;
+  const productId = args.product_id as string | undefined;
+  const imageUrls = args.image_urls as string[] | undefined;
+
+  // Simplified auto flow: only productId (+ optional customCaption/hashtags/dryRun) was
+  // given — fetch the product/shop from Supabase ourselves instead of requiring the
+  // caller to pass shop_id/image_urls explicitly.
+  if (!shopId || !imageUrls?.length) {
+    return publishProductAuto(args);
+  }
+
+  if (!productId) throw new Error('product_id is required');
+  if (imageUrls.length > 10) throw new Error('image_urls must contain at most 10 images');
+  if (!client) {
+    throw new Error(
+      'Instagram client not initialized. Please set INSTAGRAM_ACCESS_TOKEN in your environment variables.'
+    );
+  }
+  if (userId) await assertShopOwnership(shopId, userId);
+
+  const db = getServiceRoleClient();
+  const { data: product, error: prodErr } = await db
+    .from('products')
+    .select('id, title, description, price, image_urls')
+    .eq('id', productId)
+    .eq('shop_id', shopId)
+    .maybeSingle();
+  if (prodErr || !product) throw new Error('Product not found for this shop.');
+
+  const ownImageUrls = new Set((product.image_urls as string[] | null) ?? []);
+  const invalidUrl = imageUrls.find((url) => !ownImageUrls.has(url));
+  if (invalidUrl) throw new Error('One or more image_urls do not belong to this product.');
+
+  const caption = (args.caption as string | undefined)?.trim() || buildCaption(product);
+
+  const { mediaId } = await client.publishProductPost(
+    imageUrls,
+    caption,
+    args.account_id as string | undefined
+  );
+
+  await db
+    .from('products')
+    .update({ instagram_published_media_id: mediaId, instagram_published_at: new Date().toISOString() })
+    .eq('id', productId);
+
+  return { success: true, media_id: mediaId, caption };
+}
+
 export async function handleInstagramTool(
   client: InstagramClient | null,
   name: string,
   args: Record<string, unknown>,
   userId?: string
 ): Promise<unknown> {
+  // instagram_publish_product's auto flow (productId-only) manages its own credentials
+  // (INSTAGRAM_ACCESS_TOKEN / INSTAGRAM_IG_USER_ID) and supports dryRun with none at all,
+  // so it must not be blocked by the shared-client guard below.
+  if (name === 'instagram_publish_product') {
+    return handlePublishProduct(client, args, userId);
+  }
+
   if (!client) {
     throw new Error(
       'Instagram client not initialized. Please set INSTAGRAM_ACCESS_TOKEN in your environment variables.'

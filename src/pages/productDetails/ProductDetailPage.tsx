@@ -14,6 +14,17 @@ import './ProductDetailPage.css';
 const NOT_FOUND = "المعلومة غير متوفرة";
 const safeText = (v?: string | null) => (v && v.trim() ? v : NOT_FOUND);
 
+// Local, network-free fallback — via.placeholder.com was discontinued and
+// left product pages with no images stuck on a broken/hanging request.
+const NO_IMAGE_PLACEHOLDER =
+  'data:image/svg+xml;utf8,' +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600">' +
+      '<rect width="600" height="600" fill="#f1efe9"/>' +
+      '<text x="50%" y="50%" font-family="sans-serif" font-size="32" fill="#a39d8f" text-anchor="middle" dominant-baseline="middle">SouqLink</text>' +
+      '</svg>'
+  );
+
 interface ProductVariant {
   id: string;
   color: string | null;
@@ -121,9 +132,7 @@ const ProductDetailPage: React.FC = () => {
   const [qty, setQty] = useState(1);
   const isFav = product ? isFavorited(product.id) : false;
   const [activeThumb, setActiveThumb] = useState(0);
-  const [mainImage, setMainImage] = useState<string>(
-    'https://via.placeholder.com/600x600?text=SouqLink'
-  );
+  const [mainImage, setMainImage] = useState<string>(NO_IMAGE_PLACEHOLDER);
   const [activeTab, setActiveTab] = useState('desc');
 
   // Nav counters

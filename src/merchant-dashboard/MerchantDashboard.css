@@ -555,6 +555,14 @@
   white-space: nowrap;
 }
 
+.mo-customer-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+}
+
 .mo-price {
   font-weight: 700;
   font-size: 0.95rem;
@@ -627,6 +635,12 @@
   color: var(--color-text-secondary);
 }
 
+.mo-item-shipment-num {
+  font-size: 0.72rem;
+  color: var(--color-text-secondary);
+  opacity: 0.85;
+}
+
 .mo-item-subtotal {
   font-weight: 700;
   font-size: 0.9rem;
@@ -644,22 +658,35 @@
   padding: 0.5rem 0.85rem;
 }
 
-.mo-mark-btn {
+.mo-item-ready {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.3rem 0.6rem;
+  border-radius: 20px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.mo-item-mark-btn {
   background: #16a34a;
   color: #fff;
   border: none;
-  border-radius: 10px;
-  padding: 0.7rem 1.25rem;
+  border-radius: 8px;
+  padding: 0.4rem 0.8rem;
   font-family: var(--font-main);
-  font-size: 0.95rem;
+  font-size: 0.78rem;
   font-weight: 700;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: background 0.2s, transform 0.1s;
-  align-self: flex-start;
 }
-.mo-mark-btn:hover:not(:disabled) { background: #15803d; }
-.mo-mark-btn:active:not(:disabled) { transform: scale(0.98); }
-.mo-mark-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.mo-item-mark-btn:hover:not(:disabled) { background: #15803d; }
+.mo-item-mark-btn:active:not(:disabled) { transform: scale(0.96); }
+.mo-item-mark-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* ════════════════════════════════════════
    HOME PAGE

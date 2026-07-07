@@ -7,7 +7,8 @@ import crypto from 'crypto';
 const router = express.Router();
 
 const SCOPES = [
-'instagram_basic',
+  'instagram_basic',
+  'instagram_content_publish',
   'pages_show_list',
   'pages_read_engagement',
 ].join(',');
@@ -306,6 +307,69 @@ router.post('/import-products', async (req: Request, res: Response) => {
     return res.json({ ok: true, count: result.count ?? 0, message: result.message ?? '' });
   } catch (err: any) {
     console.error('[import-products] error:', err.message);
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/instagram/product/:id/publish
+ * Publishes a product's image(s) to the merchant's connected Instagram account
+ * as a feed post (1 image) or carousel post (2-10 images).
+ */
+router.post('/product/:id/publish', async (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ ok: false, error: 'Missing Authorization header' });
+
+  const token = authHeader.replace('Bearer ', '');
+  const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+  if (authError || !user) return res.status(401).json({ ok: false, error: 'Invalid token' });
+
+  const { data: conn } = await supabase
+    .from('instagram_connections')
+    .select('access_token, instagram_account_id')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (!conn) {
+    return res.status(400).json({ ok: false, error: 'لم يتم ربط حساب انستقرام بعد. قم بالربط أولاً.' });
+  }
+
+  const { data: shop } = await supabase
+    .from('shops')
+    .select('shop_id, merchants!inner(user_id)')
+    .eq('merchants.user_id', user.id)
+    .maybeSingle();
+
+  if (!shop) {
+    return res.status(400).json({ ok: false, error: 'لم يتم العثور على متجر لهذا الحساب.' });
+  }
+
+  const { image_urls, caption } = req.body as { image_urls?: string[]; caption?: string };
+  const productId = req.params.id;
+  if (!image_urls?.length) {
+    return res.status(400).json({ ok: false, error: 'image_urls is required' });
+  }
+
+  try {
+    const resultText = await callTool('instagram_publish_product', {
+      shop_id: shop.shop_id,
+      product_id: productId,
+      image_urls,
+      caption,
+      _instagram_access_token: conn.access_token,
+      _instagram_account_id: conn.instagram_account_id,
+      _user_id: user.id,
+    });
+
+    const result = JSON.parse(resultText);
+
+    if (result.error) {
+      return res.status(500).json({ ok: false, error: result.error });
+    }
+
+    return res.json({ ok: true, media_id: result.media_id, caption: result.caption });
+  } catch (err: any) {
+    console.error('[product/publish] error:', err.message);
     return res.status(500).json({ ok: false, error: err.message });
   }
 });

@@ -7,6 +7,7 @@ import StoreNav from '../../components/StoreNav';
 import type { ShipmentStatus } from '../../../shared/status';
 import { CUSTOMER_NOTIFICATION_EVENT_TYPES, type TrackingEventType } from '../../../shared/trackingEvents';
 import { confirmShipmentReceived, reportShipmentDelay } from '../../lib/trackingEvents';
+import { fetchBatchNumbers } from '../../lib/batchNumbers';
 import { markOrderNotificationsSeen } from '../../lib/orderNotifications';
 import './OrderTrackingPage.css';
 
@@ -24,6 +25,8 @@ interface Shop {
   name: string;
 }
 
+type EtaSource = 'sla_fallback' | 'route_estimate' | 'actual' | 'unknown';
+
 interface Shipment {
   id: string;
   order_detail_id: number;
@@ -32,6 +35,12 @@ interface Shipment {
   picked_up_at: string | null;
   delivered_at: string | null;
   deadline: string | null;
+  estimated_delivery_at: string | null;
+  eta_source: EtaSource | null;
+  /** Human-readable display code, e.g. "S-100234" — see shipments.shipment_number. */
+  shipment_number: string;
+  /** Display code of the logistics batch this shipment is grouped into, if any. */
+  batchNumber: string | null;
   /** created_at of this shipment's 'customer_confirmed' tracking event, if any. */
   confirmedAt: string | null;
 }
@@ -42,6 +51,7 @@ interface OrderDetail {
   shop_id: string | null;
   qty: number | null;
   unit_price: number | null;
+  ready_time: string | null;
   product: Product | null;
   shop: Shop | null;
   shipment: Shipment | null;
@@ -64,6 +74,8 @@ interface ShippingAddress {
 
 interface Order {
   id: number;
+  /** Human-readable display code, e.g. "O-100066" — see orders.order_number. */
+  order_number: string;
   total_price: number | null;
   status: string | null;
   payment_status: string | null;
@@ -73,10 +85,6 @@ interface Order {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-
-function formatOrderId(id: number) {
-  return `#SQ-${String(id).padStart(5, '0')}`;
-}
 
 function fmtDate(d: Date) {
   return d.toLocaleDateString('ar-EG-u-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -88,10 +96,6 @@ function fmtTime(d: Date) {
 
 function fmtShort(d: Date) {
   return d.toLocaleDateString('ar-EG-u-nu-latn', { day: 'numeric', month: 'long' });
-}
-
-function addH(d: Date, h: number): Date {
-  return new Date(d.getTime() + h * 3_600_000);
 }
 
 function isToday(d: Date): boolean {
@@ -187,30 +191,92 @@ function getOrderCompletionPercent(order: Order): number {
   return Math.round((sumSteps / (5 * details.length)) * 100);
 }
 
-// Real predicted-delivery estimate for the header banner — driven by
-// shipments.deadline (the same field the logistics batching engine uses for
-// urgency scoring / sequencing), not by guessing off orders.status.
-interface DeadlineEstimate { earliest: Date; isMultiShipment: boolean; }
+// Single shared ETA pipeline — the banner, sidebar, and product cards all read
+// through these so they can never show contradictory times for the same order.
+// estimated_delivery_at / eta_source come from the server's per-shipment ETA
+// (server/logistics/eta.ts): 'route_estimate' is a real road-distance-based
+// prediction, 'sla_fallback' is the flat deadline ceiling used until real route
+// data exists, 'actual' is the real delivered_at, 'unknown' means no reliable
+// estimate exists (e.g. a stranded shipment) — never fabricate one for those.
 
-function getDeadlineEstimate(order: Order): DeadlineEstimate | null {
-  const shipments = order.order_details.map(d => d.shipment).filter((s): s is Shipment => !!s);
-  const deadlines = shipments.map(s => s.deadline).filter((d): d is string => !!d).map(d => new Date(d));
-  if (deadlines.length === 0) return null;
+interface EtaRollup { earliest: Date; latest: Date; source: EtaSource; isMultiShipment: boolean; }
 
-  const earliest = new Date(Math.min(...deadlines.map(d => d.getTime())));
+// Order-level rollup: earliest–latest estimated_delivery_at across this
+// order's non-delivered shipments. Skips shipments with no reliable estimate
+// (eta_source 'unknown'). If any contributing shipment is still on the flat
+// SLA fallback, the whole rollup is labeled 'sla_fallback' too — never
+// overstate confidence.
+function orderEtaRollup(order: Order): EtaRollup | null {
+  const shipments = order.order_details
+    .map(d => d.shipment)
+    .filter((s): s is Shipment => !!s && s.status !== 'delivered');
+
+  const withEta = shipments
+    .filter(s => !!s.estimated_delivery_at)
+    .map(s => ({ time: new Date(s.estimated_delivery_at as string), source: s.eta_source }));
+  if (withEta.length === 0) return null;
+
+  const times = withEta.map(e => e.time.getTime());
+  const earliest = new Date(Math.min(...times));
+  const latest = new Date(Math.max(...times));
+  const source: EtaSource = withEta.some(e => e.source !== 'route_estimate' && e.source !== 'actual')
+    ? 'sla_fallback' : 'route_estimate';
   const isMultiShipment = new Set(shipments.map(s => s.id)).size > 1;
-  return { earliest, isMultiShipment };
+  return { earliest, latest, source, isMultiShipment };
 }
 
-function getDeliveryWindow(order: Order): { prefix: string; time: string } {
-  const base = new Date(order.created_at);
-  let start: Date;
-  if (order.status === 'delivering') start = addH(new Date(), 2);
-  else if (order.status === 'pending') start = addH(base, 26);
-  else start = addH(base, 50);
-  const end = addH(start, 2);
-  const prefix = isToday(start) ? 'اليوم بين' : `${fmtShort(start)} بين`;
-  return { prefix, time: `${fmtTime(start)} - ${fmtTime(end)}` };
+// Turns a rollup into the one Arabic label used everywhere (banner, sidebar).
+function formatEtaLabel(rollup: EtaRollup | null): { label: string; time: string; note: string } {
+  if (!rollup) {
+    return {
+      label: 'موعد التوصيل',
+      time: 'سيتم تحديد موعد التوصيل قريباً',
+      note: 'سيتم إشعارك عند تحديد الموعد',
+    };
+  }
+
+  const isRange = rollup.latest.getTime() !== rollup.earliest.getTime();
+  const note = rollup.isMultiShipment ? 'قد يصل طلبك على أكثر من دفعة' : 'سيتم تحديث الوقت تلقائياً';
+
+  if (rollup.source === 'sla_fallback') {
+    const prefix = isToday(rollup.latest) ? 'اليوم' : fmtShort(rollup.latest);
+    return {
+      label: 'موعد التوصيل المتوقع',
+      time: `بحلول ${prefix} الساعة ${fmtTime(rollup.latest)}`,
+      note,
+    };
+  }
+
+  const prefix = isToday(rollup.earliest) ? 'اليوم' : fmtShort(rollup.earliest);
+  return {
+    label: 'الوصول المتوقع',
+    time: isRange
+      ? `${prefix} من ${fmtTime(rollup.earliest)} إلى ${fmtTime(rollup.latest)}`
+      : `${prefix} الساعة ${fmtTime(rollup.earliest)}`,
+    note,
+  };
+}
+
+// Per-shipment ETA line (product cards). Never fabricates a time for a
+// stranded shipment, and stays silent once delivered (the timeline already
+// shows the real delivered_at there).
+function shipmentEtaLabel(shipment: Shipment): string | null {
+  if (shipment.status === 'stranded' || shipment.status === 'delivered') return null;
+  if (!shipment.estimated_delivery_at) return null;
+  const d = new Date(shipment.estimated_delivery_at);
+  const prefix = isToday(d) ? 'اليوم' : fmtShort(d);
+  return shipment.eta_source === 'route_estimate'
+    ? `التوصيل المتوقع ${prefix} الساعة ${fmtTime(d)}`
+    : `التوصيل المتوقع بحلول ${prefix} الساعة ${fmtTime(d)}`;
+}
+
+// Human-readable "منذ" elapsed time, used by AlertPanel's real "آخر تحديث" signal.
+function elapsedLabel(from: Date): string {
+  const minutes = Math.max(0, Math.round((Date.now() - from.getTime()) / 60_000));
+  if (minutes < 1) return 'الآن';
+  if (minutes < 60) return `قبل ${minutes} دقيقة`;
+  const hours = Math.round(minutes / 60);
+  return `قبل ${hours} ساعة`;
 }
 
 // Same labels/order as OrderHistoryPage.tsx's STEPS — the two timelines must match.
@@ -242,12 +308,12 @@ export default function OrderTrackingPage() {
       try {
         const { data: od, error: oe } = await supabase
           .from('orders')
-          .select('id, total_price, status, payment_status, created_at')
+          .select('id, order_number, total_price, status, payment_status, created_at, shipping_address')
           .eq('id', orderId).eq('user_id', customer!.id).single();
         if (oe || !od) throw oe ?? new Error('الطلب غير موجود');
 
         const { data: dd, error: de } = await supabase
-          .from('order_details').select('id, order_id, product_id, shop_id, qty, unit_price')
+          .from('order_details').select('id, order_id, product_id, shop_id, qty, unit_price, ready_time')
           .eq('order_id', od.id);
         if (de) throw de;
 
@@ -259,7 +325,7 @@ export default function OrderTrackingPage() {
         const [pr, sr, shr, tr] = await Promise.all([
           prodIds.length ? supabase.from('products').select('id,title,image_urls,price').in('id', prodIds) : Promise.resolve({ data: [] as any[] }),
           shopIds.length ? supabase.from('shops').select('shop_id,name').in('shop_id', shopIds)             : Promise.resolve({ data: [] as any[] }),
-          detailIds.length ? supabase.from('shipments').select('id,order_detail_id,status,created_at,picked_up_at,delivered_at,deadline').in('order_detail_id', detailIds) : Promise.resolve({ data: [] as any[] }),
+          detailIds.length ? supabase.from('shipments').select('id,order_detail_id,status,created_at,picked_up_at,delivered_at,deadline,estimated_delivery_at,eta_source,shipment_number,batch_id').in('order_detail_id', detailIds) : Promise.resolve({ data: [] as any[] }),
           supabase.from('order_tracking_events').select('shipment_id,event_type,requires_review,note,customer_seen_at,created_at').eq('order_id', od.id),
         ]);
 
@@ -279,20 +345,29 @@ export default function OrderTrackingPage() {
           if (e.event_type === 'delay_reported' && e.requires_review) openDelayShipments.add(e.shipment_id);
         });
 
+        // Batch display codes for shipments already grouped into a logistics
+        // batch — see fetchBatchNumbers() for why this goes through the server.
+        const shipmentIdsWithBatch = (shr.data ?? [])
+          .filter((s: any) => s.batch_id)
+          .map((s: any) => s.id as string);
+        const batchNumberByShipment = await fetchBatchNumbers(shipmentIdsWithBatch);
+
         const hm = new Map<number, Shipment>();
         (shr.data ?? []).forEach((s: any) => hm.set(s.order_detail_id as number, {
           ...s,
+          batchNumber: batchNumberByShipment[s.id] ?? null,
           confirmedAt: confirmedAtByShipment.get(s.id) ?? null,
         }));
 
         const merged: Order = {
-          id: od.id, total_price: od.total_price, status: od.status,
+          id: od.id, order_number: od.order_number, total_price: od.total_price, status: od.status,
           payment_status: od.payment_status, created_at: od.created_at,
+          shipping_address: (od as any).shipping_address ?? null,
           order_details: details.map(d => {
             const shipment = hm.get(d.id) ?? null;
             return {
               id: d.id, product_id: d.product_id, shop_id: d.shop_id,
-              qty: d.qty, unit_price: d.unit_price,
+              qty: d.qty, unit_price: d.unit_price, ready_time: d.ready_time ?? null,
               product:  d.product_id ? (pm.get(d.product_id) ?? null) : null,
               shop:     d.shop_id    ? (sm.get(d.shop_id)    ?? null) : null,
               shipment,
@@ -351,7 +426,6 @@ export default function OrderTrackingPage() {
 
   const progress    = getOrderProgress(order);
   const hasStranded = order.order_details.some(d => d.shipment?.status === 'stranded');
-  const delivery    = getDeliveryWindow(order);
 
   return (
     <><Topbar /><StoreNav />
@@ -373,7 +447,7 @@ export default function OrderTrackingPage() {
         {/* S2: Header card */}
         <div className="ot-header-card">
           <div className="ot-hc-right">
-            <div className="ot-hc-order-num">{formatOrderId(order.id)}</div>
+            <div className="ot-hc-order-num">{order.order_number}</div>
             <div>
               <div className="ot-hc-date-label">تم إنشاء الطلب</div>
               <div className="ot-hc-date-val">{fmtDate(new Date(order.created_at))} - {fmtTime(new Date(order.created_at))}</div>
@@ -397,7 +471,7 @@ export default function OrderTrackingPage() {
         <div className="ot-main-grid">
           {/* Sidebar (right) */}
           <aside className="ot-sidebar">
-            <DeliveryInfoCard order={order} delivery={delivery} />
+            <DeliveryInfoCard order={order} />
             <SummaryCard order={order} />
           </aside>
 
@@ -553,33 +627,31 @@ function HeaderDeliveryBanner({ order }: { order: Order }) {
     </div>
   );
 
-  const estimate = getDeadlineEstimate(order);
+  const rollup = orderEtaRollup(order);
+  const eta = formatEtaLabel(rollup);
 
-  if (!estimate) return (
+  if (!rollup) return (
     <div className="ot-hc-left ot-hc-left--success">
       <svg className="ot-hcl-clock" width="22" height="22" fill="none" stroke="#15803D" strokeWidth="2" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
       </svg>
       <div className="ot-hc-delivery">
-        <div className="ot-hcd-label">موعد التوصيل</div>
-        <div className="ot-hcd-time ot-hcd-time--success">سيتم تحديد موعد التوصيل قريباً</div>
-        <div className="ot-hcd-note">سيتم إشعارك عند تحديد الموعد</div>
+        <div className="ot-hcd-label">{eta.label}</div>
+        <div className="ot-hcd-time ot-hcd-time--success">{eta.time}</div>
+        <div className="ot-hcd-note">{eta.note}</div>
       </div>
     </div>
   );
 
-  const prefix = isToday(estimate.earliest) ? 'اليوم' : fmtShort(estimate.earliest);
   return (
     <div className="ot-hc-left">
       <svg className="ot-hcl-clock" width="22" height="22" fill="none" stroke="#15803D" strokeWidth="2" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
       </svg>
       <div className="ot-hc-delivery">
-        <div className="ot-hcd-label">الوصول المتوقع</div>
-        <div className="ot-hcd-time">{prefix} بحلول {fmtTime(estimate.earliest)}</div>
-        <div className="ot-hcd-note">
-          {estimate.isMultiShipment ? 'قد يصل طلبك على أكثر من دفعة' : 'سيتم تحديث الوقت تلقائياً'}
-        </div>
+        <div className="ot-hcd-label">{eta.label}</div>
+        <div className="ot-hcd-time">{eta.time}</div>
+        <div className="ot-hcd-note">{eta.note}</div>
       </div>
       <CompletionRing percent={getOrderCompletionPercent(order)} />
     </div>
@@ -679,19 +751,22 @@ function AlertPanel({ order, hasStranded }: { order: Order; hasStranded: boolean
       </div>
     </div>
   );
-  if (order.status === 'delivering') return (
-    <div className="ot-alert ot-alert--blue">
-      <svg width="18" height="18" fill="none" stroke="#2563EB" strokeWidth="2" viewBox="0 0 24 24">
-        <rect x="1" y="3" width="15" height="13" rx="1"/>
-        <path d="M16 8h4l3 5v3h-7V8z"/>
-        <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
-      </svg>
-      <div>
-        <div className="ot-alert-title">السائق في الطريق إلى موقعك</div>
-        <div className="ot-alert-sub">آخر تحديث: قبل 15 دقيقة</div>
+  if (order.status === 'delivering') {
+    const pickedUpAt = earliestPickedUpAt(order);
+    return (
+      <div className="ot-alert ot-alert--blue">
+        <svg width="18" height="18" fill="none" stroke="#2563EB" strokeWidth="2" viewBox="0 0 24 24">
+          <rect x="1" y="3" width="15" height="13" rx="1"/>
+          <path d="M16 8h4l3 5v3h-7V8z"/>
+          <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
+        </svg>
+        <div>
+          <div className="ot-alert-title">السائق في الطريق إلى موقعك</div>
+          {pickedUpAt && <div className="ot-alert-sub">آخر تحديث: {elapsedLabel(pickedUpAt)}</div>}
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
   return (
     <div className="ot-alert ot-alert--green">
       <svg width="18" height="18" fill="none" stroke="#16a34a" strokeWidth="2" viewBox="0 0 24 24">
@@ -707,8 +782,20 @@ function AlertPanel({ order, hasStranded }: { order: Order; hasStranded: boolean
 
 // ── Delivery Info Card ─────────────────────────────────────────────────────────
 
-function DeliveryInfoCard({ order, delivery }: { order: Order; delivery: { prefix: string; time: string } }) {
-  const isDelivering = order.status === 'delivering';
+// Driver name/phone are deliberately not shown here — there's no data path
+// today for exposing courier contact details to a customer. Faking them was
+// the bug; surfacing real courier contact is a separate future feature.
+function DeliveryInfoCard({ order }: { order: Order }) {
+  const addr = order.shipping_address;
+  const addressLines = addr
+    ? [
+        [addr.address, addr.apartment].filter(Boolean).join('، '),
+        addr.city ?? '',
+      ].filter(Boolean)
+    : [];
+
+  const eta = formatEtaLabel(orderEtaRollup(order));
+
   return (
     <div className="ot-sb-card">
       <div className="ot-sb-title">
@@ -722,24 +809,14 @@ function DeliveryInfoCard({ order, delivery }: { order: Order; delivery: { prefi
       <div className="ot-sb-rows">
         {[
           {
-            icon: <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
-            label: 'اسم السائق',
-            val: isDelivering ? 'أحمد خالد' : '—',
-          },
-          {
-            icon: <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 15a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 4.21h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 11.9a16 16 0 0 0 6 6l1.27-.93a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 19.18z"/></svg>,
-            label: 'رقم التواصل',
-            val: isDelivering ? '05*******38' : '—',
-          },
-          {
             icon: <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>,
-            label: 'وقت الوصول المتوقع',
-            val: `${delivery.prefix}، ${delivery.time.split(' - ')[0]}`,
+            label: eta.label,
+            val: eta.time,
           },
           {
             icon: <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>,
             label: 'عنوان التسليم',
-            val: 'القدس، شارع صلاح الدين\nالعمارة 12، الطابق 3',
+            val: addressLines.length ? addressLines.join('\n') : '—',
             multiline: true,
           },
         ].map(row => (
@@ -748,22 +825,13 @@ function DeliveryInfoCard({ order, delivery }: { order: Order; delivery: { prefi
             <div>
               <div className="ot-sb-row-label">{row.label}</div>
               {row.multiline
-                ? <div className="ot-sb-row-val">{row.val.split('\n').map((l, i) => <span key={i}>{l}{i === 0 && <br />}</span>)}</div>
+                ? <div className="ot-sb-row-val">{row.val.split('\n').map((l, i) => <span key={i}>{l}{i === 0 && row.val.split('\n').length > 1 && <br />}</span>)}</div>
                 : <div className="ot-sb-row-val">{row.val}</div>
               }
             </div>
           </div>
         ))}
       </div>
-      {isDelivering && (
-        <button type="button" className="ot-sb-map-btn">
-          <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"/>
-            <line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/>
-          </svg>
-          تتبع السائق على الخريطة
-        </button>
-      )}
     </div>
   );
 }
@@ -849,7 +917,7 @@ function getProductTimestamps(detail: OrderDetail, orderCreatedAt: string): (Dat
   const s    = detail.shipment;
   return [
     base,                                                            // 0: تم الطلب
-    s ? new Date(s.created_at) : null,                               // 1: جاهز للاستلام
+    detail.ready_time ? new Date(detail.ready_time) : null,          // 1: جاهز للاستلام
     null,                                                            // 2: في انتظار الاستلام (no DB timestamp)
     s?.picked_up_at ? new Date(s.picked_up_at) : null,              // 3: قيد التوصيل
     s?.delivered_at ? new Date(s.delivered_at) : null,              // 4: تم التسليم
@@ -913,6 +981,12 @@ function ProductCard({
             )}
             <span className="ot-pc-qty-badge">{qty} قطعة</span>
             <div className="ot-pc-price">₪{(price * qty).toFixed(2)}</div>
+            {shipment && (
+              <div className="ot-pc-shipment-num">
+                رقم الشحنة: {shipment.shipment_number}
+                {shipment.batchNumber && <> · رقم التجميعة: {shipment.batchNumber}</>}
+              </div>
+            )}
           </div>
         </div>
 
@@ -959,6 +1033,7 @@ function ProductCard({
       </div>
 
       <ProductStatusPanel shipment={shipment} />
+      <ProductEtaLine shipment={shipment} />
       <DeliveryFeedbackActions detail={detail} />
     </div>
   );
@@ -1039,6 +1114,15 @@ function DeliveryFeedbackActions({ detail }: { detail: OrderDetail }) {
       )}
     </div>
   );
+}
+
+// ── Product ETA Line ───────────────────────────────────────────────────────────
+
+function ProductEtaLine({ shipment }: { shipment: Shipment | null }) {
+  if (!shipment) return null;
+  const label = shipmentEtaLabel(shipment);
+  if (!label) return null;
+  return <div className="ot-pc-eta">{label}</div>;
 }
 
 // ── Product Status Panel ───────────────────────────────────────────────────────

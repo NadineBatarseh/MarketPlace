@@ -805,6 +805,7 @@ function EditProductModal({ product, onSave, onClose }: {
     setError('');
 
     const uploadedUrls: string[] = [];
+    let imageError = '';
     for (let i = 0; i < pendingFiles.length; i++) {
       const file = pendingFiles[i];
       const ext = file.name.split('.').pop();
@@ -812,7 +813,11 @@ function EditProductModal({ product, onSave, onClose }: {
       const { data: uploadData, error: uploadErr } = await supabase.storage
         .from('product-images')
         .upload(path, file, { upsert: true });
-      if (uploadErr) { setError('تعذّر رفع الصورة: ' + uploadErr.message); continue; }
+      if (uploadErr) {
+        console.error('[EditModal] image upload failed:', uploadErr);
+        imageError = 'تعذّر رفع الصورة: ' + uploadErr.message;
+        continue;
+      }
       const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(uploadData.path);
       uploadedUrls.push(urlData.publicUrl);
     }
@@ -904,6 +909,11 @@ function EditProductModal({ product, onSave, onClose }: {
       category_id: categoryId || null,
       discount_pct: parseDiscountPct(form.discount),
     });
+    setSaving(false);
+    if (imageError) {
+      setError(imageError + ' — تم حفظ باقي التعديلات، حاول رفع الصورة مرة أخرى');
+      return;
+    }
     onClose();
   };
 
@@ -1124,6 +1134,7 @@ function AddProductModal({ shopId, onAdd, onClose }: {
     const productId = data.id as string;
 
     const uploadedUrls: string[] = [];
+    let imageError = '';
     for (let i = 0; i < pendingFiles.length; i++) {
       const file = pendingFiles[i];
       const ext = file.name.split('.').pop();
@@ -1131,13 +1142,21 @@ function AddProductModal({ shopId, onAdd, onClose }: {
       const { data: uploadData, error: uploadErr } = await supabase.storage
         .from('product-images')
         .upload(path, file, { upsert: true });
-      if (uploadErr) { setError('تعذّر رفع الصورة: ' + uploadErr.message); continue; }
+      if (uploadErr) {
+        console.error('[AddModal] image upload failed:', uploadErr);
+        imageError = 'تعذّر رفع الصورة: ' + uploadErr.message;
+        continue;
+      }
       const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(uploadData.path);
       uploadedUrls.push(urlData.publicUrl);
     }
 
     if (uploadedUrls.length > 0) {
-      await supabase.from('products').update({ image_urls: uploadedUrls }).eq('id', productId);
+      const { error: imgUpdateErr } = await supabase.from('products').update({ image_urls: uploadedUrls }).eq('id', productId);
+      if (imgUpdateErr) {
+        console.error('[AddModal] saving image_urls failed:', imgUpdateErr);
+        imageError = 'تعذّر حفظ رابط الصورة: ' + imgUpdateErr.message;
+      }
     }
 
     if (matrix.colors.length > 0 && matrix.sizes.length > 0) {
@@ -1193,6 +1212,11 @@ function AddProductModal({ shopId, onAdd, onClose }: {
 
     previewUrls.forEach(url => URL.revokeObjectURL(url));
     onAdd({ ...data, image_urls: uploadedUrls.length > 0 ? uploadedUrls : null, capacity_units } as DBProduct);
+    setSaving(false);
+    if (imageError) {
+      setError(imageError + ' — تم حفظ باقي بيانات المنتج، يمكنك إعادة رفع الصورة من خلال تعديل المنتج');
+      return;
+    }
     onClose();
   };
 
