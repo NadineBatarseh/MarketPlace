@@ -2,6 +2,7 @@ import supabase from '../../supabase.js';
 import { C } from '../constants.js';
 import { roadDistance, estimateDurationMinutes } from '../formulas.js';
 import { Coordinates } from '../types.js';
+import { applyRouteEta } from '../eta.js';
 
 // Courier is considered "arrived" at a zone when within this distance
 const ARRIVAL_THRESHOLD_KM = 1.0;
@@ -119,6 +120,17 @@ export async function tryAddShipmentsToBatch(params: AdditionParams): Promise<bo
     .eq('id', batch_id);
 
   console.log(`[Phase 8] Added ${new_shipment_ids.length} shipments to batch ${batch_id}`);
+
+  // Route ETA from the courier's live position (guaranteed non-null here —
+  // D27's timeOk check above already required courierLoc to be truthy).
+  const { data: dropoffs } = await supabase
+    .from('shipments')
+    .select('id, dropoff_lat, dropoff_lng')
+    .in('id', new_shipment_ids);
+  if (dropoffs?.length) {
+    await applyRouteEta(dropoffs as { id: string; dropoff_lat: number; dropoff_lng: number }[], courierLoc!);
+  }
+
   return true;
 }
 

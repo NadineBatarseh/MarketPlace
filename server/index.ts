@@ -982,7 +982,6 @@ app.post("/api/activate", async (req: Request, res: Response) => {
           status: "offline",
           location: { lat: 31.9038, lng: 35.2034 },
           home_base: { lat: 31.9038, lng: 35.2034 },
-          home_base_zone: "Ramallah",
           ...courierDocs,
         });
       if (insertCourierError) {

@@ -6,8 +6,10 @@ import {
   type AdminBatchFilters, type BreakdownCase,
 } from '../../lib/adminBatches';
 import {
-  MoveShipmentsModal, RemoveShipmentsModal, AddNoteModal, UpdateEstimatedTimeModal, ResolveBreakdownModal, ChangeDriverModal,
+  RemoveShipmentsModal, AddNoteModal, ResolveBreakdownModal, ChangeDriverModal, ModalShell,
+  CustomerDetailsModal,
 } from './batchManagement/components';
+import { RedistributeShipmentsModal } from './batchManagement/redistributeModal';
 
 type BatchStatus = 'pending_assignment' | 'assigned' | 'in_transit' | 'completed' | 'cancelled';
 
@@ -54,10 +56,11 @@ const ACTION_TYPE_LABELS: Record<string, string> = {
   escalate_manual_intervention: 'تصعيد لمعالجة يدوية',
   resolve_breakdown: 'معالجة عطل',
   change_driver: 'تغيير السائق',
+  redistribute_shipments: 'إعادة توزيع شحنات',
 };
 
 const STATUS_STYLE: Record<BatchStatus, { bg: string; text: string; border: string }> = {
-  pending_assignment: { bg: '#FFF7ED', text: '#C2410C', border: '#FDBA74' },
+  pending_assignment: { bg: '#F1F5F9', text: '#334155', border: '#CBD5E1' },
   assigned: { bg: '#EFF6FF', text: '#1D4ED8', border: '#93C5FD' },
   in_transit: { bg: '#F0FDF4', text: '#15803D', border: '#86EFAC' },
   completed: { bg: '#F8FAFC', text: '#475569', border: '#CBD5E1' },
@@ -65,6 +68,8 @@ const STATUS_STYLE: Record<BatchStatus, { bg: string; text: string; border: stri
 };
 
 const ALL_STATUSES: BatchStatus[] = ['pending_assignment', 'assigned', 'in_transit', 'completed', 'cancelled'];
+const ACTIVE_STATUSES: BatchStatus[] = ['pending_assignment', 'assigned', 'in_transit'];
+const ARCHIVE_STATUSES: BatchStatus[] = ['completed', 'cancelled'];
 
 function formatDate(iso: string | null) {
   if (!iso) return '—';
@@ -115,13 +120,14 @@ const actionBtnStyle = (color: string): React.CSSProperties => ({
 });
 
 export default function BatchMonitorPage() {
-  const [tab, setTab] = useState<'batches' | 'breakdowns'>('batches');
+  const [tab, setTab] = useState<'batches' | 'archive' | 'breakdowns'>('batches');
 
   // ── Filters ──
   const [filters, setFilters] = useState<AdminBatchFilters>({});
   const [searchInput, setSearchInput] = useState('');
 
   const [batches, setBatches] = useState<AdminBatchListRow[]>([]);
+  const [archivedCount, setArchivedCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -150,16 +156,18 @@ export default function BatchMonitorPage() {
   const [addingShipments, setAddingShipments] = useState<Set<string>>(new Set());
   const [addShipmentMsg, setAddShipmentMsg] = useState<Record<string, string>>({});
 
-  // Shipment selection for move/remove actions
+  // Shipment selection for remove action
   const [moveSelection, setMoveSelection] = useState<Record<string, Set<string>>>({});
 
   // Modals
-  const [moveModal, setMoveModal] = useState<{ batchId: string; shipmentIds: string[] } | null>(null);
   const [removeModal, setRemoveModal] = useState<{ batchId: string; shipmentIds: string[] } | null>(null);
   const [noteModal, setNoteModal] = useState<{ batchId: string } | null>(null);
-  const [timeModal, setTimeModal] = useState<{ batchId: string; current: string | null } | null>(null);
   const [resolveModal, setResolveModal] = useState<BreakdownCase | null>(null);
   const [driverModal, setDriverModal] = useState<{ batchId: string } | null>(null);
+  const [redistributeModal, setRedistributeModal] = useState<{ batchId: string } | null>(null);
+  const [auditLogModal, setAuditLogModal] = useState<{ batchId: string } | null>(null);
+  const [customerModal, setCustomerModal] = useState<AdminShipmentDetail | null>(null);
+  const [addShipmentsModal, setAddShipmentsModal] = useState<{ batchId: string } | null>(null);
 
   // Breakdowns tab
   const [breakdownCases, setBreakdownCases] = useState<BreakdownCase[]>([]);
@@ -176,14 +184,20 @@ export default function BatchMonitorPage() {
     setUnbatchedShipments((data ?? []) as UnbatchedShipment[]);
   }, []);
 
+  const loadArchivedCount = useCallback(async () => {
+    const { count } = await supabase.from('batches').select('id', { count: 'exact', head: true }).in('status', ['completed', 'cancelled']);
+    setArchivedCount(count ?? 0);
+  }, []);
+
   const loadBatches = useCallback(async () => {
     setLoading(true);
     setError('');
-    const [res] = await Promise.all([fetchAdminBatches(filters), loadUnbatched()]);
+    const scopedFilters = tab === 'archive' ? { ...filters, archived: 'true' as const } : filters;
+    const [res] = await Promise.all([fetchAdminBatches(scopedFilters), loadUnbatched(), loadArchivedCount()]);
     if (!res.ok) setError('تعذّر تحميل البيانات: ' + (res.error ?? ''));
     else setBatches(res.batches ?? []);
     setLoading(false);
-  }, [filters, loadUnbatched]);
+  }, [filters, tab, loadUnbatched, loadArchivedCount]);
 
   const loadBreakdowns = useCallback(async () => {
     setLoadingBreakdowns(true);
@@ -258,6 +272,14 @@ export default function BatchMonitorPage() {
       const current = new Set(prev[batchId] ?? []);
       current.has(shipmentId) ? current.delete(shipmentId) : current.add(shipmentId);
       return { ...prev, [batchId]: current };
+    });
+  };
+
+  const toggleAllMoveSelection = (batchId: string, eligibleIds: string[]) => {
+    setMoveSelection(prev => {
+      const current = prev[batchId] ?? new Set<string>();
+      const allSelected = eligibleIds.length > 0 && eligibleIds.every(id => current.has(id));
+      return { ...prev, [batchId]: allSelected ? new Set<string>() : new Set(eligibleIds) };
     });
   };
 
@@ -364,6 +386,24 @@ export default function BatchMonitorPage() {
   const counts = Object.fromEntries(ALL_STATUSES.map(s => [s, batches.filter(b => b.status === s).length])) as Record<BatchStatus, number>;
   const delayedCount = batches.filter(b => b.is_delayed).length;
   const breakdownCount = batches.filter(b => b.has_active_breakdown).length;
+  const manualCount = batches.filter(b => b.creation_source === 'admin').length;
+
+  const statTiles = tab === 'archive'
+    ? [
+        { label: 'الإجمالي', value: batches.length, color: '#0F2B4E', bg: '#FFFFFF', border: '#E2E8F0' },
+        { label: 'مكتملة', value: counts.completed, color: '#475569', bg: '#FFFFFF', border: '#E2E8F0' },
+        { label: 'ملغاة', value: counts.cancelled, color: '#DC2626', bg: '#FFFFFF', border: '#E2E8F0' },
+        { label: 'بها عطل', value: breakdownCount, color: '#DC2626', bg: '#FFFFFF', border: '#E2E8F0' },
+      ]
+    : [
+        { label: 'الإجمالي', value: batches.length, color: '#0F2B4E', bg: '#FFFFFF', border: '#E2E8F0' },
+        { label: 'بانتظار السائق', value: counts.pending_assignment, color: '#334155', bg: '#FFFFFF', border: '#E2E8F0' },
+        { label: 'تم التعيين', value: counts.assigned, color: '#1D4ED8', bg: '#FFFFFF', border: '#E2E8F0' },
+        { label: 'في الطريق', value: counts.in_transit, color: '#15803D', bg: '#FFFFFF', border: '#E2E8F0' },
+        { label: 'متأخرة', value: delayedCount, color: '#B45309', bg: '#FFFFFF', border: '#E2E8F0' },
+        { label: 'بها عطل', value: breakdownCount, color: '#DC2626', bg: '#FFFFFF', border: '#E2E8F0' },
+        { label: 'أُنشئت يدوياً', value: manualCount, color: '#7C3AED', bg: '#FFFFFF', border: '#E2E8F0' },
+      ];
 
   function applySearch() {
     setFilters(prev => ({ ...prev, q: searchInput.trim() || undefined }));
@@ -374,11 +414,6 @@ export default function BatchMonitorPage() {
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');`}</style>
 
       {/* Modals */}
-      {moveModal && (
-        <MoveShipmentsModal batchId={moveModal.batchId} shipmentIds={moveModal.shipmentIds}
-          onClose={() => setMoveModal(null)}
-          onSuccess={() => { setMoveModal(null); setMoveSelection(prev => ({ ...prev, [moveModal.batchId]: new Set() })); refreshDetail(moveModal.batchId); }} />
-      )}
       {removeModal && (
         <RemoveShipmentsModal batchId={removeModal.batchId} shipmentIds={removeModal.shipmentIds}
           onClose={() => setRemoveModal(null)}
@@ -386,10 +421,6 @@ export default function BatchMonitorPage() {
       )}
       {noteModal && (
         <AddNoteModal batchId={noteModal.batchId} onClose={() => setNoteModal(null)} onSuccess={() => { setNoteModal(null); refreshDetail(noteModal.batchId); }} />
-      )}
-      {timeModal && (
-        <UpdateEstimatedTimeModal batchId={timeModal.batchId} currentValue={timeModal.current}
-          onClose={() => setTimeModal(null)} onSuccess={() => { setTimeModal(null); refreshDetail(timeModal.batchId); }} />
       )}
       {resolveModal && (
         <ResolveBreakdownModal caseRow={resolveModal} onClose={() => setResolveModal(null)}
@@ -406,6 +437,59 @@ export default function BatchMonitorPage() {
             onClose={() => setDriverModal(null)}
             onSuccess={() => { setDriverModal(null); refreshDetail(driverModal.batchId); }}
           />
+        );
+      })()}
+      {redistributeModal && (
+        <RedistributeShipmentsModal batchId={redistributeModal.batchId}
+          onClose={() => setRedistributeModal(null)}
+          onSuccess={() => { setRedistributeModal(null); refreshDetail(redistributeModal.batchId); loadBatches(); }} />
+      )}
+      {auditLogModal && (
+        <ModalShell title="السجلات الإدارية" icon="📋" onClose={() => setAuditLogModal(null)} width={520}>
+          <AuditLogPanel entries={detailCache[auditLogModal.batchId]?.audit_log ?? []} />
+        </ModalShell>
+      )}
+      {customerModal && (
+        <CustomerDetailsModal shipment={customerModal} onClose={() => setCustomerModal(null)} />
+      )}
+      {addShipmentsModal && (() => {
+        const target = batches.find(b => b.id === addShipmentsModal.batchId);
+        if (!target) return null;
+        return (
+          <ModalShell title={`إضافة شحنات من ${target.route[1] ?? ''} للتجميعة`} icon="➕" onClose={() => setAddShipmentsModal(null)} width={480}>
+            {target.estimated_minutes_to_next_zone != null && (
+              <div style={{ marginBottom: 10, fontSize: 11, color: '#15803D', background: '#DCFCE7', border: '1px solid #86EFAC', borderRadius: 5, padding: '2px 8px', display: 'inline-block' }}>
+                ⏱ {target.estimated_minutes_to_next_zone} د حتى الوصول
+              </div>
+            )}
+            {loadingCompatible.has(target.id) && <div style={{ color: '#94A3B8', fontSize: 12 }}>جاري البحث عن شحنات متوافقة...</div>}
+            {!loadingCompatible.has(target.id) && (compatibleShipments[target.id]?.length ?? 0) === 0 && (
+              <div style={{ color: '#94A3B8', fontSize: 12 }}>لا توجد شحنات متاحة من {target.route[1]}</div>
+            )}
+            {!loadingCompatible.has(target.id) && (compatibleShipments[target.id]?.length ?? 0) > 0 && (
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 240, overflowY: 'auto', marginBottom: 10 }}>
+                  {compatibleShipments[target.id].map(s => (
+                    <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: '#0F2B4E' }}>
+                      <input type="checkbox" checked={phase8Selected[target.id]?.has(s.id) ?? false} onChange={() => togglePhase8Selection(target.id, s.id)} style={{ accentColor: '#15803D' }} />
+                      <span style={{ fontFamily: 'monospace', color: '#64748B' }}>{s.shipment_number}</span>
+                      <span>{s.pickup_zone} ← {s.dropoff_zone}</span>
+                      <span style={{ fontSize: 10, color: s.status === 'delayed' ? '#C2410C' : '#15803D' }}>{SHIPMENT_STATUS_LABELS[s.status] ?? s.status}</span>
+                    </label>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <button disabled={!(phase8Selected[target.id]?.size) || addingShipments.has(target.id)} onClick={() => addShipmentsToBatch(target)}
+                    style={{ padding: '7px 18px', borderRadius: 7, border: 'none', background: (phase8Selected[target.id]?.size) ? '#15803D' : '#CBD5E1', color: '#fff', cursor: (phase8Selected[target.id]?.size) ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 700, fontFamily: 'inherit', opacity: addingShipments.has(target.id) ? 0.7 : 1, whiteSpace: 'nowrap' }}>
+                    {addingShipments.has(target.id) ? '⏳ جاري...' : `أضف للتجميعة${(phase8Selected[target.id]?.size) ? ` (${phase8Selected[target.id].size})` : ''}`}
+                  </button>
+                  {addShipmentMsg[target.id] && (
+                    <span style={{ fontSize: 12, color: addShipmentMsg[target.id].startsWith('✓') ? '#15803D' : '#DC2626', fontWeight: 600 }}>{addShipmentMsg[target.id]}</span>
+                  )}
+                </div>
+              </>
+            )}
+          </ModalShell>
         );
       })()}
 
@@ -430,11 +514,18 @@ export default function BatchMonitorPage() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-        <button onClick={() => setTab('batches')} style={{
+        <button onClick={() => { setTab('batches'); setFilters(prev => ({ ...prev, status: undefined })); }} style={{
           padding: '6px 16px', borderRadius: 20, border: '1.5px solid', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
           borderColor: tab === 'batches' ? '#0F2B4E' : '#E2E8F0', background: tab === 'batches' ? '#0F2B4E' : '#fff',
           color: tab === 'batches' ? '#fff' : '#64748B', fontWeight: tab === 'batches' ? 700 : 400,
         }}>التجميعات</button>
+        <button onClick={() => { setTab('archive'); setFilters(prev => ({ ...prev, status: undefined })); }} style={{
+          padding: '6px 16px', borderRadius: 20, border: '1.5px solid', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
+          borderColor: tab === 'archive' ? '#0F2B4E' : '#E2E8F0', background: tab === 'archive' ? '#0F2B4E' : '#fff',
+          color: tab === 'archive' ? '#fff' : '#64748B', fontWeight: tab === 'archive' ? 700 : 400,
+        }}>
+          الأرشيف {archivedCount > 0 && <span style={{ fontFamily: 'monospace' }}>({archivedCount})</span>}
+        </button>
         <button onClick={() => setTab('breakdowns')} style={{
           padding: '6px 16px', borderRadius: 20, border: '1.5px solid', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
           borderColor: tab === 'breakdowns' ? '#DC2626' : '#E2E8F0', background: tab === 'breakdowns' ? '#FEF2F2' : '#fff',
@@ -455,16 +546,8 @@ export default function BatchMonitorPage() {
           )}
 
           {/* Stats strip */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8, marginBottom: 18 }}>
-            {[
-              { label: 'الإجمالي', value: batches.length, color: '#0F2B4E', bg: '#F8FAFC', border: '#E2E8F0' },
-              { label: 'بانتظار السائق', value: counts.pending_assignment, color: '#C2410C', bg: '#FFF7ED', border: '#FDBA74' },
-              { label: 'تم التعيين', value: counts.assigned, color: '#1D4ED8', bg: '#EFF6FF', border: '#93C5FD' },
-              { label: 'في الطريق', value: counts.in_transit, color: '#15803D', bg: '#F0FDF4', border: '#86EFAC' },
-              { label: 'مكتملة', value: counts.completed, color: '#475569', bg: '#F8FAFC', border: '#CBD5E1' },
-              { label: 'متأخرة', value: delayedCount, color: '#B45309', bg: '#FFFBEB', border: '#FDE68A' },
-              { label: 'بها عطل', value: breakdownCount, color: '#DC2626', bg: '#FEF2F2', border: '#FCA5A5' },
-            ].map(s => (
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${statTiles.length}, 1fr)`, gap: 8, marginBottom: 18 }}>
+            {statTiles.map(s => (
               <div key={s.label} style={{ background: s.bg, border: `1.5px solid ${s.border}`, borderRadius: 10, padding: '10px 0', textAlign: 'center' }}>
                 <div style={{ fontSize: 20, fontWeight: 800, color: s.color, fontFamily: 'monospace' }}>{s.value}</div>
                 <div style={{ fontSize: 10, color: '#64748B', marginTop: 2 }}>{s.label}</div>
@@ -474,9 +557,19 @@ export default function BatchMonitorPage() {
 
           {/* Filters */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14, padding: '12px 14px', background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: 10 }}>
-            <select style={inputStyle} value={filters.status ?? ''} onChange={e => setFilters(prev => ({ ...prev, status: e.target.value || undefined }))}>
+            <select style={inputStyle} value={filters.breakdown === 'true' ? 'breakdown' : (filters.created_manually === 'true' ? 'created_manually' : (filters.status ?? ''))} onChange={e => {
+              const v = e.target.value;
+              setFilters(prev => ({
+                ...prev,
+                status: (v !== 'breakdown' && v !== 'created_manually' && v) ? v : undefined,
+                breakdown: v === 'breakdown' ? 'true' : undefined,
+                created_manually: v === 'created_manually' ? 'true' : undefined,
+              }));
+            }}>
               <option value="">كل الحالات</option>
-              {ALL_STATUSES.map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+              {(tab === 'archive' ? ARCHIVE_STATUSES : ACTIVE_STATUSES).map(s => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+              <option value="breakdown">بها عطل</option>
+              <option value="created_manually">أُنشئت يدوياً</option>
             </select>
             <select style={inputStyle} value={filters.driver_id ?? ''} onChange={e => setFilters(prev => ({ ...prev, driver_id: e.target.value || undefined }))}>
               <option value="">كل السائقين</option>
@@ -495,16 +588,12 @@ export default function BatchMonitorPage() {
               <option value="with_reason">تأخير بسبب مذكور</option>
               <option value="without_reason">تأخير بدون سبب</option>
             </select>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#64748B', cursor: 'pointer' }}>
-              <input type="checkbox" checked={filters.breakdown === 'true'} onChange={e => setFilters(prev => ({ ...prev, breakdown: e.target.checked ? 'true' : undefined }))} />
-              بها عطل فقط
-            </label>
             <input type="date" style={inputStyle} value={filters.date_from ?? ''} onChange={e => setFilters(prev => ({ ...prev, date_from: e.target.value || undefined }))} title="من تاريخ" />
             <input type="date" style={inputStyle} value={filters.date_to ?? ''} onChange={e => setFilters(prev => ({ ...prev, date_to: e.target.value || undefined }))} title="إلى تاريخ" />
             <input type="text" style={{ ...inputStyle, minWidth: 180 }} placeholder="رقم التجميعة أو الشحنة..." value={searchInput}
               onChange={e => setSearchInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && applySearch()} />
             <button onClick={applySearch} style={{ ...inputStyle, cursor: 'pointer', background: '#0F2B4E', color: '#fff', border: 'none' }}>بحث</button>
-            {(filters.status || filters.driver_id || filters.zone || filters.delayed || filters.breakdown || filters.date_from || filters.date_to || filters.q) && (
+            {(filters.status || filters.driver_id || filters.zone || filters.delayed || filters.breakdown || filters.created_manually || filters.date_from || filters.date_to || filters.q) && (
               <button onClick={() => { setFilters({}); setSearchInput(''); }} style={{ ...inputStyle, cursor: 'pointer', color: '#DC2626' }}>إعادة ضبط</button>
             )}
           </div>
@@ -514,8 +603,8 @@ export default function BatchMonitorPage() {
           )}
           {loading && <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8', fontSize: 14 }}>جاري التحميل...</div>}
 
-          {/* Unbatched individual shipment cards */}
-          {!loading && unbatchedShipments.length > 0 && (
+          {/* Unbatched individual shipment cards — not relevant in the archive view */}
+          {!loading && tab !== 'archive' && unbatchedShipments.length > 0 && (
             <div style={{ marginBottom: 18 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#92400E', marginBottom: 8, letterSpacing: '0.05em' }}>
                 طرود غير مجمّعة ({unbatchedShipments.length})
@@ -548,7 +637,7 @@ export default function BatchMonitorPage() {
             </div>
           )}
 
-          {!loading && batches.length === 0 && unbatchedShipments.length === 0 && (
+          {!loading && batches.length === 0 && (tab === 'archive' || unbatchedShipments.length === 0) && (
             <div style={{ textAlign: 'center', padding: 48, color: '#94A3B8', fontSize: 14 }}>لا توجد تجميعات مطابقة للفلاتر الحالية</div>
           )}
 
@@ -564,73 +653,65 @@ export default function BatchMonitorPage() {
 
               return (
                 <div key={batch.id} style={{ background: '#fff', border: `1.5px solid ${isOpen ? col.border : '#E2E8F0'}`, borderRadius: 10, overflow: 'hidden', transition: 'border-color 0.15s' }}>
-                  {/* Card header */}
-                  <div onClick={() => toggle(batch)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', cursor: 'pointer', userSelect: 'none', flexWrap: 'wrap' }}>
-                    <span style={{ background: col.bg, color: col.text, border: `1px solid ${col.border}`, borderRadius: 6, padding: '2px 10px', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 }}>
-                      {STATUS_LABELS[batch.status as BatchStatus] ?? batch.status}
-                    </span>
-
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-                        {batch.route.length > 0
-                          ? batch.route.map((zone, i) => (
-                            <React.Fragment key={i}>
-                              <span style={{ background: '#F1F5F9', color: '#0F2B4E', borderRadius: 5, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>{zone}</span>
-                              {i < batch.route.length - 1 && <span style={{ color: '#94A3B8', fontSize: 11 }}>←</span>}
-                            </React.Fragment>
-                          ))
-                          : <span style={{ color: '#94A3B8', fontSize: 11 }}>لا يوجد مسار</span>}
+                  {/* Card header — route+batch number pinned to the physical right edge via
+                      position:absolute + right:16px (a physical offset, immune to any
+                      direction:rtl flex-ordering quirks); everything else flows normally
+                      on the left, with paddingRight reserving room so it never overlaps. */}
+                  <div onClick={() => toggle(batch)} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 16, padding: '20px 230px 20px 20px', cursor: 'pointer', userSelect: 'none', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginRight: 'auto' }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
+                        <span style={{ background: col.bg, color: col.text, border: `1px solid ${col.border}`, borderRadius: 6, padding: '3px 12px', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                          {STATUS_LABELS[batch.status as BatchStatus] ?? batch.status}
+                        </span>
+                        {batch.courier?.name && <Chip icon="🚗" label={batch.courier.name} color="blue" />}
+                        {batch.is_delayed && <Chip icon="⏰" label={`متأخرة ${batch.delay_minutes} د`} color="orange" />}
+                        {batch.has_active_breakdown && <Chip icon="🛑" label="عطل نشط" color="red" />}
+                        {batch.requires_manual_intervention && <Chip icon="⚠" label="تتطلب تدخل يدوي" color="red" />}
+                        {batch.needs_dispatcher && <Chip icon="⚠" label="يحتاج مشرف" color="red" />}
                       </div>
-                      <span style={{ fontSize: 10, color: '#94A3B8', fontFamily: 'monospace' }}>{batch.batch_number}</span>
+
+                      <span style={{ color: '#94A3B8', fontSize: 13, flexShrink: 0 }}>{isOpen ? '▲' : '▼'}</span>
                     </div>
 
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
-                      <Chip icon="📦" label={`${batch.shipment_count} شحنة`} />
-                      <Chip icon="⚖" label={`${batch.total_volume}/${batch.max_volume}`} />
-                      <Chip icon="✅" label={`${batch.delivered_count} تم التوصيل`} color="green" />
-                      <Chip icon="🚚" label={`${batch.picked_up_count} مع السائق`} color="blue" />
-                      <Chip icon="🏬" label={`${batch.not_picked_up_count} لم يُستلم`} color="gray" />
-                      {batch.courier?.name && <Chip icon="🚗" label={batch.courier.name} color="blue" />}
-                      {batch.is_delayed && <Chip icon="⏰" label={`متأخرة ${batch.delay_minutes} د`} color="orange" />}
-                      {batch.has_active_breakdown && <Chip icon="🛑" label="عطل نشط" color="red" />}
-                      {batch.requires_manual_intervention && <Chip icon="⚠" label="تتطلب تدخل يدوي" color="red" />}
-                      {batch.under_monitoring && <Chip icon="👁" label="تحت المراقبة" color="orange" />}
-                      {batch.needs_dispatcher && <Chip icon="⚠" label="يحتاج مشرف" color="red" />}
+                    <div style={{ position: 'absolute', right: 20, top: '50%', transform: 'translateY(-50%)', textAlign: 'right', maxWidth: 210 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#0F2B4E', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {batch.route.length > 0 ? batch.route.join('  ←  ') : 'لا يوجد مسار'}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#94A3B8', fontFamily: 'monospace' }}>{batch.batch_number}</div>
+                      <div style={{ fontSize: 11, color: '#94A3B8' }}>{formatDate(batch.created_at)}</div>
                     </div>
-
-                    <span style={{ color: '#94A3B8', fontSize: 12, flexShrink: 0 }}>{isOpen ? '▲' : '▼'}</span>
                   </div>
 
-                  {/* Expanded details */}
+                  {/* Expanded details — everything shown at once */}
                   {isOpen && (
                     <div style={{ borderTop: `1px solid ${col.border}`, padding: '14px 16px', background: col.bg }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14, marginBottom: 16 }}>
-                        <Detail label="المنطقة/المدينة" value={batch.zone ?? '—'} />
-                        <Detail label="تاريخ الإنشاء" value={formatDate(batch.created_at)} />
-                        <Detail label="بدء التوصيل" value={formatDate(batch.started_at)} />
-                        <Detail label="الإنجاز الفعلي" value={formatDate(batch.completed_at)} />
-                        <Detail label="الإنجاز المتوقع" value={formatDate(batch.expected_completion_at)} />
-                        <Detail label="السعة المستخدمة" value={`${batch.total_volume} / ${batch.max_volume}`} />
-                        <Detail label="المحطات" value={`${batch.stops_used} / ${batch.max_stops}`} />
-                        {detail?.batch.courier && (
-                          <Detail label="بيانات المركبة" value={`سعة السائق: ${detail.batch.courier.max_volume} وحدة`} />
-                        )}
-                        {batch.delay_reason && <Detail label="سبب التأخير" value={batch.delay_reason} />}
-                        {batch.breakdown_reason && <Detail label="سبب العطل" value={batch.breakdown_reason} />}
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+                        <Chip icon="📦" label={`${batch.shipment_count} شحنة`} />
+                        <Chip icon="⚖" label={`${batch.total_volume}/${batch.max_volume}`} />
+                        <Chip icon="✅" label={`${batch.delivered_count} تم التوصيل`} color="green" />
+                        <Chip icon="🚚" label={`${batch.picked_up_count} مع السائق`} color="blue" />
+                        <Chip icon="🏬" label={`${batch.not_picked_up_count} لم يُستلم`} color="gray" />
+                        {batch.creation_source === 'admin' && <Chip icon="🖐" label="أُنشئت يدوياً" color="gray" />}
+                        {batch.under_monitoring && <Chip icon="👁" label="تحت المراقبة" color="orange" />}
                       </div>
 
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-                        <button onClick={() => setNoteModal({ batchId: batch.id })} style={actionBtnStyle('#1D4ED8')}>📝 إضافة ملاحظة</button>
-                        <button onClick={() => setTimeModal({ batchId: batch.id, current: detail?.batch.expected_completion_at ?? null })} style={actionBtnStyle('#1D4ED8')}>⏱ تحديث وقت الإنجاز</button>
-                        {eligibleSelected.length > 0 && (
+                        {tab !== 'archive' && (
                           <>
-                            <button onClick={() => setMoveModal({ batchId: batch.id, shipmentIds: eligibleSelected.map(s => s.id) })} style={actionBtnStyle('#15803D')}>
-                              🔁 نقل {eligibleSelected.length} شحنة لتجميعة أخرى
-                            </button>
-                            <button onClick={() => setRemoveModal({ batchId: batch.id, shipmentIds: eligibleSelected.map(s => s.id) })} style={actionBtnStyle('#DC2626')}>
-                              ↩️ إزالة {eligibleSelected.length} شحنة وإعادتها للمتاح
-                            </button>
+                            <button onClick={() => setNoteModal({ batchId: batch.id })} style={actionBtnStyle('#1D4ED8')}>📝 إضافة ملاحظة</button>
+                            <button onClick={() => setRedistributeModal({ batchId: batch.id })} style={actionBtnStyle('#7C3AED')}>🔀 إعادة توزيع الشحنات</button>
                           </>
+                        )}
+                        <button onClick={() => setAuditLogModal({ batchId: batch.id })} style={actionBtnStyle('#64748B')}>📋 السجلات الإدارية</button>
+                        {tab !== 'archive' && !['completed', 'cancelled'].includes(batch.status) && (
+                          <button onClick={() => setDriverModal({ batchId: batch.id })} style={actionBtnStyle('#EA580C')}>
+                            🚗 {batch.courier ? 'تغيير السائق' : 'تعيين سائق'}
+                          </button>
+                        )}
+                        {tab !== 'archive' && batch.status === 'in_transit' && batch.route.length >= 2 && (
+                          <button onClick={() => setAddShipmentsModal({ batchId: batch.id })} style={actionBtnStyle('#15803D')}>
+                            ➕ إضافة شحنات من {batch.route[1]}
+                          </button>
                         )}
                       </div>
 
@@ -641,67 +722,19 @@ export default function BatchMonitorPage() {
                           shipments={detail.shipments}
                           selected={selectedForMove}
                           onToggle={id => toggleMoveSelection(batch.id, id)}
+                          onToggleAll={() => toggleAllMoveSelection(batch.id, detail.shipments.filter(s => s.not_picked_up).map(s => s.id))}
+                          readOnly={tab === 'archive'}
+                          onShowCustomer={setCustomerModal}
                         />
                       )}
 
-                      {batch.status === 'in_transit' && batch.route.length >= 2 && (
-                        <div style={{ marginTop: 16, padding: '14px 16px', background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: 8 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 6 }}>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: '#15803D' }}>إضافة شحنات من {batch.route[1]} للتجميعة</div>
-                            {batch.estimated_minutes_to_next_zone != null && (
-                              <span style={{ fontSize: 11, color: '#15803D', background: '#DCFCE7', border: '1px solid #86EFAC', borderRadius: 5, padding: '2px 8px' }}>
-                                ⏱ {batch.estimated_minutes_to_next_zone} د حتى الوصول
-                              </span>
-                            )}
-                          </div>
-
-                          {loadingCompatible.has(batch.id) && <div style={{ color: '#94A3B8', fontSize: 12 }}>جاري البحث عن شحنات متوافقة...</div>}
-                          {!loadingCompatible.has(batch.id) && (compatibleShipments[batch.id]?.length ?? 0) === 0 && (
-                            <div style={{ color: '#94A3B8', fontSize: 12 }}>لا توجد شحنات متاحة من {batch.route[1]}</div>
-                          )}
-                          {!loadingCompatible.has(batch.id) && (compatibleShipments[batch.id]?.length ?? 0) > 0 && (
-                            <>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 160, overflowY: 'auto', marginBottom: 10 }}>
-                                {compatibleShipments[batch.id].map(s => (
-                                  <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12, color: '#0F2B4E' }}>
-                                    <input type="checkbox" checked={phase8Selected[batch.id]?.has(s.id) ?? false} onChange={() => togglePhase8Selection(batch.id, s.id)} style={{ accentColor: '#15803D' }} />
-                                    <span style={{ fontFamily: 'monospace', color: '#64748B' }}>{s.shipment_number}</span>
-                                    <span>{s.pickup_zone} ← {s.dropoff_zone}</span>
-                                    <span style={{ fontSize: 10, color: s.status === 'delayed' ? '#C2410C' : '#15803D' }}>{SHIPMENT_STATUS_LABELS[s.status] ?? s.status}</span>
-                                  </label>
-                                ))}
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                                <button disabled={!(phase8Selected[batch.id]?.size) || addingShipments.has(batch.id)} onClick={() => addShipmentsToBatch(batch)}
-                                  style={{ padding: '7px 18px', borderRadius: 7, border: 'none', background: (phase8Selected[batch.id]?.size) ? '#15803D' : '#CBD5E1', color: '#fff', cursor: (phase8Selected[batch.id]?.size) ? 'pointer' : 'not-allowed', fontSize: 13, fontWeight: 700, fontFamily: 'inherit', opacity: addingShipments.has(batch.id) ? 0.7 : 1, whiteSpace: 'nowrap' }}>
-                                  {addingShipments.has(batch.id) ? '⏳ جاري...' : `أضف للتجميعة${(phase8Selected[batch.id]?.size) ? ` (${phase8Selected[batch.id].size})` : ''}`}
-                                </button>
-                                {addShipmentMsg[batch.id] && (
-                                  <span style={{ fontSize: 12, color: addShipmentMsg[batch.id].startsWith('✓') ? '#15803D' : '#DC2626', fontWeight: 600 }}>{addShipmentMsg[batch.id]}</span>
-                                )}
-                              </div>
-                            </>
-                          )}
+                      {tab !== 'archive' && eligibleSelected.length > 0 && (
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '12px 0' }}>
+                          <button onClick={() => setRemoveModal({ batchId: batch.id, shipmentIds: eligibleSelected.map(s => s.id) })} style={actionBtnStyle('#DC2626')}>
+                            ↩️ إزالة {eligibleSelected.length} شحنة وإعادتها للمتاح
+                          </button>
                         </div>
                       )}
-
-                      {/* Driver assignment/change — hidden entirely for completed/cancelled batches.
-                          If the batch is in_transit, ChangeDriverModal itself shows the
-                          "driver already departed — are you sure?" confirmation. */}
-                      {!['completed', 'cancelled'].includes(batch.status) && (
-                        <div style={{ marginTop: 16, padding: '14px 16px', background: '#F8FAFC', border: '1.5px solid #E2E8F0', borderRadius: 8 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
-                            <div style={{ fontSize: 12, color: '#64748B' }}>
-                              السائق المعيّن: <strong style={{ color: '#0F2B4E' }}>{batch.courier?.name ?? 'لا يوجد سائق معيّن'}</strong>
-                            </div>
-                            <button onClick={() => setDriverModal({ batchId: batch.id })} style={actionBtnStyle('#EA580C')}>
-                              🚗 {batch.courier ? 'تغيير السائق' : 'تعيين سائق'}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {detail && <AuditLogPanel entries={detail.audit_log} />}
                     </div>
                   )}
                 </div>
@@ -714,10 +747,14 @@ export default function BatchMonitorPage() {
   );
 }
 
-function ShipmentsTable({ shipments, selected, onToggle }: {
-  shipments: AdminShipmentDetail[]; selected: Set<string>; onToggle: (id: string) => void;
+function ShipmentsTable({ shipments, selected, onToggle, onToggleAll, readOnly, onShowCustomer }: {
+  shipments: AdminShipmentDetail[]; selected: Set<string>; onToggle: (id: string) => void; onToggleAll: () => void; readOnly?: boolean;
+  onShowCustomer: (s: AdminShipmentDetail) => void;
 }) {
   if (!shipments.length) return null;
+
+  const eligible = shipments.filter(s => s.not_picked_up);
+  const allSelected = eligible.length > 0 && eligible.every(s => selected.has(s.id));
 
   function custodyChip(s: AdminShipmentDetail) {
     if (s.delivered) return <Chip icon="✅" label="تم التوصيل" color="green" />;
@@ -733,7 +770,12 @@ function ShipmentsTable({ shipments, selected, onToggle }: {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              <th style={{ ...thStyle, width: 30 }}></th>
+              {!readOnly && (
+                <th style={{ ...thStyle, width: 30 }}>
+                  <input type="checkbox" disabled={eligible.length === 0} checked={allSelected} onChange={onToggleAll}
+                    title={allSelected ? 'إلغاء تحديد الكل' : 'تحديد الكل'} />
+                </th>
+              )}
               <th style={thStyle}>الشحنة</th>
               <th style={thStyle}>الطلب</th>
               <th style={thStyle}>التاجر</th>
@@ -742,24 +784,37 @@ function ShipmentsTable({ shipments, selected, onToggle }: {
               <th style={thStyle}>رحلة</th>
               <th style={thStyle}>الحجم</th>
               <th style={thStyle}>الحالة الفعلية (الحيازة)</th>
+              <th style={thStyle}>الدفعة السابقة</th>
               <th style={thStyle}>الترتيب</th>
             </tr>
           </thead>
           <tbody>
             {shipments.map((s, idx) => (
               <tr key={s.id} style={{ background: '#fff' }}>
-                <td style={tdStyle}>
-                  <input type="checkbox" disabled={!s.not_picked_up} checked={selected.has(s.id)} onChange={() => onToggle(s.id)}
-                    title={s.not_picked_up ? 'تحديد للنقل/الإزالة' : 'لا يمكن تحديدها — تم استلامها أو تسليمها أو تتطلب معالجة يدوية'} />
-                </td>
+                {!readOnly && (
+                  <td style={tdStyle}>
+                    <input type="checkbox" disabled={!s.not_picked_up} checked={selected.has(s.id)} onChange={() => onToggle(s.id)}
+                      title={s.not_picked_up ? 'تحديد للنقل/الإزالة' : 'لا يمكن تحديدها — تم استلامها أو تسليمها أو تتطلب معالجة يدوية'} />
+                  </td>
+                )}
                 <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 11 }}>{s.shipment_number}</td>
                 <td style={tdStyle}>{s.order_id ? `#${s.order_id}` : '—'}</td>
                 <td style={tdStyle}>{s.merchant_name ?? '—'}</td>
-                <td style={tdStyle}>{s.customer_name ?? '—'}</td>
+                <td style={tdStyle}>
+                  {s.customer_name ? (
+                    <button onClick={() => onShowCustomer(s)} title="عرض تفاصيل العميل"
+                      style={{ background: 'none', border: 'none', padding: 0, color: '#2563EB', textDecoration: 'underline', cursor: 'pointer', fontSize: 'inherit', fontFamily: 'inherit' }}>
+                      {s.customer_name}
+                    </button>
+                  ) : '—'}
+                </td>
                 <td style={tdStyle}>{s.pickup_zone} ← {s.dropoff_zone}</td>
                 <td style={tdStyle}>{s.leg === 'ab' ? <Chip icon="①" label="أ←ب" color="blue" /> : <Chip icon="②" label="ب←ج" color="orange" />}</td>
                 <td style={tdStyle}>{s.volume}</td>
                 <td style={tdStyle}>{custodyChip(s)}</td>
+                <td style={{ ...tdStyle, fontFamily: 'monospace', fontSize: 11 }}>
+                  {s.previous_batch ? (s.previous_batch.batch_number ?? s.previous_batch.id) : '—'}
+                </td>
                 <td style={{ ...tdStyle, fontFamily: 'monospace' }}>{idx + 1}</td>
               </tr>
             ))}

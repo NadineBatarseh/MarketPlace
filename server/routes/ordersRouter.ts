@@ -217,26 +217,29 @@ router.post('/create', requireCustomer, async (req: Request, res: Response) => {
 });
 
 /**
- * Merchant marks their lines of an order ready for pickup.
+ * Merchant marks a single order line (one product) ready for pickup.
  *
  * Runs server-side (service-role) because RLS denies the merchant client a direct
- * UPDATE on order_details — the previous client-side update silently affected 0
- * rows, so ready_time was never written and the shipment ready-trigger never fired.
+ * UPDATE on order_details — a client-side update would silently affect 0 rows,
+ * so ready_time would never be written and the shipment ready-trigger would
+ * never fire.
  *
- * Setting order_details.ready_time fires trg_shipment_mark_available, which flips
- * the matching 'pending' shipment(s) to 'available'. We ALSO flip them explicitly
- * (scoped to this order so legacy NULL-order_id seed rows are untouched) so the
+ * Scoped to one order_details row so a shop can release part of a multi-item
+ * order for pickup without waiting on its other lines. Setting
+ * order_details.ready_time fires trg_shipment_mark_available, which flips the
+ * matching 'pending' shipment to 'available'. We ALSO flip it explicitly so the
  * flow still works even if that trigger is ever dropped.
  *
- * When EVERY shop in the order is ready we record a 'collecting' tracking
+ * When EVERY line in the order is ready we record a 'collecting' tracking
  * event — orders.status itself is untouched (it only ever holds
  * 'pending' | 'delivering' | 'completed'); "ready for pickup" is derived
  * client-side from shipment status.
  */
-router.post('/:orderId/mark-ready', requireCustomer, async (req: Request, res: Response) => {
+router.post('/:orderId/details/:detailId/mark-ready', requireCustomer, async (req: Request, res: Response) => {
   const orderId = Number(req.params.orderId);
-  if (!Number.isInteger(orderId) || orderId <= 0) {
-    return res.status(400).json({ ok: false, error: 'رقم طلب غير صالح' });
+  const detailId = Number(req.params.detailId);
+  if (!Number.isInteger(orderId) || orderId <= 0 || !Number.isInteger(detailId) || detailId <= 0) {
+    return res.status(400).json({ ok: false, error: 'معرّف غير صالح' });
   }
 
   // Resolve the caller's shop (auth.users → merchants → shops).
@@ -247,37 +250,34 @@ router.post('/:orderId/mark-ready', requireCustomer, async (req: Request, res: R
     .maybeSingle();
   if (!shop) return res.status(403).json({ ok: false, error: 'لا تملك متجراً' });
 
-  // The shop's lines in this order (also confirms the order belongs to this shop).
-  const { data: shopDetails, error: detErr } = await supabase
+  // Confirm this line belongs to both this order and this shop before touching it.
+  const { data: detail, error: detErr } = await supabase
     .from('order_details')
     .select('id')
+    .eq('id', detailId)
     .eq('order_id', orderId)
-    .eq('shop_id', shop.shop_id);
+    .eq('shop_id', shop.shop_id)
+    .maybeSingle();
   if (detErr) return res.status(500).json({ ok: false, error: detErr.message });
-  if (!shopDetails?.length) {
-    return res.status(404).json({ ok: false, error: 'لا توجد منتجات لمتجرك في هذا الطلب' });
-  }
+  if (!detail) return res.status(404).json({ ok: false, error: 'هذا المنتج لا ينتمي لمتجرك في هذا الطلب' });
 
   const now = new Date().toISOString();
-  const detailIds = shopDetails.map((d) => d.id);
 
-  // 1. Stamp ready_time → fires the shipment ready-trigger.
+  // 1. Stamp ready_time on this line only → fires the shipment ready-trigger.
   const { error: updErr } = await supabase
     .from('order_details')
     .update({ ready_time: now })
-    .eq('order_id', orderId)
-    .eq('shop_id', shop.shop_id);
+    .eq('id', detailId);
   if (updErr) return res.status(500).json({ ok: false, error: updErr.message });
 
-  // 2. Backstop: release this order's pending shipments even if the trigger is absent.
+  // 2. Backstop: release this line's pending shipment even if the trigger is absent.
   await supabase
     .from('shipments')
     .update({ status: 'available' })
-    .eq('order_id', orderId)
-    .in('order_detail_id', detailIds)
+    .eq('order_detail_id', detailId)
     .eq('status', 'pending');
 
-  // 3. If every shop in the order is now ready, advance the order.
+  // 3. If every line in the order is now ready, advance the order.
   const { data: allDetails } = await supabase
     .from('order_details')
     .select('ready_time')
@@ -303,6 +303,37 @@ router.post('/:orderId/mark-ready', requireCustomer, async (req: Request, res: R
   }
 
   return res.json({ ok: true, ready_time: now, all_ready: allReady });
+});
+
+/**
+ * Resolve display batch_number for a set of shipment ids.
+ *
+ * The `batches` table carries route-planning data for potentially many other
+ * customers'/shops' shipments, so customer and merchant clients never query it
+ * directly — this endpoint hands back only the display code, scoped to
+ * shipment ids the caller already has (from their own order/shop query).
+ * Runs behind requireCustomer only (any authenticated user, customer or
+ * merchant) since batch_number itself isn't sensitive.
+ */
+router.post('/batch-numbers', requireCustomer, async (req: Request, res: Response) => {
+  const { shipment_ids } = req.body as { shipment_ids?: unknown };
+  const ids = Array.isArray(shipment_ids)
+    ? shipment_ids.filter((id): id is string => typeof id === 'string').slice(0, 500)
+    : [];
+  if (ids.length === 0) return res.json({ ok: true, batchNumbers: {} });
+
+  const { data, error } = await supabase
+    .from('shipments')
+    .select('id, batches(batch_number)')
+    .in('id', ids);
+  if (error) return res.status(500).json({ ok: false, error: error.message });
+
+  const batchNumbers: Record<string, string> = {};
+  for (const row of (data ?? []) as any[]) {
+    const batchNumber = row.batches?.batch_number;
+    if (batchNumber) batchNumbers[row.id] = batchNumber;
+  }
+  return res.json({ ok: true, batchNumbers });
 });
 
 export default router;

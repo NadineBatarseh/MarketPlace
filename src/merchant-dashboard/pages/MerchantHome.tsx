@@ -10,6 +10,8 @@ interface Stats {
 
 interface RecentOrder {
   id: number;
+  /** Human-readable display code, e.g. "O-100066" — see orders.order_number. */
+  orderNumber: string;
   status: string;
   total: number;
   createdAt: string;
@@ -20,8 +22,6 @@ const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   delivering: { label: 'الشحن',     color: '#0ea5e9' },
   completed:  { label: 'تم التسليم', color: '#16a34a' },
 };
-
-const fmt = (id: number) => `ORD-${String(id).padStart(3, '0')}`;
 
 export default function MerchantHome({ onNavigate }: { onNavigate?: (page: string, highlight?: boolean) => void }) {
   const { merchant } = useMerchantAuth();
@@ -70,11 +70,12 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
         newOrders = newCount ?? 0;
 
         const { data: ordersData } = await supabase
-          .from('orders').select('id, status, total_price, created_at')
+          .from('orders').select('id, order_number, status, total_price, created_at')
           .in('id', orderIds).order('created_at', { ascending: false }).limit(10);
 
         setOrders((ordersData ?? []).map(o => ({
           id: o.id,
+          orderNumber: (o as any).order_number,
           status: o.status ?? 'pending',
           total: Number(o.total_price) || 0,
           createdAt: o.created_at,
@@ -91,7 +92,7 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
 
   const filtered = orders.filter(o => {
     const matchStatus = statusFilter === 'all' || o.status === statusFilter;
-    const matchSearch = !search || String(o.id).includes(search);
+    const matchSearch = !search || o.orderNumber.toLowerCase().includes(search.toLowerCase());
     return matchStatus && matchSearch;
   });
 
@@ -223,7 +224,7 @@ export default function MerchantHome({ onNavigate }: { onNavigate?: (page: strin
                   const date = new Date(order.createdAt).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' });
                   return (
                     <tr key={order.id}>
-                      <td className="mh-td-id">{fmt(order.id)}</td>
+                      <td className="mh-td-id">{order.orderNumber}</td>
                       <td>
                         <span className="mh-badge" style={{ background: `${s.color}18`, color: s.color, borderColor: `${s.color}30` }}>
                           {s.label}

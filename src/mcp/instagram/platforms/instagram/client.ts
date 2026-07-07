@@ -27,7 +27,11 @@ import {
   BreakdownType,
   Timeframe,
   DemographicBreakdown,
+  MediaContainerResponse,
+  ContainerStatusResponse,
 } from './types.js';
+
+const CAROUSEL_MAX_CHILDREN = 10;
 
 const DEFAULT_API_VERSION = 'v23.0';
 
@@ -378,6 +382,142 @@ export class InstagramClient {
       url: config.url,
       params: config.params,
     });
+  }
+
+  private async post<T>(config: { url: string; params?: Record<string, unknown> }): Promise<T> {
+    return requestWithRetry<T>(this.axiosInstance, {
+      method: 'POST',
+      url: config.url,
+      params: config.params,
+    });
+  }
+
+  private async createMediaContainer(
+    imageUrl: string,
+    accountId: string,
+    opts?: { caption?: string; isCarouselItem?: boolean }
+  ): Promise<MediaContainerResponse> {
+    try {
+      const params: Record<string, unknown> = { image_url: imageUrl };
+      if (opts?.isCarouselItem) {
+        params.is_carousel_item = true;
+      } else if (opts?.caption) {
+        params.caption = opts.caption;
+      }
+      return await this.post<MediaContainerResponse>({
+        url: `/${accountId}/media`,
+        params,
+      });
+    } catch (error) {
+      if (error instanceof InstagramApiError) throw error;
+      throw this.wrapError('Failed to create media container', error);
+    }
+  }
+
+  private async createCarouselContainer(
+    childIds: string[],
+    caption: string,
+    accountId: string
+  ): Promise<MediaContainerResponse> {
+    try {
+      return await this.post<MediaContainerResponse>({
+        url: `/${accountId}/media`,
+        params: {
+          media_type: 'CAROUSEL_ALBUM',
+          children: childIds.join(','),
+          caption,
+        },
+      });
+    } catch (error) {
+      if (error instanceof InstagramApiError) throw error;
+      throw this.wrapError('Failed to create carousel container', error);
+    }
+  }
+
+  private async getContainerStatus(containerId: string): Promise<ContainerStatusResponse> {
+    try {
+      return await this.request<ContainerStatusResponse>({
+        url: `/${containerId}`,
+        params: { fields: 'status_code' },
+      });
+    } catch (error) {
+      if (error instanceof InstagramApiError) throw error;
+      throw this.wrapError('Failed to get container status', error);
+    }
+  }
+
+  private async waitForContainerReady(containerId: string): Promise<void> {
+    const maxAttempts = 10;
+    const pollIntervalMs = 2000;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const status = await this.getContainerStatus(containerId);
+      if (status.status_code === 'FINISHED') return;
+      if (status.status_code === 'ERROR' || status.status_code === 'EXPIRED') {
+        throw new InstagramApiError({
+          message: `Instagram failed to process the media container (status: ${status.status_code}).`,
+        });
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+
+    throw new InstagramApiError({
+      message: 'Timed out waiting for Instagram to process the media container.',
+    });
+  }
+
+  private async publishContainer(containerId: string, accountId: string): Promise<{ id: string }> {
+    try {
+      return await this.post<{ id: string }>({
+        url: `/${accountId}/media_publish`,
+        params: { creation_id: containerId },
+      });
+    } catch (error) {
+      if (error instanceof InstagramApiError) throw error;
+      throw this.wrapError('Failed to publish media container', error);
+    }
+  }
+
+  /**
+   * Publishes a product's images as a single Instagram feed post (1 image)
+   * or a carousel post (2-10 images).
+   */
+  async publishProductPost(
+    imageUrls: string[],
+    caption: string,
+    accountId?: string
+  ): Promise<{ mediaId: string }> {
+    if (imageUrls.length === 0) {
+      throw new InstagramApiError({ message: 'At least one image is required to publish a post.' });
+    }
+    if (imageUrls.length > CAROUSEL_MAX_CHILDREN) {
+      throw new InstagramApiError({
+        message: `Instagram carousels support at most ${CAROUSEL_MAX_CHILDREN} images.`,
+      });
+    }
+
+    const targetAccountId = accountId || (await this.getAccountId());
+
+    if (imageUrls.length === 1) {
+      const container = await this.createMediaContainer(imageUrls[0], targetAccountId, { caption });
+      await this.waitForContainerReady(container.id);
+      const published = await this.publishContainer(container.id, targetAccountId);
+      return { mediaId: published.id };
+    }
+
+    const childContainers = await Promise.all(
+      imageUrls.map((url) => this.createMediaContainer(url, targetAccountId, { isCarouselItem: true }))
+    );
+    await Promise.all(childContainers.map((child) => this.waitForContainerReady(child.id)));
+
+    const carouselContainer = await this.createCarouselContainer(
+      childContainers.map((child) => child.id),
+      caption,
+      targetAccountId
+    );
+    await this.waitForContainerReady(carouselContainer.id);
+    const published = await this.publishContainer(carouselContainer.id, targetAccountId);
+    return { mediaId: published.id };
   }
 
   private wrapError(context: string, error: unknown): InstagramApiError {

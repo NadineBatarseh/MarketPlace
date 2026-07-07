@@ -2,6 +2,7 @@ import { supabase } from '../../supabase.js';
 import { C } from '../constants.js';
 import { computeUrgencyScore, computeBatchRawUrgency, roadDistance, estimateDurationMinutes, haversineDistance } from '../formulas.js';
 import { CandidateBatch, DemandFlow, Shipment } from '../types.js';
+import { resetToFallback } from '../eta.js';
 
 // â”€â”€ Step 1: Fetch and sort shipments for a flow (D3) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // urgency_score_i = (NOW - created_at_i) / (deadline_i - created_at_i)
@@ -146,6 +147,8 @@ async function handleThinBatch(
 
   if (error) {
     console.error('[Phase 0b] handleThinBatch error:', error.message);
+  } else {
+    resetToFallback(batch.shipment_ids);
   }
 
   return null;
