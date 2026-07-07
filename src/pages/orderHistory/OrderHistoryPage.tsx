@@ -52,6 +52,8 @@ interface ShippingAddress {
 
 interface Order {
   id: number;
+  /** Human-readable display code, e.g. "O-100066" — see orders.order_number. */
+  order_number: string;
   total_price: number | null;
   status: string | null;
   payment_status: string | null;
@@ -104,10 +106,6 @@ function getDateFilterStart(key: string): Date | null {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatOrderId(id: number) {
-  return `#${id}`;
-}
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('ar-EG', {
@@ -325,7 +323,7 @@ export default function OrderHistoryPage() {
       try {
         const { data: ordersData, error: ordErr } = await supabase
           .from('orders')
-          .select('id, total_price, status, payment_status, created_at, shipping_address')
+          .select('id, order_number, total_price, status, payment_status, created_at, shipping_address')
           .eq('user_id', customer!.id)
           .order('created_at', { ascending: false });
         if (ordErr) throw ordErr;
@@ -379,6 +377,7 @@ export default function OrderHistoryPage() {
 
         const merged: Order[] = ordersData.map(o => ({
           id:             o.id,
+          order_number:   (o as any).order_number,
           total_price:    o.total_price,
           status:         o.status,
           payment_status: (o as any).payment_status ?? null,
@@ -421,7 +420,7 @@ export default function OrderHistoryPage() {
       const matchFilter = activeFilter === 'all' || filterKey === activeFilter;
       const firstName   = o.order_details[0]?.product?.title ?? '';
       const matchSearch = !q
-        || formatOrderId(o.id).toLowerCase().includes(q)
+        || o.order_number.toLowerCase().includes(q)
         || firstName.toLowerCase().includes(q);
       const matchDate = !dateStart || new Date(o.created_at) >= dateStart;
       return matchFilter && matchSearch && matchDate;
@@ -712,7 +711,7 @@ function OrderCard({ order, idx, unreadCount }: { order: Order; idx: number; unr
         <div className="oh-col-order">
           <div className="oh-grid-order-id-row">
             <span className="oh-grid-order-label">رقم الطلب</span>
-            <span className="oh-grid-order-id">{formatOrderId(order.id)}</span>
+            <span className="oh-grid-order-id">{order.order_number}</span>
           </div>
           <div className="oh-grid-order-date">
             <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">

@@ -7,6 +7,7 @@ import {
 } from './formulas.js';
 import { Courier } from './types.js';
 import { getActiveWorkSession } from './workSessions.js';
+import { applyRouteEta } from './eta.js';
 
 // D33 — Score a driver against a specific batch
 // Driver_Score = W_prox·P + W_cap·C - W_load·L
@@ -58,6 +59,34 @@ async function fetchAvailableCouriers(
       return dA - dB;
     })
     .slice(0, limit);
+}
+
+// Recomputes ETA for just the batch's A→B leg from the driver's live location
+// at the moment of lock. Deliberately not chained to the B→C leg — that would
+// drift into full-route persistence, which is out of scope for this pass.
+// Fire-and-forget: never blocks the caller's assignment response.
+function recomputeAbLegEta(batchId: string, driverId: string): void {
+  (async () => {
+    try {
+      const [{ data: batch }, { data: courier }] = await Promise.all([
+        supabase.from('batches').select('ab_shipment_ids').eq('id', batchId).maybeSingle(),
+        supabase.from('couriers').select('location').eq('id', driverId).maybeSingle(),
+      ]);
+      const abIds = (batch?.ab_shipment_ids as string[] | null) ?? [];
+      const loc = (courier as any)?.location;
+      if (!abIds.length || !loc?.lat || !loc?.lng) return;
+
+      const { data: dropoffs } = await supabase
+        .from('shipments')
+        .select('id, dropoff_lat, dropoff_lng')
+        .in('id', abIds);
+      if (dropoffs?.length) {
+        await applyRouteEta(dropoffs as { id: string; dropoff_lat: number; dropoff_lng: number }[], { lat: loc.lat, lng: loc.lng });
+      }
+    } catch (err) {
+      console.warn('[Driver Assignment] recomputeAbLegEta failed:', (err as Error).message);
+    }
+  })();
 }
 
 // ── D34 — Atomic assignment for AVAILABLE drivers ───────────────────────────
@@ -119,6 +148,10 @@ export async function atomicAssign(
     return { success: false, reason: 'courier_unavailable' };
   }
 
+  // Batch is now durably assigned — clear the dispatcher-escalation flag (if any).
+  await supabase.from('batches').update({ needs_dispatcher: false }).eq('id', batchId);
+
+  recomputeAbLegEta(batchId, driverId);
   return { success: true };
 }
 
@@ -180,7 +213,7 @@ export async function atomicAssignNextMission(
   // sees an empty result and returns batch_unavailable. No further locking needed.
   const { data, error } = await supabase
     .from('batches')
-    .update({ status: 'assigned', assigned_to: driverId, assigned_at: new Date().toISOString() })
+    .update({ status: 'assigned', assigned_to: driverId, assigned_at: new Date().toISOString(), needs_dispatcher: false })
     .eq('id', batchId)
     .eq('status', 'pending_assignment')
     .select('id');
@@ -208,6 +241,7 @@ export async function atomicAssignNextMission(
     .neq('courier_id', driverId);
 
   console.log(`[Driver Assignment] Next mission ${batchId} locked for on_route courier ${driverId}`);
+  recomputeAbLegEta(batchId, driverId);
   return { success: true };
 }
 

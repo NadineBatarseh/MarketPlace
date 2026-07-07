@@ -1,5 +1,6 @@
 import supabase from '../../supabase.js';
 import { C } from '../constants.js';
+import { resetToFallback } from '../eta.js';
 
 // ── Job 1 — Release expired reservations (D23) ──────────────────────────────
 // reserved_until < NOW normally → status back to 'available'.
@@ -70,6 +71,10 @@ async function releaseExpiredReservations(): Promise<void> {
 
     if (error) {
       console.error('[Phase 7 Job 1] releaseExpiredReservations error:', error.message);
+    } else {
+      // These shipments just left their batch — revert to the flat SLA deadline
+      // so they never keep a stale, precise-looking route estimate in the pool.
+      resetToFallback(toRelease.map(s => s.id));
     }
   }
 }

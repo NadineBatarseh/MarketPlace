@@ -64,9 +64,7 @@ export function getRoadDurationMin(
   return (km / C.AVERAGE_SPEED_KMH) * 60;
 }
 
-// ── ASYNC warm-up: fetch every directed pair among `locations` ────────────────
-export async function prefetchPairs(locations: Coordinates[]): Promise<void> {
-  // De-dupe locations by quantized value.
+function dedupeCoords(locations: Coordinates[]): Coordinates[] {
   const uniq = new Map<string, Coordinates>();
   for (const loc of locations) {
     if (loc == null || loc.lat == null || loc.lng == null) continue;
@@ -75,7 +73,12 @@ export async function prefetchPairs(locations: Coordinates[]): Promise<void> {
       lng: quantize(loc.lng),
     });
   }
-  const points = [...uniq.values()];
+  return [...uniq.values()];
+}
+
+// ── ASYNC warm-up: fetch every directed pair among `locations` ────────────────
+export async function prefetchPairs(locations: Coordinates[]): Promise<void> {
+  const points = dedupeCoords(locations);
   if (points.length < 2) return;
 
   // Build every directed pair not already in memory (skip a point to itself).
@@ -88,6 +91,27 @@ export async function prefetchPairs(locations: Coordinates[]): Promise<void> {
       }
     }
   }
+  await fetchAndCacheMissing(points, missing);
+}
+
+// ── ASYNC warm-up: one origin → many destinations (avoids the N×N fan-out of
+// prefetchPairs when only single-origin legs are needed, e.g. an ETA lookup). ──
+export async function prefetchFromOrigin(origin: Coordinates, destinations: Coordinates[]): Promise<void> {
+  if (origin == null || origin.lat == null || origin.lng == null) return;
+  const o = { lat: quantize(origin.lat), lng: quantize(origin.lng) };
+  const dests = dedupeCoords(destinations).filter((d) => d.lat !== o.lat || d.lng !== o.lng);
+  if (dests.length === 0) return;
+
+  const missing = dests
+    .filter((d) => !memory.has(pairKey(o.lat, o.lng, d.lat, d.lng)))
+    .map((d) => ({ o, d }));
+  await fetchAndCacheMissing([o, ...dests], missing);
+}
+
+async function fetchAndCacheMissing(
+  points: Coordinates[],
+  missing: Array<{ o: Coordinates; d: Coordinates }>
+): Promise<void> {
   if (missing.length === 0) return;
 
   // 1) Try Supabase before spending on Google. Over-fetch by origin lat/lng, then

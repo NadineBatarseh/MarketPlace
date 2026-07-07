@@ -239,21 +239,30 @@ export const INSTAGRAM_TOOLS: Tool[] = [
   {
     name: "instagram_publish_product",
     description:
-      "Publish one of the merchant's own products to Instagram as a feed post (1 image) or carousel post (2-10 images), using a caption built from the product's title, price, and description unless a caption is provided.",
+      "Publish a product to Instagram. Two ways to call it: " +
+      "(1) Auto mode — pass only productId (optionally customCaption, hashtags, dryRun): the tool fetches the product and its shop from Supabase itself, uses the product's first image, generates an Arabic caption unless customCaption is given, and publishes via the INSTAGRAM_ACCESS_TOKEN/INSTAGRAM_IG_USER_ID account. Set dryRun to true to preview the caption without publishing. " +
+      "(2) Merchant mode — pass shop_id, product_id, and image_urls (1-10 of the product's own images) to post as a feed/carousel post to that merchant's connected Instagram account.",
     inputSchema: {
       type: "object",
       properties: {
-        shop_id: { type: "string", description: "The merchant's shop ID." },
-        product_id: { type: "string", description: "The product ID to publish." },
+        productId: { type: "string", description: "Auto mode: the product ID to publish. The tool fetches its title, description, price, image, and shop name from Supabase." },
+        customCaption: { type: "string", description: "Auto mode: caption text to use instead of the auto-generated Arabic caption." },
+        hashtags: {
+          type: "array",
+          items: { type: "string" },
+          description: "Auto mode: hashtags to append to the caption (with or without a leading #).",
+        },
+        dryRun: { type: "boolean", description: "Auto mode: if true, only generate/return the caption — do not publish to Instagram." },
+        shop_id: { type: "string", description: "Merchant mode: the merchant's shop ID." },
+        product_id: { type: "string", description: "Merchant mode: the product ID to publish." },
         image_urls: {
           type: "array",
           items: { type: "string" },
-          description: "1-10 publicly accessible HTTPS image URLs, each one of the product's own image_urls.",
+          description: "Merchant mode: 1-10 publicly accessible HTTPS image URLs, each one of the product's own image_urls.",
         },
-        caption: { type: "string", description: "Caption text to post. If omitted, one is generated from the product's title/price/description." },
+        caption: { type: "string", description: "Merchant mode: caption text to post. If omitted, one is generated from the product's title/price/description." },
         account_id: { type: "string", description: "Instagram Business Account ID. Auto-detected if not provided." },
       },
-      required: ["shop_id", "product_id", "image_urls"],
     },
   },
 ];

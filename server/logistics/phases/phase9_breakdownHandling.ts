@@ -1,6 +1,7 @@
 import supabase from '../../supabase.js';
 import { Shipment } from '../types.js';
 import { cancelDeliverySessionAndCloseWork } from '../workSessions.js';
+import { resetToFallback, markUnknown } from '../eta.js';
 
 interface BreakdownResult {
   re_pooled: string[];
@@ -54,6 +55,8 @@ export async function handleBreakdown(batchId: string, report: BreakdownReport =
 
     if (rePoolError) {
       console.error('[Phase 9] re-pool error:', rePoolError.message);
+    } else {
+      resetToFallback(notYetCollected);
     }
   }
 
@@ -66,6 +69,10 @@ export async function handleBreakdown(batchId: string, report: BreakdownReport =
 
     if (strandedError) {
       console.error('[Phase 9] stranded update error:', strandedError.message);
+    } else {
+      // Goods are on a broken-down vehicle with no dispatcher decision yet —
+      // never fabricate an ETA for them.
+      markUnknown(alreadyCollected);
     }
 
     // Alert dispatchers â€” in production this would send a push notification or email

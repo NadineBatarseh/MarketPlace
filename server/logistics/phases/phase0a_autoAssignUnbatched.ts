@@ -2,6 +2,7 @@ import { supabase } from '../../supabase.js';
 import { C } from '../constants.js';
 import { roadDistance, estimateDurationMinutes } from '../formulas.js';
 import { getCourierLocation, getZoneCoords } from '../locationUtils.js';
+import { applyRouteEta } from '../eta.js';
 
 // Driver must be at least this far from a zone to still pick up from it
 const ARRIVAL_THRESHOLD_KM = 1.0;
@@ -19,6 +20,8 @@ interface UnbatchedShipment {
   id: string;
   pickup_zone: string;
   dropoff_zone: string;
+  dropoff_lat: number;
+  dropoff_lng: number;
   volume: number;
   deadline: string | null;
 }
@@ -104,7 +107,7 @@ function legFor(batch: EligibleBatch, shipment: UnbatchedShipment): 'ab_shipment
 export async function autoAssignUnbatchedShipments(): Promise<void> {
   const { data: rawShipments } = await supabase
     .from('shipments')
-    .select('id, pickup_zone, dropoff_zone, deadline, order_details(qty, products(capacity_units))')
+    .select('id, pickup_zone, dropoff_zone, dropoff_lat, dropoff_lng, deadline, order_details(qty, products(capacity_units))')
     .is('batch_id', null)
     .in('status', ['available', 'delayed']);
 
@@ -114,6 +117,8 @@ export async function autoAssignUnbatchedShipments(): Promise<void> {
     id: s.id,
     pickup_zone: s.pickup_zone,
     dropoff_zone: s.dropoff_zone,
+    dropoff_lat: s.dropoff_lat,
+    dropoff_lng: s.dropoff_lng,
     deadline: s.deadline ?? null,
     volume: computeVolume(s),
   }));
@@ -178,6 +183,19 @@ export async function autoAssignUnbatchedShipments(): Promise<void> {
       // Keep local state in sync so later shipments see the updated volume
       batch.total_volume += shipment.volume;
       (batch[leg] as string[]).push(shipment.id);
+
+      // Route ETA: prefer the courier's live position for an in_transit batch,
+      // else the centroid of the zone this leg starts from.
+      const legOriginZone = leg === 'ab_shipment_ids' ? batch.route[0] : batch.route[1];
+      const origin =
+        (batch.status === 'in_transit' ? await getCourierLocation(batch.id) : null) ??
+        (await getZoneCoords(legOriginZone));
+      if (origin) {
+        await applyRouteEta(
+          [{ id: shipment.id, dropoff_lat: shipment.dropoff_lat, dropoff_lng: shipment.dropoff_lng }],
+          origin
+        );
+      }
 
       // Notify the driver when a new shipment is added to their in-transit batch
       if (batch.status === 'in_transit' && batch.assigned_to) {

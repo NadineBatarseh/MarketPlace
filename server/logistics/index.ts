@@ -10,6 +10,7 @@ import { atomicAssign, atomicAssignNextMission } from './driverAssignment.js';
 import { triggerQueuedNextMission } from './phases/phase11_nextMissionQueuing.js';
 import { autoAssignUnbatchedShipments } from './phases/phase0a_autoAssignUnbatched.js';
 import { startDeliverySession, completeDeliverySession } from './workSessions.js';
+import { applyRouteEta } from './eta.js';
 import { supabase } from '../supabase.js';
 import { C } from './constants.js';
 import { loadPaymentConfig } from '../lib/paymentConfig.js';
@@ -243,7 +244,7 @@ logisticsRouter.post('/pickup-shipment', async (req: Request, res: Response) => 
   // Fetch the shipment to get its batch
   const { data: shipment } = await supabase
     .from('shipments')
-    .select('id, batch_id, status, order_detail_id')
+    .select('id, batch_id, status, order_detail_id, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng')
     .eq('id', shipment_id)
     .maybeSingle();
 
@@ -284,6 +285,13 @@ logisticsRouter.post('/pickup-shipment', async (req: Request, res: Response) => 
   }
 
   void insertDriverTrackingEvent(shipment_id, shipment.order_detail_id as number | null, 'driver_picked_up');
+
+  // The single most accurate ETA hook: the courier is standing exactly at the
+  // pickup point, so the leg to dropoff is a real (not centroid-approximated) origin.
+  void applyRouteEta(
+    [{ id: shipment_id, dropoff_lat: shipment.dropoff_lat, dropoff_lng: shipment.dropoff_lng }],
+    { lat: shipment.pickup_lat, lng: shipment.pickup_lng }
+  );
 
   res.json({ success: true });
 });
@@ -330,9 +338,16 @@ logisticsRouter.post('/deliver-shipment', async (req: Request, res: Response) =>
     return;
   }
 
+  const deliveredAt = new Date().toISOString();
   const { data: updated } = await supabase
     .from('shipments')
-    .update({ status: 'delivered', delivered_at: new Date().toISOString() })
+    .update({
+      status: 'delivered',
+      delivered_at: deliveredAt,
+      estimated_delivery_at: deliveredAt,
+      eta_source: 'actual',
+      eta_computed_at: deliveredAt,
+    })
     .eq('id', shipment_id)
     .eq('status', 'picked_up')
     .select('id');

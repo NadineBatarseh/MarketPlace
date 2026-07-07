@@ -1,27 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import {
   BATCH_ADMIN_REASON_CODES,
-  fetchEligibleDestinations,
-  moveShipments,
   removeShipments,
   addBatchNote,
   updateEstimatedTime,
   resolveBreakdown,
   changeDriver,
   type BatchAdminReasonCode,
-  type EligibleDestination,
   type BreakdownCase,
+  type AdminShipmentDetail,
 } from '../../../lib/adminBatches';
 
-const BLOCKED_REASON_LABELS: Record<string, string> = {
-  different_zone: 'لا يوجد مسار مطابق لمنطقة استلام/تسليم الشحنات المختارة في هذه التجميعة',
-  max_stops_exceeded: 'سيتجاوز الحد الأقصى لعدد المحطات',
-  insufficient_capacity: 'سعة غير كافية',
-  active_breakdown: 'يوجد عطل نشط في هذه التجميعة',
-};
-
-function ModalShell({ title, icon, onClose, children, width = 480 }: {
+export function ModalShell({ title, icon, onClose, children, width = 480 }: {
   title: string; icon?: string; onClose: () => void; children: React.ReactNode; width?: number;
 }) {
   return (
@@ -50,14 +41,39 @@ function ModalShell({ title, icon, onClose, children, width = 480 }: {
   );
 }
 
-const inputStyle: React.CSSProperties = {
+/* ───────────────────────────── Customer Details Modal ───────────────────────────── */
+export function CustomerDetailsModal({ shipment, onClose }: { shipment: AdminShipmentDetail; onClose: () => void }) {
+  const rows: { label: string; value: string }[] = [
+    { label: 'الاسم', value: shipment.customer_name ?? '—' },
+    { label: 'رقم الهاتف', value: shipment.customer_phone ?? '—' },
+    { label: 'العنوان', value: shipment.customer_address ?? '—' },
+    { label: 'الطلب', value: shipment.order_id != null ? `#${shipment.order_id}` : '—' },
+    { label: 'التاجر', value: shipment.merchant_name ?? '—' },
+    { label: 'المنطقة', value: `${shipment.pickup_zone} ← ${shipment.dropoff_zone}` },
+  ];
+
+  return (
+    <ModalShell title="تفاصيل العميل" icon="👤" onClose={onClose} width={400}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {rows.map(r => (
+          <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, padding: '6px 0', borderBottom: '1px solid #F1F5F9' }}>
+            <span style={{ color: '#64748B', fontWeight: 600 }}>{r.label}</span>
+            <span style={{ color: '#0F2B4E', fontWeight: 700, textAlign: 'left', wordBreak: 'break-word' }}>{r.value}</span>
+          </div>
+        ))}
+      </div>
+    </ModalShell>
+  );
+}
+
+export const inputStyle: React.CSSProperties = {
   width: '100%', padding: '8px 10px', borderRadius: 8, border: '1.5px solid #E2E8F0',
   fontFamily: 'inherit', fontSize: 13, direction: 'rtl', boxSizing: 'border-box', color: '#0F2B4E',
 };
 
-const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: '#64748B', marginBottom: 5, display: 'block' };
+export const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: '#64748B', marginBottom: 5, display: 'block' };
 
-function ReasonFields({ reasonCode, setReasonCode, reason, setReason, notes, setNotes }: {
+export function ReasonFields({ reasonCode, setReasonCode, reason, setReason, notes, setNotes }: {
   reasonCode: BatchAdminReasonCode | ''; setReasonCode: (v: BatchAdminReasonCode | '') => void;
   reason: string; setReason: (v: string) => void;
   notes: string; setNotes: (v: string) => void;
@@ -83,7 +99,7 @@ function ReasonFields({ reasonCode, setReasonCode, reason, setReason, notes, set
   );
 }
 
-function ErrorBox({ error }: { error: string }) {
+export function ErrorBox({ error }: { error: string }) {
   if (!error) return null;
   return (
     <div style={{ padding: '8px 12px', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 7, color: '#DC2626', fontSize: 12, marginBottom: 12 }}>
@@ -92,7 +108,7 @@ function ErrorBox({ error }: { error: string }) {
   );
 }
 
-function ActionButtons({ onCancel, onConfirm, loading, confirmLabel, disabled }: {
+export function ActionButtons({ onCancel, onConfirm, loading, confirmLabel, disabled }: {
   onCancel: () => void; onConfirm: () => void; loading: boolean; confirmLabel: string; disabled?: boolean;
 }) {
   return (
@@ -108,115 +124,6 @@ function ActionButtons({ onCancel, onConfirm, loading, confirmLabel, disabled }:
         {loading ? 'جاري التنفيذ...' : confirmLabel}
       </button>
     </div>
-  );
-}
-
-/* ───────────────────────────── Move Shipments Modal ───────────────────────────── */
-export function MoveShipmentsModal({ batchId, shipmentIds, onClose, onSuccess }: {
-  batchId: string; shipmentIds: string[]; onClose: () => void; onSuccess: () => void;
-}) {
-  const [loadingDest, setLoadingDest] = useState(true);
-  const [destinations, setDestinations] = useState<EligibleDestination[]>([]);
-  const [movingVolume, setMovingVolume] = useState(0);
-  const [zonePairs, setZonePairs] = useState<{ from: string; to: string }[]>([]);
-  const [destError, setDestError] = useState('');
-  const [selected, setSelected] = useState('');
-  const [reasonCode, setReasonCode] = useState<BatchAdminReasonCode | ''>('');
-  const [reason, setReason] = useState('');
-  const [notes, setNotes] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    (async () => {
-      setLoadingDest(true);
-      const res = await fetchEligibleDestinations(batchId, shipmentIds);
-      if (!res.ok) {
-        setDestError(res.error ?? 'تعذّر تحميل التجميعات المتاحة');
-      } else {
-        setDestinations(res.destinations ?? []);
-        setMovingVolume(res.moving_volume ?? 0);
-        setZonePairs(res.zone_pairs ?? []);
-      }
-      setLoadingDest(false);
-    })();
-  }, [batchId, shipmentIds]);
-
-  const dest = destinations.find(d => d.id === selected) ?? null;
-
-  async function handleConfirm() {
-    if (!selected || !reasonCode || !reason.trim()) return;
-    setSubmitting(true);
-    setError('');
-    const res = await moveShipments(batchId, {
-      shipment_ids: shipmentIds, destination_batch_id: selected,
-      reason_code: reasonCode, reason: reason.trim(), notes: notes.trim() || undefined,
-    });
-    setSubmitting(false);
-    if (!res.ok) { setError(res.error ?? 'فشلت عملية النقل'); return; }
-    onSuccess();
-  }
-
-  return (
-    <ModalShell title={`نقل ${shipmentIds.length} شحنة إلى تجميعة أخرى`} icon="🔁" onClose={onClose} width={560}>
-      <ErrorBox error={error || destError} />
-
-      {zonePairs.length > 0 && (
-        <div style={{ fontSize: 12, color: '#64748B', marginBottom: 12 }}>
-          المسار{zonePairs.length > 1 ? 'ات' : ''}: <strong>{zonePairs.map(p => `${p.from} ← ${p.to}`).join('، ')}</strong> · الحجم الإجمالي للشحنات المختارة: <strong>{movingVolume}</strong> وحدة
-        </div>
-      )}
-
-      <div style={{ marginBottom: 14 }}>
-        <label style={labelStyle}>التجميعة الوجهة *</label>
-        {loadingDest ? (
-          <div style={{ fontSize: 12, color: '#94A3B8' }}>جاري البحث عن تجميعات متاحة...</div>
-        ) : destinations.length === 0 ? (
-          <div style={{ fontSize: 12, color: '#94A3B8' }}>لا توجد تجميعات مرشحة حالياً</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
-            {destinations.map(d => (
-              <label key={d.id} style={{
-                display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 10px', borderRadius: 8,
-                border: `1.5px solid ${selected === d.id ? '#86EFAC' : '#E2E8F0'}`,
-                background: d.eligible ? (selected === d.id ? '#F0FDF4' : '#fff') : '#F8FAFC',
-                cursor: d.eligible ? 'pointer' : 'not-allowed', opacity: d.eligible ? 1 : 0.6,
-              }}>
-                <input type="radio" name="dest" disabled={!d.eligible} checked={selected === d.id}
-                  onChange={() => setSelected(d.id)} style={{ marginTop: 3 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: 12, fontWeight: 700, color: '#0F2B4E' }}>
-                    <span style={{ fontFamily: 'monospace' }}>{d.batch_number}</span>
-                    <span>{d.route.join(' ← ')}</span>
-                    {d.courier_name && <span style={{ color: '#1D4ED8' }}>🚗 {d.courier_name}</span>}
-                  </div>
-                  <div style={{ fontSize: 11, color: '#64748B', marginTop: 3 }}>
-                    السعة: {d.total_volume} ← {d.capacity_after} / {d.max_volume} · المحطات: {d.stops_used} ← {d.stops_after} / {d.max_stops}
-                  </div>
-                  {!d.eligible && (
-                    <div style={{ fontSize: 11, color: '#DC2626', marginTop: 3 }}>
-                      {d.blocked_reasons.map(r => BLOCKED_REASON_LABELS[r] ?? r).join('، ')}
-                    </div>
-                  )}
-                </div>
-              </label>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {dest && (
-        <div style={{ padding: '10px 12px', background: '#EFF6FF', border: '1px solid #93C5FD', borderRadius: 8, fontSize: 12, color: '#1D4ED8', marginBottom: 14 }}>
-          ملخص: نقل {shipmentIds.length} شحنة ({movingVolume} وحدة) من هذه التجميعة إلى {dest.batch_number}.
-          السعة بعد النقل: {dest.capacity_after} / {dest.max_volume}. المحطات بعد النقل: {dest.stops_after} / {dest.max_stops}.
-        </div>
-      )}
-
-      <ReasonFields reasonCode={reasonCode} setReasonCode={setReasonCode} reason={reason} setReason={setReason} notes={notes} setNotes={setNotes} />
-
-      <ActionButtons onCancel={onClose} onConfirm={handleConfirm} loading={submitting} confirmLabel="تأكيد النقل"
-        disabled={!selected || !reasonCode || !reason.trim()} />
-    </ModalShell>
   );
 }
 

@@ -12,19 +12,26 @@ import { computeReservedUntil } from './formulas.js';
 import { CandidateBatch, DemandFlow } from './types.js';
 import { loadConfigFromDB } from './constants.js';
 import { supabase } from '../supabase.js';
+import { applyRouteEta, resetToFallback } from './eta.js';
 
 // Releases delayed shipments whose wait period has elapsed back into the pool.
 // Runs once at the start of each cycle â€” the single mechanism for un-delaying.
 async function releaseDelayedShipments(): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('shipments')
     .update({ status: 'available', delayed_reason: null, delayed_until: null })
     .eq('status', 'delayed')
-    .lte('delayed_until', new Date().toISOString());
+    .lte('delayed_until', new Date().toISOString())
+    .select('id');
 
   if (error) {
     console.error('[Batch Cycle] releaseDelayedShipments error:', error.message);
+    return;
   }
+  // These shipments just left whatever batch/reservation gave them a route
+  // estimate â€” revert to the flat SLA deadline so the tracking page never
+  // shows a stale, precise-looking ETA for a shipment back in the pool.
+  if (data?.length) resetToFallback(data.map(r => r.id));
 }
 
 // Default courier home base â€” replace with real dispatcher location per region
@@ -119,6 +126,28 @@ async function processSingleBatch(
   console.log(`[Phase 5] Batch ${batchId} closed â€” route: ${routePlan.route.join(' â†’ ')}`);
 
   const totalVolume = current.total_volume + routePlan.bc_total_volume;
+
+  // ETA â€” best-effort, runs asynchronously, does not block the next batch.
+  // Aâ†’B leg: shipments already read above, so no extra query.
+  setTimeout(() => {
+    applyRouteEta(
+      shipments.map(s => ({ id: s.id, dropoff_lat: s.dropoff_lat, dropoff_lng: s.dropoff_lng })),
+      { lat: current.origin_lat, lng: current.origin_lng }
+    );
+    // Bâ†’C leg: fetch dropoff coords for the newly-claimed extension shipments.
+    if (routePlan.bc_shipment_ids.length > 0) {
+      supabase
+        .from('shipments')
+        .select('id, dropoff_lat, dropoff_lng')
+        .in('id', routePlan.bc_shipment_ids)
+        .then(({ data, error }) => {
+          if (error) { console.warn('[Batch Cycle] Bâ†’C ETA fetch failed:', error.message); return; }
+          if (data?.length) {
+            applyRouteEta(data, { lat: current.destination_lat, lng: current.destination_lng });
+          }
+        });
+    }
+  }, 0);
 
   // Driver assignment â€” runs asynchronously, does not block the next batch
   setTimeout(() => assignBatch(batchId, current.origin_lat, current.origin_lng, totalVolume), 0);

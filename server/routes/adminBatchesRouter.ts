@@ -4,6 +4,12 @@ import { supabase } from '../supabase.js';
 import { requireAdmin } from '../middleware/requireAdmin.js';
 import type { BatchAdminActionType, BatchAdminReasonCode } from '../../shared/batchAdminActions.js';
 import { BATCH_ADMIN_REASON_CODES } from '../../shared/batchAdminActions.js';
+import type { ShipmentStatus } from '../../shared/status.js';
+import { resetToFallback } from '../logistics/eta.js';
+import { roadDistance } from '../logistics/formulas.js';
+import { getZoneCoords } from '../logistics/locationUtils.js';
+import { resolveEffectivePickup, fetchSourceBatch } from '../logistics/effectivePickup.js';
+import { assignBatch } from '../logistics/driverAssignment.js';
 
 /**
  * Admin "Batch Management" — view/modify the division of shipments into
@@ -36,16 +42,17 @@ function validateReason(body: Record<string, unknown>): { reason_code: BatchAdmi
   return { reason_code: reason_code as BatchAdminReasonCode, reason };
 }
 
-async function getCapacityConfig(): Promise<{ maxVolume: number; maxStops: number; delayThresholdMinutes: number }> {
+async function getCapacityConfig(): Promise<{ maxVolume: number; maxStops: number; delayThresholdMinutes: number; maxDistanceKm: number }> {
   const { data } = await supabase
     .from('batch_config')
-    .select('max_driver_capacity, max_stops_per_batch, delay_threshold_minutes')
+    .select('max_driver_capacity, max_stops_per_batch, delay_threshold_minutes, max_distance_km')
     .eq('id', 1)
     .maybeSingle();
   return {
     maxVolume: data?.max_driver_capacity ?? 100,
     maxStops: data?.max_stops_per_batch ?? 20,
     delayThresholdMinutes: data?.delay_threshold_minutes ?? 180,
+    maxDistanceKm: data?.max_distance_km ?? 50,
   };
 }
 
@@ -92,7 +99,7 @@ router.get('/reason-codes', (_req: Request, res: Response) => {
 
 /* ───────────────────────────── GET / (list) ───────────────────────────── */
 router.get('/', async (req: Request, res: Response) => {
-  const { status, driver_id, zone, delayed, breakdown, date_from, date_to, q } = req.query as Record<string, string | undefined>;
+  const { status, driver_id, zone, delayed, breakdown, created_manually, date_from, date_to, q, archived } = req.query as Record<string, string | undefined>;
 
   let query = supabase
     .from('batches')
@@ -100,11 +107,18 @@ router.get('/', async (req: Request, res: Response) => {
     .order('created_at', { ascending: false })
     .limit(300);
 
+  // Default (batch monitor) view only ever shows live batches; completed/cancelled
+  // ones live in the archive view (?archived=true) instead. An explicit status
+  // filter always wins over this scoping.
   if (status) query = query.eq('status', status);
+  else if (archived === 'true') query = query.in('status', ['completed', 'cancelled']);
+  else query = query.not('status', 'in', '(completed,cancelled)');
+
   if (driver_id) query = query.eq('assigned_to', driver_id);
   if (date_from) query = query.gte('created_at', date_from);
   if (date_to) query = query.lte('created_at', date_to);
   if (breakdown === 'true') query = query.not('breakdown_reported_at', 'is', null);
+  if (created_manually === 'true') query = query.eq('creation_source', 'admin');
 
   if (q?.trim()) {
     const term = q.trim();
@@ -189,6 +203,7 @@ router.get('/', async (req: Request, res: Response) => {
       completed_at: b.completed_at,
       expected_completion_at: b.expected_completion_at,
       courier: b.couriers ? { id: b.couriers.id, name: b.couriers.name, status: b.couriers.status } : null,
+      creation_source: b.creation_source ?? 'system',
       is_delayed,
       delay_minutes,
       delay_reason: b.delay_reason,
@@ -297,9 +312,57 @@ router.get('/:batchId', async (req: Request, res: Response) => {
   const orderMap = new Map<number, any>((orders ?? []).map((o: any) => [o.id, o]));
   const userIds = [...new Set((orders ?? []).map((o: any) => o.user_id).filter(Boolean))] as string[];
   const { data: profiles } = userIds.length
-    ? await supabase.from('customer_profiles').select('user_id, first_name, last_name').in('user_id', userIds)
+    ? await supabase.from('customer_profiles').select('user_id, first_name, last_name, phone, city, street, apartment').in('user_id', userIds)
     : { data: [] as any[] };
   const profileMap = new Map<string, any>((profiles ?? []).map((p: any) => [p.user_id, p]));
+
+  // A shipment that arrived here via "Redistribute Shipments" (either moved
+  // into an existing batch or split off into a brand-new one) has a
+  // redistribute_shipments row logged against its *source* batch — to_batch_id
+  // for the move-to-existing case, metadata.new_batch_id for the new-batch
+  // case (see the /:batchId/redistribute handler below). Look those up so the
+  // UI can show "came from batch X" per shipment.
+  const shipIds = (shipRows as any[] ?? []).map(s => s.id);
+  let previousBatchMap = new Map<string, string>();
+  if (shipIds.length) {
+    // Two separate queries instead of a single .or() with a jsonb ->> path —
+    // the latter is finicky to get right through supabase-js/PostgREST and
+    // fails silently (no error surfaces, the column just never matches).
+    // .contains() compiles to a native jsonb `@>` containment check instead.
+    const [movedRes, newBatchRes] = await Promise.all([
+      supabase
+        .from('batch_admin_actions')
+        .select('from_batch_id, metadata, created_at')
+        .eq('action_type', 'redistribute_shipments')
+        .eq('to_batch_id', batchId)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('batch_admin_actions')
+        .select('from_batch_id, metadata, created_at')
+        .eq('action_type', 'redistribute_shipments')
+        .contains('metadata', { new_batch_id: batchId })
+        .order('created_at', { ascending: false }),
+    ]);
+    if (movedRes.error) console.error('[AdminBatches] previous-batch lookup (moved) failed:', movedRes.error.message);
+    if (newBatchRes.error) console.error('[AdminBatches] previous-batch lookup (new-batch) failed:', newBatchRes.error.message);
+
+    const redistributeLogs = [...(movedRes.data ?? []), ...(newBatchRes.data ?? [])]
+      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    for (const log of redistributeLogs as any[]) {
+      const loggedShipmentIds: string[] = log.metadata?.shipment_ids ?? [];
+      for (const sid of loggedShipmentIds) {
+        if (shipIds.includes(sid) && !previousBatchMap.has(sid)) {
+          previousBatchMap.set(sid, log.from_batch_id);
+        }
+      }
+    }
+  }
+  const previousBatchIds = [...new Set(previousBatchMap.values())];
+  const { data: previousBatchRows } = previousBatchIds.length
+    ? await supabase.from('batches').select('id, batch_number').in('id', previousBatchIds)
+    : { data: [] as any[] };
+  const previousBatchNumberMap = new Map((previousBatchRows ?? []).map((b: any) => [b.id, b.batch_number]));
 
   const shipments = ((shipRows as any[]) ?? []).map(s => {
     const orderId = s.order_details?.order_id ?? s.order_id ?? null;
@@ -309,6 +372,10 @@ router.get('/:batchId', async (req: Request, res: Response) => {
     const customerName =
       [sa.firstName, sa.lastName].filter(Boolean).join(' ').trim() ||
       [prof?.first_name, prof?.last_name].filter(Boolean).join(' ').trim() || null;
+    const customerPhone = sa.phone || prof?.phone || null;
+    const customerAddress =
+      [sa.address, sa.apartment, sa.city].filter(Boolean).join('، ').trim() ||
+      [prof?.street, prof?.apartment, prof?.city].filter(Boolean).join('، ').trim() || null;
 
     return {
       id: s.id,
@@ -317,6 +384,8 @@ router.get('/:batchId', async (req: Request, res: Response) => {
       order_id: orderId,
       merchant_name: s.order_details?.shops?.name ?? null,
       customer_name: customerName,
+      customer_phone: customerPhone,
+      customer_address: customerAddress,
       pickup_zone: s.pickup_zone,
       dropoff_zone: s.dropoff_zone,
       pickup_lat: s.pickup_lat,
@@ -332,6 +401,9 @@ router.get('/:batchId', async (req: Request, res: Response) => {
       in_driver_custody: s.status === 'picked_up',
       delivered: s.status === 'delivered',
       requires_manual_handling: s.status === 'stranded',
+      previous_batch: previousBatchMap.has(s.id)
+        ? { id: previousBatchMap.get(s.id)!, batch_number: previousBatchNumberMap.get(previousBatchMap.get(s.id)!) ?? null }
+        : null,
     };
   });
 
@@ -361,6 +433,7 @@ router.get('/:batchId', async (req: Request, res: Response) => {
       max_volume: config.maxVolume,
       max_stops: config.maxStops,
       remaining_capacity: Math.max(0, config.maxVolume - (batch.total_volume ?? 0)),
+      creation_source: batch.creation_source ?? 'system',
       created_at: batch.created_at,
       started_at: batch.started_at,
       completed_at: batch.completed_at,
@@ -675,6 +748,10 @@ router.post('/:batchId/resolve-breakdown', async (req: Request, res: Response) =
       .in('id', returnedIds)
       .eq('status', 'stranded');
     if (shipErr) return res.status(500).json({ ok: false, error: shipErr.message });
+
+    // These shipments were markUnknown'd when stranded — re-entering the pool
+    // needs a real deadline estimate again, not a lingering null ETA.
+    resetToFallback(returnedIds);
   }
 
   const { count: stillStranded } = await supabase
@@ -771,6 +848,271 @@ router.post('/:batchId/change-driver', async (req: Request, res: Response) => {
   });
 
   res.json({ ok: true });
+});
+
+/* ─────────────────── GET /:batchId/redistribution-plan ─────────────────── */
+// Analyzes every not-yet-delivered shipment of a batch and groups them by
+// their *effective* pickup point + dropoff zone (see effectivePickup.ts —
+// not-yet-collected shipments keep their store as pickup; picked_up/stranded
+// ones use the driver's last known / breakdown location instead). For each
+// group it lists eligible existing destination batches and always offers
+// "create a new batch" as a fallback — the raw material the redistribute
+// modal turns into an admin-editable plan.
+router.get('/:batchId/redistribution-plan', async (req: Request, res: Response) => {
+  const { batchId } = req.params as { batchId: string };
+
+  const { data: source } = await supabase.from('batches').select('*').eq('id', batchId).maybeSingle();
+  if (!source) return res.status(404).json({ ok: false, error: 'التجميعة غير موجودة' });
+
+  const allIds = [...(source.ab_shipment_ids ?? []), ...(source.bc_shipment_ids ?? [])];
+  const { data: shipRows } = allIds.length
+    ? await supabase
+        .from('shipments')
+        .select('id, status, pickup_zone, pickup_lat, pickup_lng, dropoff_zone, order_details(qty, products(capacity_units))')
+        .in('id', allIds)
+    : { data: [] as any[] };
+
+  const activeShipments = ((shipRows as any[]) ?? [])
+    .filter(s => s.status !== 'delivered')
+    .map(s => ({
+      id: s.id as string,
+      status: s.status as ShipmentStatus,
+      pickup_zone: s.pickup_zone as string,
+      pickup_lat: s.pickup_lat as number,
+      pickup_lng: s.pickup_lng as number,
+      dropoff_zone: s.dropoff_zone as string,
+      volume: (s.order_details?.qty ?? 0) * (s.order_details?.products?.capacity_units ?? 0),
+    }));
+
+  if (!activeShipments.length) return res.json({ ok: true, groups: [] });
+
+  const sourceBatchForPickup = { id: source.id, assigned_to: source.assigned_to, breakdown_location: source.breakdown_location ?? null };
+  const effective = await resolveEffectivePickup(sourceBatchForPickup, activeShipments);
+  const effectiveById = new Map(effective.map(e => [e.shipment_id, e]));
+
+  interface GroupAcc {
+    source: string; zone: string | null; dropoff_zone: string; lat: number | null; lng: number | null;
+    location_available: boolean; shipment_ids: string[]; volume: number;
+  }
+  const groupMap = new Map<string, GroupAcc>();
+  for (const s of activeShipments) {
+    const eff = effectiveById.get(s.id)!;
+    const key = `${eff.source}::${eff.zone ?? 'unknown'}::${s.dropoff_zone}`;
+    let g = groupMap.get(key);
+    if (!g) {
+      g = { source: eff.source, zone: eff.zone, dropoff_zone: s.dropoff_zone, lat: eff.lat, lng: eff.lng, location_available: eff.location_available, shipment_ids: [], volume: 0 };
+      groupMap.set(key, g);
+    }
+    g.shipment_ids.push(s.id);
+    g.volume += s.volume;
+  }
+
+  const config = await getCapacityConfig();
+  const { data: candidates } = await supabase
+    .from('batches')
+    .select('*, couriers!assigned_to(name)')
+    .in('status', ['pending_assignment', 'assigned'])
+    .neq('id', batchId)
+    .order('created_at', { ascending: false })
+    .limit(200);
+
+  const zoneCoordsCache = new Map<string, { lat: number; lng: number } | null>();
+  async function cachedZoneCoords(zone: string) {
+    if (!zoneCoordsCache.has(zone)) zoneCoordsCache.set(zone, await getZoneCoords(zone));
+    return zoneCoordsCache.get(zone) ?? null;
+  }
+
+  const groups = await Promise.all([...groupMap.values()].map(async g => {
+    if (!g.location_available) {
+      return {
+        pickup_zone: g.zone, dropoff_zone: g.dropoff_zone, source: g.source, location_available: false,
+        shipment_ids: g.shipment_ids, total_volume: g.volume,
+        eligible_destinations: [], can_create_new_batch: false, suggested_route: null as string[] | null,
+      };
+    }
+
+    const destinations = await Promise.all((candidates ?? []).map(async (b: any) => {
+      const reasons: string[] = [];
+      const route: string[] = b.route ?? [];
+      const legIndex = route[1] === g.dropoff_zone ? 0 : route[2] === g.dropoff_zone ? 1 : -1;
+      let matchType: 'exact_zone' | 'distance_based' | null = null;
+      let distanceKm: number | null = null;
+
+      if (legIndex === -1) {
+        reasons.push('different_zone');
+      } else if (g.source === 'store') {
+        if (route[legIndex] === g.zone) matchType = 'exact_zone';
+        else reasons.push('different_zone');
+      } else {
+        const legOriginCoords = await cachedZoneCoords(route[legIndex]);
+        if (!legOriginCoords || g.lat == null || g.lng == null) {
+          reasons.push('zone_coords_unavailable');
+        } else {
+          distanceKm = roadDistance(g.lat, g.lng, legOriginCoords.lat, legOriginCoords.lng);
+          if (distanceKm > config.maxDistanceKm) reasons.push('too_far');
+          else matchType = 'distance_based';
+        }
+      }
+
+      const stopsUsed = (b.ab_shipment_ids?.length ?? 0) + (b.bc_shipment_ids?.length ?? 0);
+      if (stopsUsed + g.shipment_ids.length > config.maxStops) reasons.push('max_stops_exceeded');
+      if ((b.total_volume ?? 0) + g.volume > config.maxVolume) reasons.push('insufficient_capacity');
+      if (b.breakdown_reported_at && !b.breakdown_resolved_at) reasons.push('active_breakdown');
+
+      return {
+        id: b.id, batch_number: b.batch_number, status: b.status, route,
+        courier_name: b.couriers?.name ?? null, total_volume: b.total_volume,
+        max_volume: config.maxVolume, capacity_after: (b.total_volume ?? 0) + g.volume,
+        stops_used: stopsUsed, stops_after: stopsUsed + g.shipment_ids.length, max_stops: config.maxStops,
+        match_type: matchType, distance_km: distanceKm != null ? Math.round(distanceKm * 10) / 10 : null,
+        eligible: reasons.length === 0, blocked_reasons: reasons,
+      };
+    }));
+
+    return {
+      pickup_zone: g.zone, dropoff_zone: g.dropoff_zone, source: g.source, location_available: true,
+      shipment_ids: g.shipment_ids, total_volume: g.volume,
+      eligible_destinations: destinations, can_create_new_batch: true,
+      suggested_route: g.zone ? [g.zone, g.dropoff_zone] : null,
+    };
+  }));
+
+  res.json({ ok: true, groups });
+});
+
+/* ─────────────────────────── POST /:batchId/redistribute ───────────────────────── */
+// Executes an admin-built redistribution plan: some shipment subsets move
+// into existing batches, others become brand-new batches. Every subset is its
+// own atomic RPC call — one subset failing doesn't block the others, and the
+// response reports per-operation results so the client can show exactly what
+// went through.
+interface RedistributeMove { shipment_ids: string[]; destination_batch_id: string }
+interface RedistributeNewBatch { shipment_ids: string[] }
+
+router.post('/:batchId/redistribute', async (req: Request, res: Response) => {
+  const { batchId } = req.params as { batchId: string };
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const moves = (body.moves as RedistributeMove[] | undefined) ?? [];
+  const newBatches = (body.new_batches as RedistributeNewBatch[] | undefined) ?? [];
+  const notes = (body.notes as string | undefined)?.trim() || null;
+
+  const reasonResult = validateReason(body);
+  if ('error' in reasonResult) return res.status(400).json({ ok: false, error: reasonResult.error });
+
+  const allShipmentIds = [...moves.flatMap(m => m.shipment_ids), ...newBatches.flatMap(n => n.shipment_ids)];
+  if (!allShipmentIds.length) return res.status(400).json({ ok: false, error: 'يجب اختيار شحنة واحدة على الأقل' });
+  if (new Set(allShipmentIds).size !== allShipmentIds.length) {
+    return res.status(400).json({ ok: false, error: 'لا يمكن اختيار نفس الشحنة أكثر من مرة ضمن نفس العملية' });
+  }
+
+  const { data: source } = await supabase.from('batches').select('id').eq('id', batchId).maybeSingle();
+  if (!source) return res.status(404).json({ ok: false, error: 'التجميعة غير موجودة' });
+
+  const { data: shipRows } = await supabase
+    .from('shipments')
+    .select('id, status, batch_id, pickup_zone, pickup_lat, pickup_lng, dropoff_zone')
+    .in('id', allShipmentIds);
+  const shipMap = new Map(((shipRows as any[]) ?? []).map(s => [s.id as string, s]));
+
+  const invalidIds = allShipmentIds.filter(id => {
+    const s = shipMap.get(id);
+    return !s || s.batch_id !== batchId || s.status === 'delivered';
+  });
+  if (invalidIds.length) {
+    return res.status(400).json({ ok: false, error: 'بعض الشحنات غير مؤهلة لإعادة التوزيع (تم تسليمها أو لا تتبع هذه التجميعة)', invalid_shipment_ids: invalidIds });
+  }
+
+  // Shipments already collected by the (possibly broken-down) driver must have
+  // their pickup point rewritten to that driver's last known location BEFORE
+  // any move/create RPC runs — everything downstream (zone matching, the new
+  // courier's pickup-delivery view, ETA) reads pickup_lat/pickup_lng/pickup_zone.
+  const needsOverride = allShipmentIds.filter(id => ['picked_up', 'stranded'].includes(shipMap.get(id)!.status));
+  if (needsOverride.length) {
+    const sourceBatchForPickup = await fetchSourceBatch(batchId);
+    const overrideInputs = needsOverride.map(id => {
+      const s = shipMap.get(id)!;
+      return { id: s.id, status: s.status as ShipmentStatus, pickup_zone: s.pickup_zone, pickup_lat: s.pickup_lat, pickup_lng: s.pickup_lng, dropoff_zone: s.dropoff_zone };
+    });
+    const effective = sourceBatchForPickup ? await resolveEffectivePickup(sourceBatchForPickup, overrideInputs) : [];
+    const actuallyOverridden: string[] = [];
+    for (const eff of effective) {
+      if (!eff.location_available || eff.lat == null || eff.lng == null || !eff.zone) continue;
+      const { error: overrideErr } = await supabase
+        .from('shipments')
+        .update({ pickup_lat: eff.lat, pickup_lng: eff.lng, pickup_zone: eff.zone, picked_up_at: null })
+        .eq('id', eff.shipment_id);
+      if (!overrideErr) {
+        const s = shipMap.get(eff.shipment_id)!;
+        s.pickup_zone = eff.zone; s.pickup_lat = eff.lat; s.pickup_lng = eff.lng;
+        actuallyOverridden.push(eff.shipment_id);
+      }
+    }
+    // Only reset the ETA of shipments whose pickup point we could actually
+    // resolve — a shipment with no known location keeps whatever ETA it had
+    // rather than being silently reset to a fallback that isn't more accurate.
+    await resetToFallback(actuallyOverridden);
+  }
+
+  const results: Record<string, unknown>[] = [];
+
+  for (const move of moves) {
+    if (!move.shipment_ids?.length || !move.destination_batch_id) continue;
+    const { data: result, error } = await supabase.rpc('move_shipments_between_batches', {
+      p_shipment_ids: move.shipment_ids,
+      p_source_batch_id: batchId,
+      p_destination_batch_id: move.destination_batch_id,
+    });
+    const r = error ? { success: false, error_code: 'rpc_error' } : (result as { success: boolean; error_code?: string; moved_volume?: number });
+    if (r.success) {
+      await resetToFallback(move.shipment_ids);
+      await logAction({
+        batch_id: batchId, action_type: 'redistribute_shipments', from_batch_id: batchId, to_batch_id: move.destination_batch_id,
+        reason_code: reasonResult.reason_code, reason: reasonResult.reason, notes, performed_by: req.adminUserId!,
+        metadata: { shipment_ids: move.shipment_ids, moved_volume: (r as any).moved_volume, mode: 'move_to_existing' },
+      });
+    }
+    results.push({ shipment_ids: move.shipment_ids, destination_batch_id: move.destination_batch_id, ...r });
+  }
+
+  for (const nb of newBatches) {
+    if (!nb.shipment_ids?.length) continue;
+    const rows = nb.shipment_ids.map(id => shipMap.get(id)!);
+    const pickupZones = new Set(rows.map(r => r.pickup_zone));
+    const dropoffZones = [...new Set(rows.map(r => r.dropoff_zone))];
+    if (pickupZones.size !== 1) {
+      results.push({ shipment_ids: nb.shipment_ids, success: false, error_code: 'mixed_pickup_zone' });
+      continue;
+    }
+    if (dropoffZones.length > 2) {
+      results.push({ shipment_ids: nb.shipment_ids, success: false, error_code: 'too_many_dropoff_zones' });
+      continue;
+    }
+    const route = [[...pickupZones][0], ...dropoffZones];
+
+    const { data: result, error } = await supabase.rpc('create_batch_from_shipments', {
+      p_shipment_ids: nb.shipment_ids,
+      p_route: route,
+      p_source_batch_id: batchId,
+    });
+    const r = error ? { success: false, error_code: 'rpc_error' } : (result as { success: boolean; error_code?: string; batch_id?: string; total_volume?: number });
+    if (r.success && (r as any).batch_id) {
+      const newBatchId = (r as any).batch_id as string;
+      const originLat = rows.reduce((sum, row) => sum + row.pickup_lat, 0) / rows.length;
+      const originLng = rows.reduce((sum, row) => sum + row.pickup_lng, 0) / rows.length;
+      assignBatch(newBatchId, originLat, originLng, (r as any).total_volume ?? 0).catch(err =>
+        console.error('[AdminBatches] assignBatch after redistribute failed:', err?.message ?? err)
+      );
+      await logAction({
+        batch_id: batchId, action_type: 'redistribute_shipments', from_batch_id: batchId, to_batch_id: null,
+        reason_code: reasonResult.reason_code, reason: reasonResult.reason, notes, performed_by: req.adminUserId!,
+        metadata: { shipment_ids: nb.shipment_ids, new_batch_id: newBatchId, route, mode: 'new_batch' },
+      });
+    }
+    results.push({ shipment_ids: nb.shipment_ids, ...r });
+  }
+
+  const ok = results.every(r => r.success === true);
+  res.json({ ok, results });
 });
 
 export default router;

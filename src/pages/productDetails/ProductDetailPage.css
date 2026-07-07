@@ -1,44 +1,43 @@
 /* ════════════════════════════════════════════════════════════
    Product Details Page — Souq Link
-   Design language: an open-air souq stall rendered for the web —
-   parchment paper, a deep emerald ledger ink, brass fittings, and
-   a hand-tagged price ticket as the page's one signature flourish.
+   Colors are pulled from the site's global design tokens
+   (src/index.css) so this page reads as part of the same site —
+   white surfaces, the site's green as the accent, amber for
+   ratings/highlights, matching the rest of the platform.
    Class names are page-scoped (pdp-*, rv-*, review-*, login-*,
    lightbox-*) so the logic in ProductDetailPage.tsx stays untouched.
    ════════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Markazi+Text:wght@500;600;700&display=swap');
-
 :root {
-  --pdp-green:        #0b3d2e;  /* ledger ink — headings, primary actions */
-  --pdp-green-soft:   #155b44;  /* hover/pressed */
-  --pdp-green-tint:   #e7efe8;  /* faint green wash */
+  --pdp-green:        var(--color-primary);       /* headings, primary actions */
+  --pdp-green-soft:   var(--color-primary-dark);   /* hover/pressed */
+  --pdp-green-tint:   var(--color-primary-light);  /* faint green wash */
 
-  --pdp-brass:        #a9772e;  /* fittings, stars, the price tag */
-  --pdp-brass-light:  #ddb978;
-  --pdp-brass-dark:   #7c5620;
+  --pdp-brass:        #f59e0b;  /* stars, price tag — matches site's rating amber */
+  --pdp-brass-light:  #fcd34d;
+  --pdp-brass-dark:   #b45309;
 
-  --pdp-clay:         #a8472b;  /* sale / error accent, replaces red */
-  --pdp-clay-tint:    #f6e7e1;
+  --pdp-clay:         var(--color-danger);       /* sale / error accent */
+  --pdp-clay-tint:    var(--color-danger-light);
 
-  --pdp-paper:        #fbf6ec;  /* page ground */
-  --pdp-paper-deep:   #f2ead9;  /* recessed panels */
-  --pdp-card:         #fffdf7;  /* raised cards */
+  --pdp-paper:        var(--color-bg);      /* page ground */
+  --pdp-paper-deep:   #f3f4f6;              /* recessed panels */
+  --pdp-card:         var(--color-surface); /* raised cards */
 
-  --pdp-ink:          #241a10;  /* primary text */
-  --pdp-ink-soft:      #5b5042;  /* secondary text */
-  --pdp-ink-faint:     #8b8071;  /* tertiary / placeholders */
+  --pdp-ink:          var(--color-text);
+  --pdp-ink-soft:      var(--color-text-secondary);
+  --pdp-ink-faint:     var(--color-muted);
 
-  --pdp-line:          rgba(11, 61, 46, 0.16);
-  --pdp-line-soft:     rgba(36, 26, 16, 0.10);
+  --pdp-line:          var(--color-border);
+  --pdp-line-soft:     rgba(0, 0, 0, 0.08);
 
   --pdp-radius:        14px;
   --pdp-radius-sm:     9px;
-  --pdp-shadow:        0 10px 28px rgba(36, 26, 16, 0.08);
-  --pdp-shadow-lg:     0 18px 48px rgba(36, 26, 16, 0.14);
+  --pdp-shadow:        0 10px 28px rgba(0, 0, 0, 0.08);
+  --pdp-shadow-lg:     0 18px 48px rgba(0, 0, 0, 0.14);
 
-  --font-display: 'Markazi Text', 'IBM Plex Sans Arabic', serif;
-  --font-body: 'IBM Plex Sans Arabic', sans-serif;
+  --font-display: var(--font-main);
+  --font-body: var(--font-main);
 }
 
 .pdp-page {
@@ -159,13 +158,13 @@
   z-index: 5;
   transform: rotate(-7deg);
   background: linear-gradient(155deg, var(--pdp-brass-light), var(--pdp-brass) 70%);
-  color: #2c1c08;
+  color: var(--pdp-ink);
   font-weight: 700;
   font-size: 0.8rem;
   letter-spacing: 0.01em;
   padding: 9px 14px 9px 20px;
   clip-path: polygon(13px 0, 100% 0, 100% 100%, 13px 100%, 0 50%);
-  box-shadow: 2px 4px 8px rgba(36, 26, 16, 0.3);
+  box-shadow: 2px 4px 8px rgba(0, 0, 0, 0.25);
 }
 
 .pdp-discount-tag::before {
@@ -176,7 +175,7 @@
   border-radius: 50%;
   background: var(--pdp-paper);
   transform: translateY(-50%);
-  box-shadow: inset 0 0 0 1px rgba(44, 28, 8, 0.4);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
 }
 
 .pdp-discount-tag::after {
@@ -184,7 +183,7 @@
   position: absolute;
   top: -18px; left: 10px;
   width: 1px; height: 20px;
-  background: repeating-linear-gradient(to bottom, rgba(44, 28, 8, 0.4) 0 3px, transparent 3px 6px);
+  background: repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.3) 0 3px, transparent 3px 6px);
   transform: rotate(10deg);
   transform-origin: bottom center;
 }
@@ -195,7 +194,7 @@
   transform: translateY(-50%);
   width: 38px; height: 38px;
   border-radius: 50%;
-  background: rgba(255, 253, 247, 0.92);
+  background: rgba(255, 255, 255, 0.92);
   border: 1px solid var(--pdp-line);
   color: var(--pdp-green);
   display: flex; align-items: center; justify-content: center;
@@ -320,7 +319,7 @@
   flex-wrap: wrap;
   gap: 10px;
   background: var(--pdp-paper-deep);
-  border-inline-start: 3px dashed var(--pdp-brass-light);
+  border-inline-start: 3px dashed var(--pdp-green);
   border-radius: 0 var(--pdp-radius-sm) var(--pdp-radius-sm) 0;
   padding: 14px 18px;
 }
@@ -749,7 +748,7 @@
 .rv-empty { color: var(--pdp-ink-faint); }
 
 /* ─── LOGIN MODAL ─── */
-.login-overlay { position: fixed; inset: 0; background: rgba(36, 26, 16, 0.45); display: flex; align-items: center; justify-content: center; z-index: 1000; direction: rtl; padding: 16px; }
+.login-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; direction: rtl; padding: 16px; }
 .login-modal { background: var(--pdp-card); border-radius: var(--pdp-radius); padding: 28px; width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 14px; box-shadow: var(--pdp-shadow-lg); }
 .login-head { display: flex; align-items: center; justify-content: space-between; }
 .login-title { font-family: var(--font-display); font-size: 1.3rem; font-weight: 700; color: var(--pdp-green); margin: 0; }
@@ -763,7 +762,7 @@
 .login-submit:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ─── LIGHTBOX ─── */
-.lightbox-overlay { position: fixed; inset: 0; background: rgba(20, 14, 8, 0.86); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.lightbox-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 16px; }
 .lightbox-img { max-width: 90vw; max-height: 88vh; border-radius: var(--pdp-radius-sm); object-fit: contain; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); }
 .lightbox-close { position: fixed; top: 18px; left: 22px; background: rgba(255, 255, 255, 0.15); border: none; color: #fff; width: 38px; height: 38px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .lightbox-close:hover { background: rgba(255, 255, 255, 0.28); }

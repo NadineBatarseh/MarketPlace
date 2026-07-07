@@ -89,6 +89,18 @@ export const SETTINGS_DEFINITIONS: SettingDef[] = [
     explanation: 'أدنى عدد شحنات مطلوب لإرسال الدفعة. إذا كان العدد أقل تُؤجَّل للدورة التالية.',
     category: 'batch',
   },
+  {
+    key: 'DELAY_THRESHOLD_MINUTES',
+    label: 'حد التأخير التلقائي',
+    unit: 'دقيقة',
+    type: 'minutes',
+    defaultValue: 180,
+    min: 10,
+    max: 1440,
+    step: 10,
+    explanation: 'إذا مرّ هذا الوقت على بدء الدفعة (in_transit) دون موعد إكمال متوقع، تُعتبر الدفعة متأخرة تلقائياً.',
+    category: 'batch',
+  },
 
   // ── 2. إعدادات التدفق ──────────────────────────────────────────────────────
   {

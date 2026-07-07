@@ -12,7 +12,8 @@ export type BatchAdminActionType =
   | 'mark_under_monitoring'
   | 'escalate_manual_intervention'
   | 'resolve_breakdown'
-  | 'change_driver';
+  | 'change_driver'
+  | 'redistribute_shipments';
 
 export type BatchAdminReasonCode =
   | 'load_redistribution'

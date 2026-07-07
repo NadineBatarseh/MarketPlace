@@ -674,6 +674,11 @@
   color: var(--text);
 }
 
+.ot-pc-shipment-num {
+  font-size: 11px;
+  color: var(--muted);
+}
+
 /* Vertical product timeline */
 .ot-pc-tl {
   display: flex;
@@ -799,6 +804,14 @@
   font-size: 11px;
   color: var(--muted);
   margin-top: 2px;
+}
+
+.ot-pc-eta {
+  padding: 8px 24px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+  direction: rtl;
 }
 
 /* New tracking-update banner (driver delivered / admin resolved delay report) */

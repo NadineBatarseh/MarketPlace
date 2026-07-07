@@ -116,6 +116,9 @@ export async function createShipmentsForOrder(orderId: number | string): Promise
       dropoff_formatted_address: order.dropoff_formatted_address ?? null,
       delivery_address_description: order.delivery_address_description ?? null,
       deadline,
+      estimated_delivery_at: deadline,
+      eta_source: 'sla_fallback',
+      eta_computed_at: new Date().toISOString(),
     });
   }
 
