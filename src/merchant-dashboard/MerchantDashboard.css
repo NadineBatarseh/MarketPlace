@@ -1352,6 +1352,66 @@
 }
 .mep-add-product-btn:hover { background: #d04820; }
 
+.mep-products-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.mep-select-toggle-btn {
+  background: #fff;
+  color: #1a1a2e;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 0.55rem 1.1rem;
+  font-family: var(--font-main);
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.mep-select-toggle-btn:hover { background: #f3f4f6; border-color: #9ca3af; }
+
+.mep-bulk-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8f7f5;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 0.65rem 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.mep-bulk-count { font-size: 0.88rem; font-weight: 600; color: #374151; }
+.mep-bulk-actions { display: flex; align-items: center; gap: 0.6rem; }
+.mep-bulk-selectall-btn {
+  background: #fff;
+  color: #1a1a2e;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.mep-bulk-selectall-btn:hover { background: #f3f4f6; }
+.mep-bulk-delete-btn {
+  background: #dc2626;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.mep-bulk-delete-btn:hover:not(:disabled) { background: #b91c1c; }
+.mep-bulk-delete-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .mep-products-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -1367,6 +1427,29 @@
   flex-direction: column;
   gap: 0.5rem;
   position: relative;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.mep-product-card--selectable { cursor: pointer; }
+.mep-product-card--selected {
+  border-color: #e8572a;
+  box-shadow: 0 0 0 2px rgba(232, 87, 42, 0.25);
+}
+
+.mep-product-select {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 1;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  cursor: pointer;
+}
+.mep-product-select input {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: #e8572a;
 }
 .mep-product-img {
   width: 100%;

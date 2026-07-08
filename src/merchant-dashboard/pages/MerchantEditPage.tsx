@@ -1304,9 +1304,11 @@ export default function MerchantEditPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<DBProduct | null>(null);
   const [loadingProducts, setLoadingProducts] = useState(!!shop?.shop_id);
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
   const [deleteStatus, setDeleteStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [deleteMsg, setDeleteMsg] = useState('');
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!shop?.shop_id) { setLoadingProducts(false); return; }
@@ -1323,65 +1325,101 @@ export default function MerchantEditPage() {
   }, [shop?.shop_id]);
 
   const closedDeleteModal = () => {
-    setPendingDeleteId(null);
+    setPendingDeleteIds([]);
     setDeleteStatus('idle');
     setDeleteMsg('');
   };
 
-  const handleDeleteSiteOnly = async (id: string) => {
-    if (!shop?.shop_id) return;
+  const removeFromLocalState = (ids: string[]) => {
+    setProducts(prev => prev.filter(p => !ids.includes(p.id)));
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      ids.forEach(id => next.delete(id));
+      return next;
+    });
+  };
+
+  const toggleSelectionMode = () => {
+    setSelectionMode(v => !v);
+    setSelectedIds(new Set());
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const handleDeleteSiteOnly = async (ids: string[]) => {
+    if (!shop?.shop_id || ids.length === 0) return;
     setDeleteStatus('loading');
     setDeleteMsg('');
     const { error } = await supabase
       .from('products')
       .update({ is_deleted: true })
-      .eq('id', id)
+      .in('id', ids)
       .eq('shop_id', shop.shop_id);
     if (error) {
       setDeleteStatus('error');
       setDeleteMsg('حدث خطأ أثناء الحذف، يرجى المحاولة مرة أخرى');
       return;
     }
-    setProducts(prev => prev.filter(p => p.id !== id));
+    removeFromLocalState(ids);
+    setSelectionMode(false);
     closedDeleteModal();
   };
 
-  const handleDeleteSiteAndMeta = async (id: string) => {
-    if (!shop?.shop_id) return;
+  const handleDeleteSiteAndMeta = async (ids: string[]) => {
+    if (!shop?.shop_id || ids.length === 0) return;
     setDeleteStatus('loading');
     setDeleteMsg('');
 
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token ?? '';
 
-    let metaOk = false;
-    try {
-      const res = await fetch(`${API_BASE}/api/catalog/product/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      metaOk = res.ok;
-    } catch {
-      metaOk = false;
+    const results = await Promise.all(ids.map(async id => {
+      try {
+        const res = await fetch(`${API_BASE}/api/catalog/product/${id}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        return { id, ok: res.ok };
+      } catch {
+        return { id, ok: false };
+      }
+    }));
+
+    const succeeded = results.filter(r => r.ok).map(r => r.id);
+    const failed = results.filter(r => !r.ok).map(r => r.id);
+
+    if (succeeded.length > 0) {
+      const { error } = await supabase
+        .from('products')
+        .update({ is_deleted: true })
+        .in('id', succeeded)
+        .eq('shop_id', shop.shop_id);
+      if (error) {
+        setDeleteStatus('error');
+        setDeleteMsg('تم الحذف من Meta لكن حدث خطأ في تحديث السجل، يرجى المحاولة مرة أخرى');
+        return;
+      }
+      removeFromLocalState(succeeded);
     }
 
-    if (!metaOk) {
+    if (failed.length > 0) {
       setDeleteStatus('error');
-      setDeleteMsg('تعذر حذف المنتج من كتالوج Meta، يرجى المحاولة مرة أخرى');
+      setDeleteMsg(
+        failed.length === ids.length
+          ? 'تعذر حذف المنتج من كتالوج Meta، يرجى المحاولة مرة أخرى'
+          : `تعذر حذف ${failed.length} من المنتجات من كتالوج Meta، يرجى المحاولة مرة أخرى`
+      );
+      setPendingDeleteIds(failed);
       return;
     }
 
-    const { error } = await supabase
-      .from('products')
-      .update({ is_deleted: true })
-      .eq('id', id)
-      .eq('shop_id', shop.shop_id);
-    if (error) {
-      setDeleteStatus('error');
-      setDeleteMsg('تم الحذف من Meta لكن حدث خطأ في تحديث السجل، يرجى المحاولة مرة أخرى');
-      return;
-    }
-    setProducts(prev => prev.filter(p => p.id !== id));
+    setSelectionMode(false);
     closedDeleteModal();
   };
 
@@ -1406,10 +1444,44 @@ export default function MerchantEditPage() {
       <div className="mep-section">
         <div className="mep-products-header">
           <h2 className="mep-section-title mep-section-title--flush">📦 المنتجات</h2>
-          <button type="button" className="mep-add-product-btn" onClick={() => setShowAddModal(true)}>
-            ➕ إضافة منتج
-          </button>
+          <div className="mep-products-header-actions">
+            {products.length > 0 && (
+              <button type="button" className="mep-select-toggle-btn" onClick={toggleSelectionMode}>
+                {selectionMode ? 'إلغاء التحديد' : '☑ تحديد متعدد'}
+              </button>
+            )}
+            <button type="button" className="mep-add-product-btn" onClick={() => setShowAddModal(true)}>
+              ➕ إضافة منتج
+            </button>
+          </div>
         </div>
+
+        {selectionMode && (
+          <div className="mep-bulk-bar">
+            <span className="mep-bulk-count">
+              {selectedIds.size > 0 ? `تم تحديد ${selectedIds.size} منتج` : 'اختر منتجات للحذف'}
+            </span>
+            <div className="mep-bulk-actions">
+              <button
+                type="button"
+                className="mep-bulk-selectall-btn"
+                onClick={() => setSelectedIds(
+                  selectedIds.size === products.length ? new Set() : new Set(products.map(p => p.id))
+                )}
+              >
+                {selectedIds.size === products.length ? 'إلغاء تحديد الكل' : 'تحديد الكل'}
+              </button>
+              <button
+                type="button"
+                className="mep-bulk-delete-btn"
+                disabled={selectedIds.size === 0}
+                onClick={() => setPendingDeleteIds([...selectedIds])}
+              >
+                🗑 حذف المحدد ({selectedIds.size})
+              </button>
+            </div>
+          </div>
+        )}
 
         {loadingProducts ? (
           <div className="md-page-loading">جاري تحميل المنتجات...</div>
@@ -1418,11 +1490,26 @@ export default function MerchantEditPage() {
         ) : (
           <div className="mep-products-grid mep-products-gap">
             {products.map(p => (
-              <div key={p.id} className="mep-product-card">
-                <div className="mep-product-actions">
-                  <button type="button" className="mep-product-edit-btn" onClick={() => setEditingProduct(p)} title="تعديل المنتج">✏️</button>
-                  <button type="button" className="mep-product-del-btn" onClick={() => setPendingDeleteId(p.id)} title="حذف المنتج">🗑</button>
-                </div>
+              <div
+                key={p.id}
+                className={`mep-product-card${selectionMode ? ' mep-product-card--selectable' : ''}${selectionMode && selectedIds.has(p.id) ? ' mep-product-card--selected' : ''}`}
+                onClick={selectionMode ? () => toggleSelected(p.id) : undefined}
+              >
+                {selectionMode ? (
+                  <label className="mep-product-select" onClick={e => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(p.id)}
+                      onChange={() => toggleSelected(p.id)}
+                      aria-label={`تحديد ${p.title}`}
+                    />
+                  </label>
+                ) : (
+                  <div className="mep-product-actions">
+                    <button type="button" className="mep-product-edit-btn" onClick={() => setEditingProduct(p)} title="تعديل المنتج">✏️</button>
+                    <button type="button" className="mep-product-del-btn" onClick={() => setPendingDeleteIds([p.id])} title="حذف المنتج">🗑</button>
+                  </div>
+                )}
                 <div className="mep-product-img">
                   {p.image_urls?.[0] ? <img src={p.image_urls[0]} alt={p.title} /> : '📦'}
                 </div>
@@ -1464,12 +1551,16 @@ export default function MerchantEditPage() {
         />
       )}
 
-      {pendingDeleteId && (
+      {pendingDeleteIds.length > 0 && (
         <div className="mep-del-overlay" onClick={deleteStatus !== 'loading' ? closedDeleteModal : undefined}>
           <div className="mep-del-modal" onClick={e => e.stopPropagation()}>
-            <div className="mep-del-modal-title">🗑 حذف المنتج</div>
+            <div className="mep-del-modal-title">
+              🗑 {pendingDeleteIds.length > 1 ? `حذف ${pendingDeleteIds.length} منتجات` : 'حذف المنتج'}
+            </div>
             <div className="mep-del-modal-msg">
-              هل تريد حذف المنتج من الموقع فقط، أم من الموقع ومن كتالوج Meta أيضًا؟
+              {pendingDeleteIds.length > 1
+                ? 'هل تريد حذف المنتجات المحددة من الموقع فقط، أم من الموقع ومن كتالوج Meta أيضًا؟'
+                : 'هل تريد حذف المنتج من الموقع فقط، أم من الموقع ومن كتالوج Meta أيضًا؟'}
             </div>
 
             {deleteStatus === 'loading' && (
@@ -1485,7 +1576,7 @@ export default function MerchantEditPage() {
                 type="button"
                 className="mep-del-btn-meta"
                 disabled={deleteStatus === 'loading'}
-                onClick={() => handleDeleteSiteAndMeta(pendingDeleteId)}
+                onClick={() => handleDeleteSiteAndMeta(pendingDeleteIds)}
               >
                 حذف من الموقع و Meta
               </button>
@@ -1493,7 +1584,7 @@ export default function MerchantEditPage() {
                 type="button"
                 className="mep-del-btn-site"
                 disabled={deleteStatus === 'loading'}
-                onClick={() => handleDeleteSiteOnly(pendingDeleteId)}
+                onClick={() => handleDeleteSiteOnly(pendingDeleteIds)}
               >
                 حذف من الموقع فقط
               </button>

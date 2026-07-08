@@ -1,4 +1,10 @@
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* Wrapped in @layer base so Tailwind utility classes (used by StoreHero.tsx)
+   can still override margin/padding/box-sizing — unlayered CSS always beats
+   layered CSS regardless of specificity, and this rule is otherwise identical
+   to Tailwind's own preflight reset. */
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+}
 
 :root {
   --gold: #c8a951;
@@ -9,99 +15,10 @@
    in this file were removed so they no longer override the responsive
    Topbar.css rules on mobile. */
 
-/* ── STORE HERO ── */
-.store-hero {
-  position: relative;
-  background-image: url('/storepage-photo.jpg');
-  background-size: cover;
-  background-position: center;
-  border-radius: 18px;
-  margin: 20px 24px 0;
-  padding: 44px 48px 40px;
-  display: flex;
-  align-items: center;
-  gap: 28px;
-  min-height: 190px;
-  box-shadow: 0 6px 28px rgba(0,0,0,0.15);
-}
-.store-hero::before { content: none; }
-.store-hero > * { position: relative; z-index: 1; }
-
-.store-logo-wrap {
-  width: 90px; height: 90px; border-radius: 18px;
-  background: rgba(255,255,255,0.85);
-  border: 2px solid rgba(0,0,0,0.08);
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-  overflow: hidden;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-}
-.store-logo-wrap img { width: 100%; height: 100%; object-fit: cover; }
-.store-logo-placeholder {
-  width: 100%; height: 100%;
-  background: linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.1) 100%);
-  display: flex; align-items: center; justify-content: center;
-  color: white; font-size: 32px; font-weight: 800;
-}
-
-/* ── HERO NEW LAYOUT ── */
-.sh-identity {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-shrink: 0;
-}
-.sh-name-group {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.sh-name { font-size: 22px; font-weight: 800; color: var(--color-primary-dark); }
-.sh-desc { font-size: 12px; color: #5a7a62; max-width: 200px; line-height: 1.4; }
-
-.sh-stats {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  flex: 1;
-  justify-content: center;
-}
-.sh-stat {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 3px;
-  padding: 0 40px;
-}
-.sh-stat-icon {
-  width: 18px;
-  height: 18px;
-  color: var(--color-primary);
-  margin-bottom: 2px;
-}
-.sh-stat-value {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--color-primary-dark);
-}
-.sh-stat-label {
-  font-size: 11px;
-  color: #7a9e82;
-  font-weight: 500;
-}
-.sh-stat-divider {
-  width: 1px;
-  height: 36px;
-  background: rgba(0,0,0,0.1);
-  flex-shrink: 0;
-}
-
-.sh-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
+/* ── STORE HERO ──
+   Markup/styling for the header now lives directly in StoreHero.tsx as
+   Tailwind utility classes. Only the rating popup (below) still relies on
+   plain CSS since it's shared with StoreRating.tsx. */
 
 /* keep old names for compatibility */
 .store-info { flex: 1; }
@@ -1184,28 +1101,10 @@ input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.15); }
   .sidebar { display: none; }
   .products-section { padding-right: 0; }
   .page-body { padding: 18px 16px; }
-  /* Store hero: stack and centre instead of a wide single row */
-  .store-hero {
-    margin: 14px 16px 0;
-    padding: 24px 20px;
-    flex-wrap: wrap;
-    gap: 16px;
-    justify-content: center;
-    text-align: center;
-  }
-  .sh-identity { justify-content: center; }
-  .sh-stats { flex: 1 1 100%; order: 3; justify-content: space-around; }
-  .sh-stat { padding: 0 16px; }
-  .sh-actions { flex: 1 1 100%; order: 4; justify-content: center; flex-wrap: wrap; }
 }
 
 @media (max-width: 560px) {
   .page-body { padding: 14px 12px; }
-  .store-hero { margin: 12px 12px 0; padding: 18px 14px; }
-  .sh-name { font-size: 19px; }
-  .sh-desc { max-width: none; }
-  .sh-stat { padding: 0 10px; }
-  .sh-stat-divider { display: none; }
   .products-toolbar { flex-wrap: wrap; gap: 10px; }
 }
 
