@@ -83,7 +83,7 @@ function getGreeting(): string {
 }
 
 function formatDate(): string {
-  return new Date().toLocaleDateString('ar-EG', {
+  return new Date().toLocaleDateString('ar-EG-u-nu-latn', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
 }

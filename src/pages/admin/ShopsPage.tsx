@@ -778,7 +778,7 @@ export default function ShopsPage() {
 
                       {/* Created at */}
                       <td style={{ ...tdStyle, fontSize: 11, color: '#64748B', whiteSpace: 'nowrap' }} data-label="تاريخ الإنشاء">
-                        {new Date(shop.created_at).toLocaleDateString('ar-EG', {
+                        {new Date(shop.created_at).toLocaleDateString('ar-EG-u-nu-latn', {
                           year: 'numeric', month: 'short', day: 'numeric',
                         })}
                       </td>

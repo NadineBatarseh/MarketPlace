@@ -526,7 +526,7 @@ export default function CheckoutPage() {
                           </span>
                         ) : (
                           <>
-                            <span className="co-item-price">{(item.price * item.quantity).toLocaleString('ar-SA')} ₪</span>
+                            <span className="co-item-price">{(item.price * item.quantity).toLocaleString('en-US')} ₪</span>
                             <div className="co-qty">
                               <button type="button" onClick={() => updateCartQty(item.id, item.quantity - 1)}
                                 disabled={item.quantity <= 1} aria-label="إنقاص">
@@ -560,11 +560,11 @@ export default function CheckoutPage() {
             <div className="co-totals">
               <div className="co-total-row">
                 <span className="co-total-label">المجموع الفرعي</span>
-                <span className="co-total-val">{subtotal.toLocaleString('ar-SA')} ₪</span>
+                <span className="co-total-val">{subtotal.toLocaleString('en-US')} ₪</span>
               </div>
               <div className="co-total-row">
                 <span className="co-total-label">تكلفة التوصيل</span>
-                <span className="co-total-val">{DELIVERY_COST.toLocaleString('ar-SA')} ₪</span>
+                <span className="co-total-val">{DELIVERY_COST.toLocaleString('en-US')} ₪</span>
               </div>
               <div className="co-total-row">
                 <span className="co-total-label">الخصم</span>
@@ -573,7 +573,7 @@ export default function CheckoutPage() {
               <div className="co-divider" />
               <div className="co-total-row co-grand">
                 <span className="co-total-label">الإجمالي</span>
-                <span className="co-total-val">{total.toLocaleString('ar-SA')} ₪</span>
+                <span className="co-total-val">{total.toLocaleString('en-US')} ₪</span>
               </div>
             </div>
           </div>

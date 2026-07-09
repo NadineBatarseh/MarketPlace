@@ -73,7 +73,7 @@ const ARCHIVE_STATUSES: BatchStatus[] = ['completed', 'cancelled'];
 
 function formatDate(iso: string | null) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleString('ar-EG');
+  return new Date(iso).toLocaleString('ar-EG-u-nu-latn');
 }
 
 function Detail({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {

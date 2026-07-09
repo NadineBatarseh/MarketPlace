@@ -170,8 +170,10 @@ export default function Topbar({
             className={`topbar-nav-link${pathname === '/stores-list' ? ' active' : ''}`}
             onClick={() => navigate('/stores-list')}
           >المتاجر</span>
-          <span className="topbar-nav-link">الفئات</span>
-          <span className="topbar-nav-link">العروض</span>
+          <span
+            className={`topbar-nav-link${pathname === '/offers' ? ' active' : ''}`}
+            onClick={() => navigate('/offers')}
+          >العروض</span>
         </nav>
 
         {/* Search bar */}
@@ -247,8 +249,9 @@ export default function Topbar({
             >
               {unreadOrderUpdates > 0 && <div className="badge">{unreadOrderUpdates}</div>}
               <svg fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                <path d="M18 8h1a4 4 0 0 1 0 8h-1" /><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z" />
-                <line x1="6" y1="1" x2="6" y2="4" /><line x1="10" y1="1" x2="10" y2="4" /><line x1="14" y1="1" x2="14" y2="4" />
+                <path d="M12.89 1.45l8 4A2 2 0 0 1 22 7.24v9.53a2 2 0 0 1-1.11 1.79l-8 4a2 2 0 0 1-1.79 0l-8-4a2 2 0 0 1-1.11-1.8V7.24a2 2 0 0 1 1.11-1.79l8-4a2 2 0 0 1 1.79 0z" />
+                <polyline points="2.32 6.16 12 11 21.68 6.16" />
+                <line x1="12" y1="22.76" x2="12" y2="11" />
               </svg>
             </div>
           )}

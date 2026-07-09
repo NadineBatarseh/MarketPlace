@@ -8,7 +8,7 @@ import type { FavoriteItem } from '../context/ShopContext';
 import '../styles/productTable.css';
 
 const formatDate = (dateStr: string) =>
-  new Date(dateStr).toLocaleDateString('ar-SA', {
+  new Date(dateStr).toLocaleDateString('ar-SA-u-nu-latn', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',

@@ -384,7 +384,7 @@ export default function DriverNotificationBell({ driverStatus, onBatchAccepted }
                   </p>
                 )}
                 <p className="dd-notif-panel-meta" style={{ fontSize: 10, color: '#94A3B8', marginTop: 2 }}>
-                  {new Date(msg.created_at).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  {new Date(msg.created_at).toLocaleDateString('ar-EG-u-nu-latn', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 </p>
               </div>
             </div>

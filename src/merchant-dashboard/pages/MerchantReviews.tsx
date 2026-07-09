@@ -23,7 +23,7 @@ interface Review {
 }
 
 function formatDate(iso: string) {
-  return new Intl.DateTimeFormat('ar-EG', {
+  return new Intl.DateTimeFormat('ar-EG-u-nu-latn', {
     year: 'numeric', month: 'long', day: 'numeric',
   }).format(new Date(iso));
 }

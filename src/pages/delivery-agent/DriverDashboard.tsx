@@ -100,13 +100,13 @@ function getGreeting(): string {
 }
 
 function formatDate(): string {
-  return new Date().toLocaleDateString('ar-EG', {
+  return new Date().toLocaleDateString('ar-EG-u-nu-latn', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   });
 }
 
 function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('ar-EG', {
+  return new Date(iso).toLocaleString('ar-EG-u-nu-latn', {
     year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 }
@@ -1134,7 +1134,7 @@ export default function DriverDashboard() {
                   </svg>
                 </button>
                 <span className="dd-month-nav-label">
-                  {new Date(workHistoryYear, workHistoryMonth - 1, 1).toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' })}
+                  {new Date(workHistoryYear, workHistoryMonth - 1, 1).toLocaleDateString('ar-EG-u-nu-latn', { month: 'long', year: 'numeric' })}
                 </span>
                 <button type="button" className="dd-month-nav-btn" onClick={goToNextMonth} aria-label="الشهر التالي">
                   <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
@@ -1169,7 +1169,7 @@ export default function DriverDashboard() {
                             <td>{d.worked ? formatMinutesLabel(d.totalDutyMinutes) : '—'}</td>
                             <td>{d.worked ? formatMinutesLabel(d.activeDeliveryMinutes) : '—'}</td>
                             <td>{d.worked ? formatMinutesLabel(d.availableWaitingMinutes) : '—'}</td>
-                            <td>{d.worked ? d.completedBatches.toLocaleString('ar-EG') : '—'}</td>
+                            <td>{d.worked ? d.completedBatches.toLocaleString('en-US') : '—'}</td>
                           </tr>
                         );
                       })}
@@ -1262,7 +1262,7 @@ export default function DriverDashboard() {
                   </svg>
                 </div>
               </div>
-              <div className="dd-card-value">{delivered.toLocaleString('ar-EG')}</div>
+              <div className="dd-card-value">{delivered.toLocaleString('en-US')}</div>
               <div className="dd-card-sub">إجمالي المكتملة</div>
             </div>
 
@@ -1276,7 +1276,7 @@ export default function DriverDashboard() {
                   </svg>
                 </div>
               </div>
-              <div className="dd-card-value">{todayBatches.length.toLocaleString('ar-EG')}</div>
+              <div className="dd-card-value">{todayBatches.length.toLocaleString('en-US')}</div>
               <div className="dd-card-sub">لم تبدأ بعد اليوم</div>
             </div>
 
@@ -1289,7 +1289,7 @@ export default function DriverDashboard() {
                   </svg>
                 </div>
               </div>
-              <div className="dd-card-value">{inTransit.toLocaleString('ar-EG')}</div>
+              <div className="dd-card-value">{inTransit.toLocaleString('en-US')}</div>
               <div className="dd-card-sub">نشطة الآن</div>
             </div>
 

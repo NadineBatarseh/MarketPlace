@@ -108,28 +108,28 @@ function getDateFilterStart(key: string): Date | null {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('ar-EG', {
+  return new Date(iso).toLocaleDateString('ar-EG-u-nu-latn', {
     month: 'long', day: 'numeric', year: 'numeric',
   });
 }
 
 function formatDateShort(date: Date) {
-  return date.toLocaleDateString('ar-EG', { month: 'long', day: 'numeric' });
+  return date.toLocaleDateString('ar-EG-u-nu-latn', { month: 'long', day: 'numeric' });
 }
 
 function formatTime(date: Date) {
-  return date.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', hour12: true });
+  return date.toLocaleTimeString('ar-EG-u-nu-latn', { hour: '2-digit', minute: '2-digit', hour12: true });
 }
 
 function formatDateTime(iso: string) {
   const d = new Date(iso);
-  const date = d.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' });
+  const date = d.toLocaleDateString('ar-EG-u-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' });
   const time = formatTime(d);
   return `${date} - ${time}`;
 }
 
 function formatDateFull(date: Date) {
-  return date.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' });
+  return date.toLocaleDateString('ar-EG-u-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 function addHours(date: Date, h: number): Date {

@@ -971,7 +971,7 @@ export default function MetaCatalogSettingsCard() {
                     {settingsSaved && (
                       <div className="mcs-settings-saved">
                         ✓ تم حفظ إعدادات المزامنة بنجاح
-                        {settings.settings_updated_at && ` — آخر تحديث: ${new Date(settings.settings_updated_at).toLocaleString('ar-EG')}`}
+                        {settings.settings_updated_at && ` — آخر تحديث: ${new Date(settings.settings_updated_at).toLocaleString('ar-EG-u-nu-latn')}`}
                       </div>
                     )}
                     {settingsSaved && inboundAutomaticEnabled && (

@@ -148,7 +148,7 @@
 
 /* ── PAGE TITLE (mirrors checkout .co-page-title) ── */
 .pt-page-title {
-  font-family: 'IBM Plex Sans Arabic', var(--font-main);
+  font-family: var(--font-main);
   font-size: 32px;
   line-height: 40px;
   font-weight: 600;

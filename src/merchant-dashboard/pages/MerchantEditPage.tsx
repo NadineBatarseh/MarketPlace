@@ -501,6 +501,7 @@ function VariantMatrixEditor({ matrix, onChange }: {
                             placeholder="0"
                             value={matrix.quantities[colorVal]?.[size] ?? ''}
                             onChange={e => setQty(colorVal, size, e.target.value)}
+                            onWheel={e => e.currentTarget.blur()}
                             className="var-matrix-qty"
                             aria-label={`كمية ${colorName} - ${size}`}
                           />
@@ -963,19 +964,22 @@ function EditProductModal({ product, onSave, onClose }: {
           <div className="apm-field">
             <label>السعر الأساسي (₪) *</label>
             <input type="number" min="0" step="0.5" placeholder="150" value={form.price}
-              onChange={e => setForm(f => ({ ...f, price: e.target.value }))} />
+              onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
+              onWheel={e => e.currentTarget.blur()} />
           </div>
 
           <div className="apm-field">
             <label>الكمية الإجمالية المتاحة *</label>
             <input type="number" min="0" placeholder="20" value={form.quantity}
-              onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} />
+              onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))}
+              onWheel={e => e.currentTarget.blur()} />
           </div>
 
           <div className="apm-field">
             <label>نسبة الخصم (%)</label>
             <input type="number" min="0" max="100" step="1" placeholder="بدون خصم" value={form.discount}
-              onChange={e => setForm(f => ({ ...f, discount: e.target.value }))} />
+              onChange={e => setForm(f => ({ ...f, discount: e.target.value }))}
+              onWheel={e => e.currentTarget.blur()} />
             <span className="cap-hint">اتركه فارغاً لإزالة الخصم — يظهر للزبائن كشارة "خصم %"</span>
           </div>
 
@@ -1257,13 +1261,15 @@ function AddProductModal({ shopId, onAdd, onClose }: {
           <div className="apm-field">
             <label>السعر الأساسي (₪) *</label>
             <input type="number" min="0" step="0.5" placeholder="150" value={form.price}
-              onChange={e => setForm(f => ({ ...f, price: e.target.value }))} />
+              onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
+              onWheel={e => e.currentTarget.blur()} />
           </div>
 
           <div className="apm-field">
             <label>الكمية الإجمالية المتاحة *</label>
             <input type="number" min="0" placeholder="20" value={form.quantity}
-              onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))} />
+              onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))}
+              onWheel={e => e.currentTarget.blur()} />
           </div>
 
           {catFiltersLoading && (
@@ -1518,7 +1524,7 @@ export default function MerchantEditPage() {
                   <span className="meta-import-badge">مستورد من Meta</span>
                 )}
                 <div className="mep-product-footer">
-                  <span className="mep-product-price">{Number(p.price).toLocaleString('ar-SA')} ₪</span>
+                  <span className="mep-product-price">{Number(p.price).toLocaleString('en-US')} ₪</span>
                   <span className="mep-product-qty">الكمية: {p.stock_Quantity}</span>
                 </div>
                 {p.capacity_units != null && (

@@ -367,7 +367,7 @@ export default function DriverMessagesPage() {
         id: Date.now(),
         sender: "driver",
         text: trimmed,
-        time: new Date().toLocaleTimeString("ar", {
+        time: new Date().toLocaleTimeString("ar-u-nu-latn", {
           hour: "2-digit",
           minute: "2-digit",
         }),

@@ -87,15 +87,15 @@ interface Order {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function fmtDate(d: Date) {
-  return d.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' });
+  return d.toLocaleDateString('ar-EG-u-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 function fmtTime(d: Date) {
-  return d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', hour12: true });
+  return d.toLocaleTimeString('ar-EG-u-nu-latn', { hour: '2-digit', minute: '2-digit', hour12: true });
 }
 
 function fmtShort(d: Date) {
-  return d.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long' });
+  return d.toLocaleDateString('ar-EG-u-nu-latn', { day: 'numeric', month: 'long' });
 }
 
 function isToday(d: Date): boolean {

@@ -1,6 +1,6 @@
 import type { MouseEvent } from 'react';
 import type { Product } from '../types';
-import ProductCard from './ProductCard';
+import ProductCard, { ProductCardSkeleton } from '../../../components/ProductCard';
 
 const SORT_OPTIONS = [
   { label: 'الأكثر مبيعاً', value: 'best_selling' },
@@ -92,8 +92,8 @@ function Pagination({ page, totalPages, onPageChange }: {
 }
 
 export default function ProductsSection({
-  products, total, totalPages, page, loading, sort, viewMode, wishlist,
-  onSortChange, onPageChange, onViewModeChange, onToggleWishlist, onAddToCart,
+  products, total, totalPages, page, loading, sort, wishlist,
+  onSortChange, onPageChange, onToggleWishlist, onAddToCart,
 }: Props) {
   return (
     <main className="products-section">
@@ -111,45 +111,23 @@ export default function ProductsSection({
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
-          <div className="view-toggle">
-            <button
-              type="button"
-              className={`view-btn${viewMode === 'grid' ? ' active' : ''}`}
-              title="شبكة"
-              aria-label="عرض شبكة"
-              onClick={() => onViewModeChange('grid')}
-            >
-              <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
-                <path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5v3A1.5 1.5 0 0 1 5.5 7h-3A1.5 1.5 0 0 1 1 5.5v-3zm8 0A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7h-3A1.5 1.5 0 0 1 9 5.5v-3zm-8 8A1.5 1.5 0 0 1 2.5 9h3A1.5 1.5 0 0 1 7 10.5v3A1.5 1.5 0 0 1 5.5 15h-3A1.5 1.5 0 0 1 1 13.5v-3zm8 0A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3z" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              className={`view-btn${viewMode === 'list' ? ' active' : ''}`}
-              title="قائمة"
-              aria-label="عرض قائمة"
-              onClick={() => onViewModeChange('list')}
-            >
-              <svg width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
-                <path fillRule="evenodd" d="M2.5 12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5z" />
-              </svg>
-            </button>
-          </div>
         </div>
       </div>
 
       {loading && products.length === 0 ? (
-        <div className="products-empty">جاري تحميل المنتجات...</div>
+        <div className="products-grid">
+          {Array.from({ length: 8 }).map((_, i) => <ProductCardSkeleton key={i} />)}
+        </div>
       ) : products.length === 0 ? (
         <div className="products-empty">لا توجد منتجات</div>
       ) : (
-        <div className={`products-grid${viewMode === 'list' ? ' products-grid--list' : ''}`}>
+        <div className="products-grid">
           {products.map(product => (
             <ProductCard
               key={product.id}
               product={product}
-              inWishlist={wishlist.has(product.id)}
-              onToggleWishlist={onToggleWishlist}
+              isFavorited={wishlist.has(product.id)}
+              onToggleFavorite={(e, p) => onToggleWishlist(e, p.id)}
               onAddToCart={onAddToCart}
             />
           ))}

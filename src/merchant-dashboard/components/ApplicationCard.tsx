@@ -348,10 +348,10 @@ export default function ApplicationCard(props: ApplicationCardProps) {
   const [expanded, setExpanded] = useState(false);
   const toggle = () => setExpanded(v => !v);
 
-  const formattedDate = new Date(createdAt).toLocaleDateString('ar-EG', {
+  const formattedDate = new Date(createdAt).toLocaleDateString('ar-EG-u-nu-latn', {
     year: 'numeric', month: 'long', day: 'numeric',
   });
-  const formattedTime = new Date(createdAt).toLocaleTimeString('ar-EG', {
+  const formattedTime = new Date(createdAt).toLocaleTimeString('ar-EG-u-nu-latn', {
     hour: '2-digit', minute: '2-digit',
   });
 

@@ -15,7 +15,7 @@ const SHIPMENT_STATUS_LABEL: Record<string, string> = {
 };
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('ar-EG', {
+  return new Date(iso).toLocaleDateString('ar-EG-u-nu-latn', {
     day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 }

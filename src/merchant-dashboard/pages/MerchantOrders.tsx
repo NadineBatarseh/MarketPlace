@@ -320,9 +320,9 @@ export default function MerchantOrders() {
                   </div>
 
                   <div className="mo-card-right">
-                    <span className="mo-price">{order.total_price.toLocaleString('ar-EG')} ₪</span>
+                    <span className="mo-price">{order.total_price.toLocaleString('en-US')} ₪</span>
                     <span className="mo-date">
-                      {new Date(order.created_at).toLocaleDateString('ar-EG', {
+                      {new Date(order.created_at).toLocaleDateString('ar-EG-u-nu-latn', {
                         day: 'numeric', month: 'short', year: 'numeric',
                       })}
                     </span>
