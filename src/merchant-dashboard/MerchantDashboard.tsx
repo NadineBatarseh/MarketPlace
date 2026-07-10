@@ -14,13 +14,12 @@ import MerchantPayoutDetails from './pages/MerchantPayoutDetails';
 import MerchantPayouts from './pages/MerchantPayouts';
 import MerchantLoginModal from './components/MerchantLoginModal';
 import ChangePasswordModal from '../components/ChangePasswordModal';
-import InstagramConnectPage from './pages/InstagramConnectPage';
 import ChatBot from '../components/chatbot/ChatBot';
 import AdminMessagesInbox from '../components/AdminMessagesInbox';
 import supabase from '../lib/supabase';
 import './MerchantDashboard.css';
 
-type DashPage = 'home' | 'reviews' | 'billing' | 'editPage' | 'bulkUpload' | 'orders' | 'drafts' | 'settings' | 'shopSettings' | 'instagramConnect' | 'inbox' | 'payoutDetails' | 'payouts';
+type DashPage = 'home' | 'reviews' | 'billing' | 'editPage' | 'bulkUpload' | 'orders' | 'drafts' | 'settings' | 'shopSettings' | 'inbox' | 'payoutDetails' | 'payouts';
 
 function SidebarItem({
   icon,
@@ -58,7 +57,7 @@ export default function MerchantDashboard() {
   const [highlightIncomplete, setHighlightIncomplete] = useState(false);
   const [currentPage, setCurrentPage] = useState<DashPage>(() => {
     const p = searchParams.get('page');
-    const valid: DashPage[] = ['home', 'reviews', 'billing', 'editPage', 'bulkUpload', 'orders', 'drafts', 'settings', 'shopSettings', 'instagramConnect', 'inbox', 'payoutDetails', 'payouts'];
+    const valid: DashPage[] = ['home', 'reviews', 'billing', 'editPage', 'bulkUpload', 'orders', 'drafts', 'settings', 'shopSettings', 'inbox', 'payoutDetails', 'payouts'];
     return valid.includes(p as DashPage) ? (p as DashPage) : 'home';
   });
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -161,7 +160,6 @@ export default function MerchantDashboard() {
   };
 
   const renderPage = () => {
-    if (currentPage === 'instagramConnect') return <InstagramConnectPage />;
     if (currentPage === 'editPage') return <MerchantEditPage />;
     if (currentPage === 'reviews') return <MerchantReviews />;
     if (currentPage === 'billing') return <MerchantBilling />;
@@ -433,18 +431,6 @@ export default function MerchantDashboard() {
               onClick={() => setCurrentPage('bulkUpload')}
             />
 
-            <SidebarItem
-              icon={
-                <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
-                  <circle cx="12" cy="12" r="4"/>
-                  <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/>
-                </svg>
-              }
-              label="ربط انستقرام"
-              active={currentPage === 'instagramConnect'}
-              onClick={() => setCurrentPage('instagramConnect')}
-            />
           </nav>
 
           {/* User footer */}

@@ -240,7 +240,7 @@ export const INSTAGRAM_TOOLS: Tool[] = [
     name: "instagram_publish_product",
     description:
       "Publish a product to Instagram. Two ways to call it: " +
-      "(1) Auto mode — pass only productId (optionally customCaption, hashtags, dryRun): the tool fetches the product and its shop from Supabase itself, uses the product's first image, generates an Arabic caption unless customCaption is given, and publishes via the INSTAGRAM_ACCESS_TOKEN/INSTAGRAM_IG_USER_ID account. Set dryRun to true to preview the caption without publishing. " +
+      "(1) Auto mode — pass only productId (optionally customCaption, hashtags, dryRun): the tool fetches the product and its shop from Supabase itself, uses the product's first image, generates an Arabic caption unless customCaption is given, and publishes to the caller's own connected Instagram account. Set dryRun to true to preview the caption without publishing. " +
       "(2) Merchant mode — pass shop_id, product_id, and image_urls (1-10 of the product's own images) to post as a feed/carousel post to that merchant's connected Instagram account.",
     inputSchema: {
       type: "object",

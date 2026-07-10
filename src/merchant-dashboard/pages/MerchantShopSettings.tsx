@@ -3,6 +3,7 @@ import { useMerchantAuth, MerchantShop } from '../context/MerchantAuthContext';
 import supabase from '../../lib/supabase';
 import { usePublishReadiness } from '../hooks/usePublishReadiness';
 import MetaCatalogSettingsCard from '../components/MetaCatalogSettingsCard';
+import InstagramSettingsCard from '../components/InstagramSettingsCard';
 
 interface Zone { id: string; name: string; }
 
@@ -43,7 +44,10 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError]   = useState('');
   const logoInputRef = useRef<HTMLInputElement>(null);
-  const [activeTab, setActiveTab]   = useState<SettingsTab>('basic');
+  const [activeTab, setActiveTab]   = useState<SettingsTab>(() => {
+    const section = new URLSearchParams(window.location.search).get('section');
+    return section === 'integrations' ? 'integrations' : 'basic';
+  });
 
   // Publish readiness
   const { checks, allPassed } = usePublishReadiness(shop);
@@ -508,6 +512,7 @@ export default function MerchantShopSettings({ onNavigate, highlightIncomplete =
       {!isCreate && activeTab === 'integrations' && (
         <div className="mep-section">
           <h2 className="mep-section-title">🧩 التكاملات</h2>
+          <InstagramSettingsCard />
           <MetaCatalogSettingsCard />
         </div>
       )}

@@ -187,9 +187,9 @@ router.get('/callback', async (req: Request, res: Response) => {
       }
     }
 
-    // 5. Redirect merchant back to the dashboard
+    // 5. Redirect merchant back to Store Settings → Integrations, the single home for this flow
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    res.redirect(`${frontendUrl}/merchant-dashboard?page=instagramConnect&connected=true`);
+    res.redirect(`${frontendUrl}/merchant-dashboard?page=shopSettings&section=integrations&integration=instagram&connected=true`);
 
   } catch (err: any) {
     console.error('[instagram/callback] unexpected error:', err.message);

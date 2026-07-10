@@ -73,11 +73,16 @@ async function logPublishAttempt(
 }
 
 /**
- * Auto-publish flow: fetches the product (and shop name) straight from Supabase
- * and publishes it under the single account configured via INSTAGRAM_ACCESS_TOKEN /
- * INSTAGRAM_IG_USER_ID — no shop_id/image_urls need to be supplied by the caller.
+ * Auto-publish flow: fetches the product (and shop name) straight from Supabase and
+ * publishes it to the calling merchant's own connected Instagram account (the `client`
+ * already resolved for this request) — no shop_id/image_urls need to be supplied by the
+ * caller. Never falls back to a shared/platform account.
  */
-async function publishProductAuto(args: Record<string, unknown>): Promise<AutoPublishResult> {
+async function publishProductAuto(
+  args: Record<string, unknown>,
+  client: InstagramClient | null,
+  userId?: string
+): Promise<AutoPublishResult> {
   const productId = ((args.productId as string | undefined) ?? (args.product_id as string | undefined))?.trim();
   if (!productId) {
     return { success: false, message: 'productId is required.', productId: '' };
@@ -114,6 +119,8 @@ async function publishProductAuto(args: Record<string, unknown>): Promise<AutoPu
     return { success: false, message: 'المنتج غير موجود.', productId };
   }
 
+  if (userId) await assertShopOwnership(product.shop_id, userId);
+
   const imageUrl = product.image_urls?.[0];
   if (!imageUrl) {
     return { success: false, message: 'لا يمكن نشر هذا المنتج لعدم وجود صورة.', productId };
@@ -139,22 +146,18 @@ async function publishProductAuto(args: Record<string, unknown>): Promise<AutoPu
     return { success: true, message: 'معاينة الكابشن فقط — لم يتم النشر على انستقرام.', productId, caption };
   }
 
-  const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN;
-  const igUserId = process.env.INSTAGRAM_IG_USER_ID;
-  if (!accessToken || !igUserId) {
+  if (!client) {
     return {
       success: false,
-      message: 'بيانات اعتماد انستقرام غير مهيأة. تأكد من ضبط INSTAGRAM_ACCESS_TOKEN و INSTAGRAM_IG_USER_ID.',
+      message: 'لم يتم ربط حساب انستقرام بهذا الحساب. يرجى الربط أولاً من إعدادات المتجر.',
       productId,
       caption,
     };
   }
 
-  const igClient = new InstagramClient({ accessToken, accountId: igUserId });
-
   let mediaId: string;
   try {
-    const result = await igClient.publishProductPost([imageUrl], caption, igUserId);
+    const result = await client.publishProductPost([imageUrl], caption, args.account_id as string | undefined);
     mediaId = result.mediaId;
   } catch (err) {
     const message =
@@ -196,9 +199,10 @@ async function handlePublishProduct(
 
   // Simplified auto flow: only productId (+ optional customCaption/hashtags/dryRun) was
   // given — fetch the product/shop from Supabase ourselves instead of requiring the
-  // caller to pass shop_id/image_urls explicitly.
+  // caller to pass shop_id/image_urls explicitly. Publishes via the caller's own
+  // connected Instagram client — never falls back to a shared/platform account.
   if (!shopId || !imageUrls?.length) {
-    return publishProductAuto(args);
+    return publishProductAuto(args, client, userId);
   }
 
   if (!productId) throw new Error('product_id is required');
@@ -245,9 +249,9 @@ export async function handleInstagramTool(
   args: Record<string, unknown>,
   userId?: string
 ): Promise<unknown> {
-  // instagram_publish_product's auto flow (productId-only) manages its own credentials
-  // (INSTAGRAM_ACCESS_TOKEN / INSTAGRAM_IG_USER_ID) and supports dryRun with none at all,
-  // so it must not be blocked by the shared-client guard below.
+  // instagram_publish_product's auto flow (productId-only) supports dryRun with no
+  // client at all, so it must not be blocked by the shared-client guard below — it
+  // does its own null check on `client` once it knows dryRun isn't set.
   if (name === 'instagram_publish_product') {
     return handlePublishProduct(client, args, userId);
   }

@@ -120,7 +120,7 @@ export async function getTools(role: string): Promise<Anthropic.Tool[]> {
       "facebook_get_page_feed",
     ],
   };
-  const allowedInstagramTools = instagramToolsByRole[role] ?? instagramRawTools.map((t) => t.name);
+  const allowedInstagramTools = instagramToolsByRole[role] ?? [];
 
   const instagramTools: Anthropic.Tool[] = instagramRawTools
     .filter((t) => allowedInstagramTools.includes(t.name))

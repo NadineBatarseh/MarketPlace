@@ -140,6 +140,7 @@ export default function MetaCatalogSettingsCard() {
   const [productsLoading, setProductsLoading] = useState(false);
   const [productsError, setProductsError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [productsPreviewOpen, setProductsPreviewOpen] = useState(false);
 
   const [importStatus, setImportStatus] = useState<ImportStatus>('idle');
   const [importResult, setImportResult] = useState<{ count: number; message: string } | null>(null);
@@ -243,9 +244,9 @@ export default function MetaCatalogSettingsCard() {
   useEffect(() => {
     if (!expanded) return;
     if (status === 'picking_catalog' && catalogs.length === 0 && !catalogsLoading) fetchCatalogs();
-    if (status === 'connected' && products.length === 0 && !productsLoading) fetchPreview();
+    if (status === 'connected' && productsPreviewOpen && products.length === 0 && !productsLoading) fetchPreview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expanded, status]);
+  }, [expanded, status, productsPreviewOpen]);
 
   async function startOAuth() {
     setActionLoading(true);
@@ -276,6 +277,7 @@ export default function MetaCatalogSettingsCard() {
       await fetch('/api/meta-catalog/disconnect', { method: 'DELETE', headers });
       setInfo(null);
       setProducts([]);
+      setProductsPreviewOpen(false);
       setCatalogs([]);
       setSettings(null);
       setSettingsDraft(null);
@@ -706,26 +708,33 @@ export default function MetaCatalogSettingsCard() {
 
               {/* ── Import section ── */}
               <div className="mcc-import-section">
-                <div className="mcc-import-header">
+                <button
+                  type="button"
+                  className="mcc-import-header mcc-import-header--toggle"
+                  onClick={() => setProductsPreviewOpen((v) => !v)}
+                >
                   <span>معاينة المنتجات واستيرادها</span>
-                </div>
+                  <svg className={`mcs-chevron${productsPreviewOpen ? ' mcs-chevron--up' : ''}`} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
 
-                {productsLoading && (
+                {productsPreviewOpen && productsLoading && (
                   <div className="mcc-state mcc-loading">
                     <div className="mcc-spinner" />
                     <p>جارٍ تحميل المنتجات من Meta…</p>
                   </div>
                 )}
 
-                {!productsLoading && productsError && (
+                {productsPreviewOpen && !productsLoading && productsError && (
                   <div className="mcc-inline-error">{productsError}</div>
                 )}
 
-                {!productsLoading && !productsError && products.length === 0 && (
+                {productsPreviewOpen && !productsLoading && !productsError && products.length === 0 && (
                   <div className="mcc-inline-error">لا توجد منتجات في هذا الكتالوج.</div>
                 )}
 
-                {!productsLoading && products.length > 0 && (
+                {productsPreviewOpen && !productsLoading && products.length > 0 && (
                   <>
                     <div className="mcc-import-toolbar">
                       <button type="button" className="mcc-link-btn" onClick={selectAllAvailable}>
