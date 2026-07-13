@@ -46,7 +46,7 @@ function stopLatLng(status: string, s: { pickupLat: number; pickupLng: number; d
 const SHIPMENT_STATUS_LABEL: Record<string, { label: string; color: string }> = {
   pending:   { label: 'قيد التحضير',      color: '#9ca3af' },
   available: { label: 'متاحة',            color: '#f59e0b' },
-  delayed:   { label: 'متأخرة',           color: '#f59e0b' },
+  delayed:   { label: 'مؤجلة',            color: '#2563eb' },
   batched:   { label: 'بانتظار الاستلام', color: '#2563eb' },
   reserved:  { label: 'محجوزة',           color: '#2563eb' },
   picked_up: { label: 'قيد التوصيل',      color: '#7c3aed' },

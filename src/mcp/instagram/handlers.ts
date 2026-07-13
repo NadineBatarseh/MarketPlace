@@ -248,7 +248,7 @@ export async function handleInstagramTool(
   name: string,
   args: Record<string, unknown>,
   userId?: string
-): Promise<unknown> {
+ ): Promise<unknown> {
   // instagram_publish_product's auto flow (productId-only) supports dryRun with no
   // client at all, so it must not be blocked by the shared-client guard below — it
   // does its own null check on `client` once it knows dryRun isn't set.

@@ -1,7 +1,7 @@
 import express from 'express';
 import type { Request, Response } from 'express';
 import { supabase } from '../supabase.js';
-import { callTool } from '../mcpClient.js';
+import { callTool } from '../../src/mcp/mcpClient.js';
 import crypto from 'crypto';
 
 const router = express.Router();

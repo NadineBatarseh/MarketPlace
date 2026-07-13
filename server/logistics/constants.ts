@@ -11,7 +11,7 @@ export const C = {
   // â”€â”€ Time windows (MAX_FLOW_WAITING_MINUTES overridable) â”€â”€â”€â”€â”€â”€
   CYCLE_INTERVAL_MINUTES: 30,
   MAX_FLOW_WAITING_MINUTES: 120,
-INTRA_CITY_MIN_TIME_BUFFER_MINUTES: 15,
+  INTRA_CITY_MIN_TIME_BUFFER_MINUTES: 15,
 
   // â”€â”€ Max distance between stops (overridable from batch_config)
   MAX_DISTANCE_KM: 50,

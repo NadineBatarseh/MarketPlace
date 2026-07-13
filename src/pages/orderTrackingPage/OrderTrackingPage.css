@@ -97,38 +97,33 @@
   text-align: right;
 }
 
-/* Multi-shipment informational notice (purely informational, no status link) */
-.ot-multi-shipment-card {
-  background: var(--green-light);
-  border: 1px solid var(--green-border);
-  border-radius: var(--r-lg);
-  box-shadow: var(--sh);
+/* Multi-shipment informational notice (purely informational, no status link) —
+   stated once, in place of the delivery banner's plain ETA note, instead of
+   its own separate card. */
+.ot-hc-multi-notice {
   display: flex;
   align-items: flex-start;
   direction: rtl;
-  gap: 14px;
-  padding: 18px 24px;
-  margin-bottom: 20px;
-  animation: otUp .25s ease both;
+  gap: 10px;
 }
 .ot-msc-icon {
-  font-size: 24px;
+  font-size: 20px;
   line-height: 1;
   flex-shrink: 0;
 }
 .ot-msc-text { display: flex; flex-direction: column; gap: 4px; }
 .ot-msc-title {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 800;
   color: var(--green-dark);
 }
 .ot-msc-desc {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text);
-  line-height: 1.6;
+  line-height: 1.5;
 }
 .ot-msc-note {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
 }
 

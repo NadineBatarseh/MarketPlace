@@ -35,7 +35,7 @@ const STATUS_LABELS: Record<BatchStatus, string> = {
 const SHIPMENT_STATUS_LABELS: Record<string, string> = {
   pending: 'قيد التحضير',
   available: 'متاحة',
-  delayed: 'متأخرة',
+  delayed: 'مؤجلة للدورة القادمة',
   batched: 'مجمّعة (بانتظار الاستلام)',
   reserved: 'محجوزة (بانتظار الاستلام)',
   picked_up: 'مع السائق',
@@ -474,7 +474,7 @@ export default function BatchMonitorPage() {
                       <input type="checkbox" checked={phase8Selected[target.id]?.has(s.id) ?? false} onChange={() => togglePhase8Selection(target.id, s.id)} style={{ accentColor: '#15803D' }} />
                       <span style={{ fontFamily: 'monospace', color: '#64748B' }}>{s.shipment_number}</span>
                       <span>{s.pickup_zone} ← {s.dropoff_zone}</span>
-                      <span style={{ fontSize: 10, color: s.status === 'delayed' ? '#C2410C' : '#15803D' }}>{SHIPMENT_STATUS_LABELS[s.status] ?? s.status}</span>
+                      <span style={{ fontSize: 10, color: s.status === 'delayed' ? '#1D4ED8' : '#15803D' }}>{SHIPMENT_STATUS_LABELS[s.status] ?? s.status}</span>
                     </label>
                   ))}
                 </div>
@@ -611,25 +611,28 @@ export default function BatchMonitorPage() {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {unbatchedShipments.map(s => (
-                  <div key={s.id} style={{ background: '#fff', border: '1.5px solid #FDE68A', borderRadius: 10, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                    <span style={{
-                      background: s.status === 'delayed' ? '#FEF2F2' : '#FFFBEB', color: s.status === 'delayed' ? '#DC2626' : '#92400E',
-                      border: `1px solid ${s.status === 'delayed' ? '#FCA5A5' : '#FDE68A'}`, borderRadius: 6, padding: '2px 10px', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0,
-                    }}>
-                      {SHIPMENT_STATUS_LABELS[s.status] ?? s.status}
-                    </span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-                        <span style={{ background: '#F1F5F9', color: '#0F2B4E', borderRadius: 5, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>{s.pickup_zone}</span>
-                        <span style={{ color: '#94A3B8', fontSize: 11 }}>←</span>
-                        <span style={{ background: '#F1F5F9', color: '#0F2B4E', borderRadius: 5, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>{s.dropoff_zone}</span>
+                  <div key={s.id} style={{ background: '#fff', border: '1.5px solid #FDE68A', borderRadius: 10, overflow: 'hidden' }}>
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 16, padding: '20px 230px 20px 20px', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginRight: 'auto' }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
+                          <span style={{
+                            background: s.status === 'delayed' ? '#EFF6FF' : '#FFFBEB', color: s.status === 'delayed' ? '#1D4ED8' : '#92400E',
+                            border: `1px solid ${s.status === 'delayed' ? '#BFDBFE' : '#FDE68A'}`, borderRadius: 6, padding: '3px 12px', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
+                          }}>
+                            {SHIPMENT_STATUS_LABELS[s.status] ?? s.status}
+                          </span>
+                          <Chip icon="📦" label="طرد مفرد" />
+                          {s.delayed_reason && <Chip icon="⚠" label={s.delayed_reason} color="red" />}
+                        </div>
                       </div>
-                      <span style={{ fontSize: 10, color: '#94A3B8', fontFamily: 'monospace' }}>{s.shipment_number}</span>
-                    </div>
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
-                      <Chip icon="📦" label="طرد مفرد" />
-                      {s.delayed_reason && <Chip icon="⚠" label={s.delayed_reason} color="red" />}
-                      <span style={{ fontSize: 10, color: '#94A3B8' }}>{formatDate(s.created_at)}</span>
+
+                      <div style={{ position: 'absolute', right: 20, top: '50%', transform: 'translateY(-50%)', textAlign: 'right', maxWidth: 210 }}>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: '#0F2B4E', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {s.pickup_zone}  ←  {s.dropoff_zone}
+                        </div>
+                        <div style={{ fontSize: 11, color: '#94A3B8', fontFamily: 'monospace' }}>{s.shipment_number}</div>
+                        <div style={{ fontSize: 11, color: '#94A3B8' }}>{formatDate(s.created_at)}</div>
+                      </div>
                     </div>
                   </div>
                 ))}

@@ -2,6 +2,8 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { supabase } from '../supabase.js';
 import { requireAdmin } from '../middleware/requireAdmin.js';
+import { adminEndWork } from '../logistics/workSessions.js';
+import { handleBreakdown } from '../logistics/phases/phase9_breakdownHandling.js';
 
 /**
  * Admin Archive router — recoverable, audit-tracked archiving that replaces the
@@ -137,6 +139,33 @@ router.post('/couriers/:id/restore', async (req: Request, res: Response) => {
     .eq('id', req.params.id);
   if (error) return res.status(500).json({ ok: false, error: error.message });
   return res.json({ ok: true });
+});
+
+// Admin-forced "End Work" — allowed even while the courier is on_route. If they
+// have a real active batch, it's routed through the same breakdown flow used for
+// vehicle breakdowns (re-pools/strands its shipments and cancels the batch) so it
+// isn't silently orphaned; then the shift is force-closed.
+router.post('/couriers/:id/end-work', async (req: Request, res: Response) => {
+  const courierId = req.params.id;
+  try {
+    const { data: activeBatch } = await supabase
+      .from('batches')
+      .select('id')
+      .eq('assigned_to', courierId)
+      .in('status', ['assigned', 'in_transit'])
+      .maybeSingle();
+
+    if (activeBatch) {
+      await handleBreakdown(activeBatch.id as string, { reason: 'admin_force_end_work' });
+    }
+
+    const result = await adminEndWork(courierId);
+    if (!result.success) return res.status(409).json({ ok: false, error: result.error });
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[Admin] /couriers/:id/end-work error:', err);
+    return res.status(500).json({ ok: false, error: 'Failed to force end work' });
+  }
 });
 
 /* -------------------------- APPLICATIONS -------------------------- */

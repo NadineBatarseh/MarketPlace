@@ -128,17 +128,41 @@ async function closeActiveWorkSession(
 }
 
 // â”€â”€ POST /end-work â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// Driver clicks "End Work": available -> offline, closes the shift clock.
+// Driver clicks "End Work": fully unconditional â€” always flips the courier to
+// offline, no matter their current status, whether batches (assigned or
+// in_transit) remain on them, or whether an active work session row even
+// exists (courier.status and courier_work_sessions can drift out of sync;
+// this self-heals that by always landing on offline). Assigned batches are
+// left untouched; nothing here re-pools or reassigns them.
 export async function endWork(
   courierId: string,
-): Promise<{ success: true; summary: CloseSummary } | { success: false; error: string }> {
+): Promise<{ success: true; summary: CloseSummary | null } | { success: false; error: string }> {
   const { data: courier } = await supabase
     .from('couriers').select('status').eq('id', courierId).maybeSingle();
 
   if (!courier) return { success: false, error: 'لم يتم العثور على السائق' };
-  if (courier.status === 'on_route') {
-    return { success: false, error: 'لا يمكن إنهاء الدوام أثناء تنفيذ مهمة توصيل' };
-  }
+
+  const summary = await closeActiveWorkSession(courierId, 'manual');
+
+  await supabase.from('couriers').update({ status: 'offline' }).eq('id', courierId);
+
+  return { success: true, summary };
+}
+
+// â”€â”€ POST /admin/end-work â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Admin override of "End Work". Unlike the driver-facing endWork above, this does
+// NOT block on courier.status === 'on_route' â€” an admin may need to close a shift
+// stuck on_route with no real batch (a desynced status), or one whose batch was
+// already resolved by the caller (see adminArchiveRouter's end-work route, which
+// runs handleBreakdown first when a real active batch exists). Still refuses if a
+// real active batch remains assigned, since force-closing then would orphan it.
+export async function adminEndWork(
+  courierId: string,
+): Promise<{ success: true; summary: CloseSummary | null } | { success: false; error: string }> {
+  const { data: courier } = await supabase
+    .from('couriers').select('status').eq('id', courierId).maybeSingle();
+
+  if (!courier) return { success: false, error: 'لم يتم العثور على السائق' };
 
   const { count: activeBatches } = await supabase
     .from('batches')
@@ -150,14 +174,10 @@ export async function endWork(
     return { success: false, error: 'لا يمكن إنهاء الدوام ولديك دفعة قيد التنفيذ' };
   }
 
-  const summary = await closeActiveWorkSession(courierId, 'manual');
-  if (!summary) {
-    return { success: false, error: 'لا يوجد دوام نشط لإنهائه' };
-  }
-
+  const summary = await closeActiveWorkSession(courierId, 'admin_closed');
   await supabase.from('couriers').update({ status: 'offline' }).eq('id', courierId);
 
-  return { success: true, summary };
+  return { success: true, summary: summary ?? null };
 }
 
 // â”€â”€ Batch lifecycle hooks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

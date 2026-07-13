@@ -128,17 +128,6 @@ function formatMinutesLabel(totalMinutes: number): string {
   return `${h} ساعة و ${rem} دقيقة`;
 }
 
-// "01:23:45" — used for the live ticking duty / delivery timers.
-function formatElapsed(startedAtIso: string, nowMs: number): string {
-  const totalSeconds = Math.max(0, Math.floor((nowMs - new Date(startedAtIso).getTime()) / 1000));
-  const h = Math.floor(totalSeconds / 3600);
-  const mm = Math.floor((totalSeconds % 3600) / 60);
-  const ss = totalSeconds % 60;
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(h)}:${pad(mm)}:${pad(ss)}`;
-}
-
-
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   pending_assignment: { label: 'في انتظار التخصيص', color: '#f59e0b' },
   assigned:           { label: 'لم تبدأ بعد',        color: '#2563eb' },
@@ -169,7 +158,7 @@ const TRIP_FILTERS: { value: string; label: string }[] = [
 const SHIPMENT_STATUS_LABEL: Record<string, { label: string; color: string }> = {
   pending:   { label: 'قيد التحضير',      color: '#9ca3af' },
   available: { label: 'متاحة',            color: '#f59e0b' },
-  delayed:   { label: 'متأخرة',           color: '#f59e0b' },
+  delayed:   { label: 'مؤجلة',            color: '#2563eb' },
   batched:   { label: 'بانتظار الاستلام', color: '#2563eb' },
   reserved:  { label: 'محجوزة',           color: '#2563eb' },
   picked_up: { label: 'قيد التوصيل',      color: '#7c3aed' },
@@ -245,7 +234,6 @@ export default function DriverDashboard() {
   // Duty-time / mission-time tracking (حالة الدوام)
   const [workSummary, setWorkSummary]           = useState<WorkSummary | null>(null);
   const [dutyActionLoading, setDutyActionLoading] = useState(false);
-  const [nowMs, setNowMs]                       = useState(() => Date.now());
 
   // سجل ساعات العمل (work-hours log — monthly history table)
   const now0 = new Date();
@@ -323,13 +311,6 @@ export default function DriverDashboard() {
     const id = setInterval(() => fetchWorkSummary(), 30_000);
     return () => clearInterval(id);
   }, [rawUser?.id]);
-
-  // ── Tick the clock for the live duty / delivery timers ───────────────────
-  useEffect(() => {
-    if (!workSummary || workSummary.status === 'offline') return;
-    const id = setInterval(() => setNowMs(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [workSummary?.status]);
 
   // ── Continuous real-time location tracking ────────────────────────────────
   useEffect(() => {
@@ -613,13 +594,10 @@ export default function DriverDashboard() {
   const DUTY_CONFIG: Record<DriverInfo['status'], { badge: string; color: string; bg: string; border: string; helper: string }> = {
     offline:    { badge: 'خارج الدوام',        color: '#64748b', bg: '#f8fafc', border: '#cbd5e1', helper: 'ابدأ الدوام لتتمكن من استلام المهام.' },
     available:  { badge: 'متاح لاستلام مهمة', color: '#15803d', bg: '#f0fdf4', border: '#86efac', helper: '' },
-    on_route:   { badge: 'في مهمة توصيل',     color: '#1d4ed8', bg: '#eff6ff', border: '#93c5fd', helper: 'أنهِ المهمة الحالية قبل قبول مهمة جديدة أو إنهاء الدوام.' },
+    on_route:   { badge: 'في مهمة توصيل',     color: '#1d4ed8', bg: '#eff6ff', border: '#93c5fd', helper: 'أنهِ المهمة الحالية قبل قبول مهمة جديدة.' },
   };
   const dutyConfig = DUTY_CONFIG[dutyStatus];
   const dutyLabel  = dutyConfig.badge;
-
-  const staleWorkSession =
-    workSummary?.activeWorkSession != null && !isToday(workSummary.activeWorkSession.startedAt);
 
   // Current (in_transit) + not-yet-started (assigned) missions — shown as simple rows on the home page
   const activeBatches = batches
@@ -1197,24 +1175,6 @@ export default function DriverDashboard() {
               المنطقة: {zoneLabel}
             </div>
 
-            {dutyStatus !== 'offline' && workSummary?.activeWorkSession && (
-              <div className="dd-shift-item">
-                <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><polyline points="12 12 16 14" />
-                </svg>
-                مدة الدوام: {formatElapsed(workSummary.activeWorkSession.startedAt, nowMs)}
-              </div>
-            )}
-
-            {dutyStatus === 'on_route' && workSummary?.activeDeliverySession && (
-              <div className="dd-shift-item">
-                <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <rect x="1" y="3" width="15" height="13" rx="2" /><path d="M16 8l4 2v5h-4V8z" /><circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" />
-                </svg>
-                مدة التوصيل: {formatElapsed(workSummary.activeDeliverySession.startedAt, nowMs)}
-              </div>
-            )}
-
             <div className="dd-shift-duty-actions">
               {dutyStatus === 'offline' && (
                 <button
@@ -1239,12 +1199,6 @@ export default function DriverDashboard() {
                 </button>
               )}
             </div>
-
-            {staleWorkSession && (
-              <div className="dd-duty-card-warning">
-                يوجد دوام مفتوح منذ يوم سابق، يرجى إنهاؤه أو التواصل مع الإدارة.
-              </div>
-            )}
           </div>
 
           {/* ── Stats Cards ── */}

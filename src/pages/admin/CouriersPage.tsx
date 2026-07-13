@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import supabase from '../../lib/supabase';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import AdminMessageModal from '../../components/AdminMessageModal';
-import { archiveCourier, restoreCourier } from '../../lib/adminArchive';
+import { archiveCourier, restoreCourier, endCourierWork } from '../../lib/adminArchive';
 import './adminResponsiveTable.css';
 
 interface Courier {
@@ -14,7 +14,6 @@ interface Courier {
   home_base: { lat: number; lng: number } | null;
   location: { lat: number; lng: number } | null;
   max_volume: number | null;
-  hours_driven_today: number | null;
   user_id: string | null;
   id_front_url: string | null;
   id_back_url: string | null;
@@ -41,60 +40,6 @@ const VEHICLE_LABELS: Record<string, string> = {
   van:        'فان',
   bicycle:    'دراجة هوائية',
 };
-
-// ── Performance indicator (نشاط جيد / وقت انتظار مرتفع) ──────────────────────
-// Operational monitoring only — never used for payroll/salary calculation.
-// Waiting Ratio = Waiting Time / Total Duty Time × 100.
-interface CourierTodayMinutes {
-  totalDutyMinutes: number;
-  activeDeliveryMinutes: number;
-  availableWaitingMinutes: number;
-}
-
-interface PerformanceBadgeConfig {
-  bg: string;
-  text: string;
-  border: string;
-  icon: string;
-  label: string;
-}
-
-function getPerformanceBadge(waitingRatioPct: number): PerformanceBadgeConfig {
-  if (waitingRatioPct <= 40) {
-    return { bg: '#F0FDF4', text: '#15803D', border: '#86EFAC', icon: '✓', label: 'نشاط جيد' };
-  }
-  if (waitingRatioPct <= 70) {
-    return { bg: '#FFFBEB', text: '#B45309', border: '#FCD34D', icon: '⚠️', label: 'وقت انتظار مرتفع' };
-  }
-  return { bg: '#FEF2F2', text: '#B91C1C', border: '#FCA5A5', icon: '⚠️', label: 'وقت انتظار مرتفع جداً' };
-}
-
-function PerformanceBadge({ minutes }: { minutes: CourierTodayMinutes | undefined }) {
-  if (!minutes || minutes.totalDutyMinutes <= 0) return null;
-  const ratio = Math.round((minutes.availableWaitingMinutes / minutes.totalDutyMinutes) * 100);
-  const cfg = getPerformanceBadge(ratio);
-  return (
-    <div
-      style={{
-        marginTop: 7,
-        display: 'inline-flex',
-        flexDirection: 'column',
-        gap: 1,
-        background: cfg.bg,
-        border: `1px solid ${cfg.border}`,
-        borderRadius: 6,
-        padding: '3px 7px',
-      }}
-    >
-      <span style={{ color: cfg.text, fontSize: 10.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3, whiteSpace: 'nowrap' }}>
-        <span>{cfg.icon}</span>{cfg.label}
-      </span>
-      <span style={{ color: cfg.text, fontSize: 9.5, fontWeight: 600, opacity: 0.85, whiteSpace: 'nowrap' }}>
-        نسبة الانتظار {ratio}%
-      </span>
-    </div>
-  );
-}
 
 async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
   try {
@@ -217,11 +162,13 @@ export default function CouriersPage() {
   const [restoring, setRestoring]         = useState(false);
   const [restoreError, setRestoreError]   = useState('');
   const [messageTarget, setMessageTarget] = useState<CourierWithBatches | null>(null);
+  const [endWorkTarget, setEndWorkTarget] = useState<CourierWithBatches | null>(null);
+  const [endingWork, setEndingWork]       = useState(false);
+  const [endWorkError, setEndWorkError]   = useState('');
   const [openMenuId, setOpenMenuId]     = useState<string | null>(null);
   const [menuPos, setMenuPos]           = useState<{ top: number; left: number } | null>(null);
   const menuRef                         = useRef<HTMLDivElement | null>(null);
   const [expandedId, setExpandedId]     = useState<string | null>(null);
-  const [perfStats, setPerfStats]       = useState<Record<string, CourierTodayMinutes>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -230,7 +177,7 @@ export default function CouriersPage() {
     const [{ data: courierRows, error: cErr }, { data: batchRows }] = await Promise.all([
       supabase
         .from('couriers')
-        .select('id, name, status, home_base_zone, home_base, location, max_volume, hours_driven_today, user_id, id_front_url, id_back_url, license_front_url, license_back_url, is_archived')
+        .select('id, name, status, home_base_zone, home_base, location, max_volume, user_id, id_front_url, id_back_url, license_front_url, license_back_url, is_archived')
         .order('name'),
       supabase.from('batches').select('assigned_to').in('status', ['assigned', 'in_transit']),
     ]);
@@ -275,23 +222,7 @@ export default function CouriersPage() {
     setCouriers(loaded);
     setLoading(false);
     geocodeAll(loaded);
-    loadPerformance(loaded.map((c) => c.id));
   }, []);
-
-  async function loadPerformance(courierIds: string[]) {
-    if (!courierIds.length) { setPerfStats({}); return; }
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-      const res = await fetch(`/api/admin/couriers/work-summary/today?courier_ids=${courierIds.join(',')}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const json = await res.json();
-      if (res.ok && json.success) setPerfStats(json.summaries ?? {});
-    } catch (err) {
-      console.error('[CouriersPage] performance fetch failed:', err);
-    }
-  }
 
   async function geocodeAll(rows: CourierWithBatches[]) {
     if (geocodingRef.current) return;
@@ -345,6 +276,18 @@ export default function CouriersPage() {
     setCouriers(prev => prev.map(c => c.id === restoreTarget.id ? { ...c, is_archived: false } : c));
     setRestoreTarget(null);
     setRestoring(false);
+  }
+
+  async function handleEndWork() {
+    if (!endWorkTarget) return;
+    setEndingWork(true);
+    setEndWorkError('');
+    const res = await endCourierWork(endWorkTarget.id);
+    if (!res.ok) { setEndWorkError('فشل إنهاء الدوام: ' + (res.error ?? '')); setEndingWork(false); return; }
+    setCouriers(prev => prev.map(c => c.id === endWorkTarget.id ? { ...c, status: 'offline' } : c));
+    setEndWorkTarget(null);
+    setEndingWork(false);
+    load();
   }
 
   useEffect(() => { load(); }, [load]);
@@ -481,6 +424,26 @@ export default function CouriersPage() {
         />
       )}
 
+      {endWorkTarget && (
+        <ConfirmDialog
+          title="تأكيد إنهاء الدوام"
+          icon="⏹️"
+          message={<>هل تريد إنهاء دوام المندوب <strong>{endWorkTarget.name}</strong> بالقوة؟</>}
+          warning={
+            endWorkTarget.status === 'on_route'
+              ? 'المندوب حالياً في مهمة توصيل. إنهاء الدوام سيلغي الدفعة الحالية ويعيد شحناتها للتجميع أو يعلّمها "عالقة" لتحتاج تدخل يدوي.'
+              : undefined
+          }
+          confirmColor="#DC2626"
+          confirmLabel="إنهاء الدوام بالقوة"
+          reversible={false}
+          loading={endingWork}
+          error={endWorkError}
+          onConfirm={handleEndWork}
+          onCancel={() => { setEndWorkTarget(null); setEndWorkError(''); }}
+        />
+      )}
+
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
         <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>المناديب</h2>
@@ -602,7 +565,6 @@ export default function CouriersPage() {
                 <th style={thStyle}>المنطقة الرئيسية</th>
                 <th style={thStyle}>الدفعات النشطة</th>
                 <th style={thStyle}>الطاقة</th>
-                <th style={thStyle}>ساعات اليوم</th>
                 <th style={thStyle}>آخر موقع</th>
                 <th style={{ ...thStyle, textAlign: 'center' }}>إجراءات</th>
               </tr>
@@ -666,16 +628,6 @@ export default function CouriersPage() {
                       {/* Max volume */}
                       <td style={{ ...tdStyle, fontFamily: 'monospace' }} data-label="الطاقة">
                         {courier.max_volume != null ? `${courier.max_volume} وحدة` : <span style={{ color: '#CBD5E1' }}>—</span>}
-                      </td>
-
-                      {/* Hours today */}
-                      <td style={tdStyle} data-label="ساعات اليوم">
-                        <div style={{ fontFamily: 'monospace' }}>
-                          {courier.hours_driven_today != null
-                            ? `${courier.hours_driven_today.toFixed(1)} س`
-                            : <span style={{ color: '#CBD5E1' }}>—</span>}
-                        </div>
-                        <PerformanceBadge minutes={perfStats[courier.id]} />
                       </td>
 
                       {/* Location */}
@@ -757,6 +709,18 @@ export default function CouriersPage() {
                                   </svg>
                                   إرسال رسالة
                                 </button>
+                                {courier.status !== 'offline' && (
+                                  <>
+                                    <div style={{ height: 1, background: '#F1F5F9', margin: '2px 0' }} />
+                                    <button
+                                      onClick={() => { setOpenMenuId(null); setEndWorkTarget(courier); setEndWorkError(''); }}
+                                      style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '10px 14px', border: 'none', background: 'none', color: '#B45309', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', fontWeight: 700, textAlign: 'right' }}
+                                      onMouseEnter={e => (e.currentTarget.style.background = '#FFFBEB')}
+                                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                                      <span>⏹️</span> إنهاء الدوام بالقوة
+                                    </button>
+                                  </>
+                                )}
                                 <div style={{ height: 1, background: '#F1F5F9', margin: '2px 0' }} />
                                 {courier.is_archived ? (
                                   <button

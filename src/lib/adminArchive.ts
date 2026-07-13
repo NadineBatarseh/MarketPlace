@@ -55,6 +55,8 @@ export const archiveCourier = (courierId: string, opts?: { reason?: string; forc
   post(`/api/admin/couriers/${courierId}/archive`, opts);
 export const restoreCourier = (courierId: string) =>
   post(`/api/admin/couriers/${courierId}/restore`);
+export const endCourierWork = (courierId: string) =>
+  post(`/api/admin/couriers/${courierId}/end-work`);
 
 export const archiveApplication = (type: ApplicationType, id: string | number, opts?: { reason?: string; force?: boolean }) =>
   post(`/api/admin/applications/${type}/${id}/archive`, opts);

@@ -3,7 +3,7 @@ import cors from "cors";
 import "dotenv/config";
 import type { Request, Response } from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { getTools, callTool } from "./mcpClient.js";
+import { getTools, callTool } from "../src/mcp/mcpClient.js";
 import { fileURLToPath } from "url";
 import path from "path";
 import { supabase } from "./supabase.js";

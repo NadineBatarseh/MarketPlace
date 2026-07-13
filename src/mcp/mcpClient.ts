@@ -13,8 +13,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { createSupabaseMcpServer } from "../src/mcp/supabase/server.js";
-import { createInstagramMcpServer } from "../src/mcp/instagram/server.js";
+import { createSupabaseMcpServer } from "./supabase/server.js";
+import { createInstagramMcpServer } from "./instagram/server.js";
 
 // ── In-process client singletons ─────────────────────────────────────────────
 

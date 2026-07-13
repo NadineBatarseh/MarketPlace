@@ -199,11 +199,27 @@ function getOrderCompletionPercent(order: Order): number {
 // data exists, 'actual' is the real delivered_at, 'unknown' means no reliable
 // estimate exists (e.g. a stranded shipment) — never fabricate one for those.
 
-interface EtaRollup { earliest: Date; latest: Date; source: EtaSource; isMultiShipment: boolean; }
+interface EtaRollup { earliest: Date; latest: Date; source: EtaSource; }
+
+// A courier being assigned/en route to pick up isn't a reliable delivery
+// signal — the ETA pipeline (server/logistics/eta.ts) only anchors to a real
+// road-distance measurement once the courier is physically at the pickup
+// point (index.ts's pickup-shipment route). Before that, estimated_delivery_at
+// may still hold a stale/premature value from an earlier assignment step, so
+// the customer-facing UI must not surface it until shipment.picked_up_at exists.
+function hasReliableEta(s: Shipment): boolean {
+  return !!s.picked_up_at && !!s.estimated_delivery_at;
+}
+
+// Always widen a point estimate into a "from A to B" window rather than
+// promising an exact minute — the underlying estimate is a single-hop
+// road-distance prediction, not a guarantee.
+const ETA_RANGE_BUFFER_MS = 3 * 60 * 60 * 1000;
 
 // Order-level rollup: earliest–latest estimated_delivery_at across this
-// order's non-delivered shipments. Skips shipments with no reliable estimate
-// (eta_source 'unknown'). If any contributing shipment is still on the flat
+// order's non-delivered shipments that have actually been picked up from the
+// store. Skips shipments with no reliable estimate (not yet picked up, or
+// eta_source 'unknown'). If any contributing shipment is still on the flat
 // SLA fallback, the whole rollup is labeled 'sla_fallback' too — never
 // overstate confidence.
 function orderEtaRollup(order: Order): EtaRollup | null {
@@ -212,17 +228,16 @@ function orderEtaRollup(order: Order): EtaRollup | null {
     .filter((s): s is Shipment => !!s && s.status !== 'delivered');
 
   const withEta = shipments
-    .filter(s => !!s.estimated_delivery_at)
+    .filter(hasReliableEta)
     .map(s => ({ time: new Date(s.estimated_delivery_at as string), source: s.eta_source }));
   if (withEta.length === 0) return null;
 
   const times = withEta.map(e => e.time.getTime());
   const earliest = new Date(Math.min(...times));
-  const latest = new Date(Math.max(...times));
+  const latest = new Date(Math.max(...times) + ETA_RANGE_BUFFER_MS);
   const source: EtaSource = withEta.some(e => e.source !== 'route_estimate' && e.source !== 'actual')
     ? 'sla_fallback' : 'route_estimate';
-  const isMultiShipment = new Set(shipments.map(s => s.id)).size > 1;
-  return { earliest, latest, source, isMultiShipment };
+  return { earliest, latest, source };
 }
 
 // Turns a rollup into the one Arabic label used everywhere (banner, sidebar).
@@ -236,7 +251,7 @@ function formatEtaLabel(rollup: EtaRollup | null): { label: string; time: string
   }
 
   const isRange = rollup.latest.getTime() !== rollup.earliest.getTime();
-  const note = rollup.isMultiShipment ? 'قد يصل طلبك على أكثر من دفعة' : 'سيتم تحديث الوقت تلقائياً';
+  const note = 'سيتم تحديث الوقت تلقائياً';
 
   if (rollup.source === 'sla_fallback') {
     const prefix = isToday(rollup.latest) ? 'اليوم' : fmtShort(rollup.latest);
@@ -258,16 +273,20 @@ function formatEtaLabel(rollup: EtaRollup | null): { label: string; time: string
 }
 
 // Per-shipment ETA line (product cards). Never fabricates a time for a
-// stranded shipment, and stays silent once delivered (the timeline already
-// shows the real delivered_at there).
+// stranded shipment, stays silent once delivered (the timeline already shows
+// the real delivered_at there), and stays silent until the courier has
+// actually picked the item up from the store (see hasReliableEta above) —
+// before that the estimate isn't anchored to a real position yet.
 function shipmentEtaLabel(shipment: Shipment): string | null {
   if (shipment.status === 'stranded' || shipment.status === 'delivered') return null;
-  if (!shipment.estimated_delivery_at) return null;
-  const d = new Date(shipment.estimated_delivery_at);
+  if (!hasReliableEta(shipment)) return null;
+  const d = new Date(shipment.estimated_delivery_at as string);
   const prefix = isToday(d) ? 'اليوم' : fmtShort(d);
-  return shipment.eta_source === 'route_estimate'
-    ? `التوصيل المتوقع ${prefix} الساعة ${fmtTime(d)}`
-    : `التوصيل المتوقع بحلول ${prefix} الساعة ${fmtTime(d)}`;
+  if (shipment.eta_source === 'route_estimate') {
+    const to = new Date(d.getTime() + ETA_RANGE_BUFFER_MS);
+    return `التوصيل المتوقع ${prefix} من الساعة ${fmtTime(d)} إلى الساعة ${fmtTime(to)}`;
+  }
+  return `التوصيل المتوقع بحلول ${prefix} الساعة ${fmtTime(d)}`;
 }
 
 // Human-readable "منذ" elapsed time, used by AlertPanel's real "آخر تحديث" signal.
@@ -457,9 +476,6 @@ export default function OrderTrackingPage() {
           <HeaderDeliveryBanner order={order} />
         </div>
 
-        {/* Multi-shipment notice — only when products span >1 merchant/shipment */}
-        <MultiShipmentNotice order={order} />
-
         {/* S3: Timeline card */}
         <div className="ot-tl-card">
           <div className="ot-tlc-title">حالة الطلب العامة</div>
@@ -519,21 +535,24 @@ function NewUpdatesBanner({ updates }: { updates: { event_type: TrackingEventTyp
 // ── Multi-Shipment Notice ────────────────────────────────────────────────────────
 // Purely informational — never tied to status. Shown whenever the order's
 // products span more than one merchant or more than one shipment, so the
-// customer isn't confused when items arrive separately.
+// customer isn't confused when items arrive separately. Replaces the delivery
+// banner's plain ETA note (rather than living in its own card) so the fact is
+// stated exactly once.
 
-function MultiShipmentNotice({ order }: { order: Order }) {
+function isMultiShipmentOrder(order: Order): boolean {
   const shopIds     = new Set(order.order_details.map(d => d.shop_id).filter(Boolean));
   const shipmentIds = new Set(order.order_details.map(d => d.shipment?.id).filter(Boolean));
-  const isMultiShipment = shopIds.size > 1 || shipmentIds.size > 1;
-  if (!isMultiShipment) return null;
+  return shopIds.size > 1 || shipmentIds.size > 1;
+}
 
+function MultiShipmentNotice() {
   return (
-    <div className="ot-multi-shipment-card">
+    <div className="ot-hc-multi-notice">
       <div className="ot-msc-icon">📦</div>
       <div className="ot-msc-text">
         <div className="ot-msc-title">سيصل طلبك على عدة دفعات</div>
         <div className="ot-msc-desc">
-          قد يتم توصيل منتجات هذا الطلب بشكل منفصل وفقاً لتوفر المنتجات وخطة التوصيل. سيتم تحديث حالة كل منتج بشكل مستقل حتى اكتمال الطلب بالكامل.
+          قد يتم توصيل منتجات هذا الطلب بشكل منفصل. سيتم تحديث حالة كل منتج بشكل مستقل حتى اكتمال الطلب بالكامل.
         </div>
         <div className="ot-msc-note">يمكنك متابعة حالة كل منتج من خلال الجدول الزمني أدناه.</div>
       </div>
@@ -629,6 +648,7 @@ function HeaderDeliveryBanner({ order }: { order: Order }) {
 
   const rollup = orderEtaRollup(order);
   const eta = formatEtaLabel(rollup);
+  const multi = isMultiShipmentOrder(order);
 
   if (!rollup) return (
     <div className="ot-hc-left ot-hc-left--success">
@@ -636,9 +656,7 @@ function HeaderDeliveryBanner({ order }: { order: Order }) {
         <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
       </svg>
       <div className="ot-hc-delivery">
-        <div className="ot-hcd-label">{eta.label}</div>
-        <div className="ot-hcd-time ot-hcd-time--success">{eta.time}</div>
-        <div className="ot-hcd-note">{eta.note}</div>
+        {multi ? <MultiShipmentNotice /> : <div className="ot-hcd-note">{eta.note}</div>}
       </div>
     </div>
   );
@@ -649,9 +667,7 @@ function HeaderDeliveryBanner({ order }: { order: Order }) {
         <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
       </svg>
       <div className="ot-hc-delivery">
-        <div className="ot-hcd-label">{eta.label}</div>
-        <div className="ot-hcd-time">{eta.time}</div>
-        <div className="ot-hcd-note">{eta.note}</div>
+        {multi ? <MultiShipmentNotice /> : <div className="ot-hcd-note">{eta.note}</div>}
       </div>
       <CompletionRing percent={getOrderCompletionPercent(order)} />
     </div>
@@ -794,8 +810,6 @@ function DeliveryInfoCard({ order }: { order: Order }) {
       ].filter(Boolean)
     : [];
 
-  const eta = formatEtaLabel(orderEtaRollup(order));
-
   return (
     <div className="ot-sb-card">
       <div className="ot-sb-title">
@@ -808,11 +822,6 @@ function DeliveryInfoCard({ order }: { order: Order }) {
       </div>
       <div className="ot-sb-rows">
         {[
-          {
-            icon: <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>,
-            label: eta.label,
-            val: eta.time,
-          },
           {
             icon: <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>,
             label: 'عنوان التسليم',
