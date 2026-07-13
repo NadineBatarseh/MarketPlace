@@ -430,7 +430,7 @@ export async function handleInstagramTool(
     case 'instagram_import_products': {
       const shopId = args.shop_id as string;
       if (!shopId) throw new Error('shop_id is required');
-      if (userId) await assertShopOwnership(shopId, userId);
+      if (userId) await assertShopOwnership(shopId, userId);// تتحقق من ملكية التاجر للمتجر
 
       const db = getServiceRoleClient();
 

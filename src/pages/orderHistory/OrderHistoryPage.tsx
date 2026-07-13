@@ -730,7 +730,7 @@ function OrderCard({ order, idx, unreadCount }: { order: Order; idx: number; unr
           >
             {firstImage
               ? <img src={firstImage} alt={firstName} />
-              : <svg width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+              : <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
                   <rect x="3" y="3" width="18" height="18" rx="2"/>
                   <circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>
                 </svg>
@@ -763,11 +763,6 @@ function OrderCard({ order, idx, unreadCount }: { order: Order; idx: number; unr
         <div className="oh-col-delivery">
           {showDelivery ? (
             <>
-              <div className="oh-grid-del-icon">
-                <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                  <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
-                </svg>
-              </div>
               <div className="oh-grid-del-label">
                 {isCompleted ? 'تاريخ التسليم' : 'التوصيل المتوقع'}
               </div>

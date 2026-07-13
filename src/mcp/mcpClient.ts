@@ -88,6 +88,7 @@ export async function getTools(role: string): Promise<Anthropic.Tool[]> {
   };
   const allowed = roleToolMap[role] ?? roleToolMap["customer"];
 
+// يجهز الادوات المسموحة بالشكل الذي يفهمه كلود
   const supabaseTools: Anthropic.Tool[] = supabaseRawTools
     .filter((t) => allowed.includes(t.name))
     .map((t) => ({
@@ -136,6 +137,7 @@ export async function getTools(role: string): Promise<Anthropic.Tool[]> {
   return [...supabaseTools, ...instagramTools];
 }
 
+//اختيار السيرفر المناسب وبالنهاية اعادة نتيحة الاداة
 export async function callTool(name: string, input: Record<string, any>): Promise<string> {
   // Populate routing set if getTools() was not called first
   if (instagramToolNames.size === 0) {

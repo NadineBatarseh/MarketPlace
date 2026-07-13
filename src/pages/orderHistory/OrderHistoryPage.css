@@ -319,64 +319,84 @@
 /* ── 4-column premium card header ────────────────────────────────────────────── */
 .oh-card-head-grid {
   display: grid;
-  grid-template-columns: 1.4fr 1.3fr 1fr 1.2fr;
-  gap: 48px;
+  grid-template-columns: 1.2fr 1.5fr 0.85fr 1fr;
+  gap: 8px;
   align-items: center;
-  padding: 28px 32px;
+  padding: 14px 18px;
   border-bottom: 1px solid var(--oh-border-light);
 }
+.oh-col-order,
+.oh-col-total,
+.oh-col-delivery {
+  position: relative;
+  padding-right: 16px;
+}
+.oh-col-order::after,
+.oh-col-total::after,
+.oh-col-delivery::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  right: 0;
+  width: 1px;
+  background: var(--oh-border-light);
+}
+.oh-col-order { padding-right: 0; }
+.oh-col-order::after { display: none; }
 
 /* Col 1: Order Info (far right) */
 .oh-col-order {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 8px;
+  gap: 4px;
 }
 .oh-grid-order-id-row {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: 6px;
 }
 .oh-grid-order-label {
-  font-size: 13px;
+  font-size: 10.5px;
   color: var(--oh-hint);
   font-weight: 400;
   white-space: nowrap;
 }
 .oh-grid-order-id {
   font-family: 'Tajawal', sans-serif;
-  font-size: 32px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--oh-title);
-  letter-spacing: -0.5px;
-  line-height: 1;
+  letter-spacing: 0;
+  line-height: 1.1;
 }
 .oh-grid-order-date {
-  font-size: 13px;
+  font-size: 10.5px;
   color: var(--oh-hint);
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
 }
 .oh-grid-badge {
-  margin-top: 2px;
-  font-size: 12px;
-  padding: 5px 14px;
+  margin-top: 1px;
+  font-size: 10.5px;
+  padding: 3px 10px;
 }
 
 /* Col 2: Product Info */
 .oh-col-product {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
   flex-direction: row-reverse;
+  min-width: 0;
 }
 .oh-grid-prod-img {
   position: relative;
-  width: 100px;
-  height: 100px;
-  border-radius: 16px;
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
   background: var(--oh-surface-alt);
   border: 1px solid var(--oh-border-light);
   display: flex;
@@ -389,19 +409,19 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 15px;
+  border-radius: 11px;
 }
 .oh-grid-prod-img--link { cursor: pointer; transition: opacity .15s; }
 .oh-grid-prod-img--link:hover { opacity: 0.88; }
 .oh-grid-more-badge {
   position: absolute;
-  bottom: -8px;
-  left: -8px;
+  bottom: -6px;
+  left: -6px;
   background: var(--oh-primary);
   color: #fff;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
-  padding: 2px 8px;
+  padding: 1px 6px;
   border-radius: var(--oh-r-pill);
   border: none;
   cursor: pointer;
@@ -412,28 +432,29 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 5px;
+  gap: 4px;
   text-align: right;
   min-width: 0;
 }
 .oh-grid-prod-name {
-  font-size: 20px;
+  font-size: 13.5px;
   font-weight: 700;
   color: var(--oh-title);
-  line-height: 1.2;
+  line-height: 1.25;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
 }
 .oh-grid-prod-store {
-  font-size: 13px;
+  font-size: 11px;
   color: var(--oh-muted);
 }
 .oh-grid-qty-badge {
-  font-size: 12px;
+  font-size: 10px;
   background: #f3f4f6;
   color: var(--oh-muted);
-  padding: 3px 10px;
+  padding: 2px 8px;
   border-radius: var(--oh-r-pill);
   border: 1px solid var(--oh-border-light);
   white-space: nowrap;
@@ -443,25 +464,25 @@
 .oh-col-total {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  text-align: center;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: right;
 }
 .oh-grid-total-label {
-  font-size: 13px;
+  font-size: 10.5px;
   color: var(--oh-hint);
   font-weight: 400;
 }
 .oh-grid-total-amount {
   font-family: 'Tajawal', sans-serif;
-  font-size: 30px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--oh-title);
-  line-height: 1;
-  letter-spacing: -0.5px;
+  line-height: 1.2;
+  letter-spacing: 0;
 }
 .oh-grid-total-items {
-  font-size: 12px;
+  font-size: 10.5px;
   color: var(--oh-hint);
 }
 
@@ -469,30 +490,29 @@
 .oh-col-delivery {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: right;
 }
 .oh-grid-del-icon {
-  color: var(--oh-primary);
-  margin-bottom: 2px;
-  line-height: 0;
+  display: none;
 }
 .oh-grid-del-label {
-  font-size: 13px;
+  font-size: 10.5px;
   color: var(--oh-hint);
 }
 .oh-grid-del-date {
-  font-size: 22px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--oh-title);
   line-height: 1.2;
 }
 .oh-grid-del-est {
-  font-size: 13px;
+  font-size: 10.5px;
   color: var(--oh-muted);
 }
 .oh-grid-del-cancelled {
-  font-size: 14px;
+  font-size: 12px;
   color: #dc2626;
   font-weight: 500;
 }
@@ -778,10 +798,13 @@
 @media (max-width: 900px) {
   .oh-card-head-grid {
     grid-template-columns: 1fr 1fr;
-    gap: 24px;
-    padding: 20px 20px;
+    gap: 12px 16px;
+    padding: 14px 16px;
   }
-  .oh-col-delivery { align-items: flex-start; }
+  .oh-col-order::after,
+  .oh-col-total::after,
+  .oh-col-delivery::after { display: none; }
+  .oh-col-order, .oh-col-total, .oh-col-delivery { padding-right: 0; }
 }
 @media (max-width: 640px) {
   .oh-page { padding: 1.5rem 1rem 3rem; }
@@ -791,16 +814,17 @@
   .oh-search-wrap { max-width: 100%; }
   .oh-card-head-grid {
     grid-template-columns: 1fr;
-    gap: 16px;
-    padding: 16px;
+    gap: 10px;
+    padding: 14px;
   }
   .oh-col-order { align-items: flex-start; }
-  .oh-grid-order-id { font-size: 22px; }
-  .oh-grid-total-amount { font-size: 22px; }
-  .oh-grid-del-date { font-size: 16px; }
-  .oh-col-total { align-items: flex-start; }
-  .oh-grid-prod-img { width: 72px; height: 72px; }
-  .oh-grid-prod-name { font-size: 16px; }
+  .oh-grid-order-id { font-size: 14px; }
+  .oh-grid-total-amount { font-size: 14px; }
+  .oh-grid-del-date { font-size: 13px; }
+  .oh-col-total { align-items: flex-start; text-align: left; }
+  .oh-col-delivery { align-items: flex-start; text-align: left; }
+  .oh-grid-prod-img { width: 56px; height: 56px; }
+  .oh-grid-prod-name { font-size: 13.5px; }
   .oh-foot-summary { flex-direction: column; gap: 6px; }
   .oh-dp-rows { flex-direction: column; gap: 4px; }
   .oh-success-rows { flex-direction: column; gap: 4px; }
